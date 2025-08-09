@@ -533,7 +533,7 @@ class Map:
         """Visualize the path.
 
         Args:
-            path: Path to visualize.
+            path: Path to visualize. A list of Node instances.
         """
         class PathViewer(QWidget):
             def __init__(self, nodes, edges, path):
@@ -612,6 +612,84 @@ class Map:
                     y = margin + (self.path[-1].position.y - self.min_y) * base_scale
                     painter.drawPoint(int(x), int(y))
 
+                # Draw coordinate axes legend
+                self._draw_coordinate_axes(painter, margin, base_scale)
+
+            def _draw_coordinate_axes(self, painter, margin, base_scale):
+                """Draw coordinate axes with arrows and labels."""
+                # Calculate the center of the visible area
+                center_x = margin + (self.max_x - self.min_x) * base_scale / 2
+                center_y = margin + (self.max_y - self.min_y) * base_scale / 2
+                
+                # Draw X-axis (red arrow)
+                painter.setPen(QPen(QColor(255, 0, 0), 3))  # Red for X-axis
+                axis_length = 100
+                painter.drawLine(int(center_x), int(center_y), int(center_x + axis_length), int(center_y))
+                
+                # Draw X-axis arrowhead
+                arrow_size = 10
+                painter.drawLine(int(center_x + axis_length), int(center_y), 
+                               int(center_x + axis_length - arrow_size), int(center_y - arrow_size))
+                painter.drawLine(int(center_x + axis_length), int(center_y), 
+                               int(center_x + axis_length - arrow_size), int(center_y + arrow_size))
+                
+                # Draw Y-axis (green arrow)
+                painter.setPen(QPen(QColor(0, 255, 0), 3))  # Green for Y-axis
+                painter.drawLine(int(center_x), int(center_y), int(center_x), int(center_y - axis_length))
+                
+                # Draw Y-axis arrowhead
+                painter.drawLine(int(center_x), int(center_y - axis_length), 
+                               int(center_x - arrow_size), int(center_y - axis_length + arrow_size))
+                painter.drawLine(int(center_x), int(center_y - axis_length), 
+                               int(center_x + arrow_size), int(center_y - axis_length + arrow_size))
+                
+                # Draw labels
+                painter.setPen(QPen(QColor(0, 0, 0), 1))
+                font = painter.font()
+                font.setPointSize(12)
+                font.setBold(True)
+                painter.setFont(font)
+                
+                # X-axis label
+                painter.drawText(int(center_x + axis_length + 5), int(center_y + 5), "X")
+                # Y-axis label
+                painter.drawText(int(center_x - 15), int(center_y - axis_length - 5), "Y")
+                
+                # Draw legend box
+                legend_x = 20
+                legend_y = 20
+                legend_width = 200
+                legend_height = 80
+                
+                # Draw legend background
+                painter.setPen(QPen(QColor(0, 0, 0), 1))
+                painter.setBrush(QColor(255, 255, 255, 200))  # Semi-transparent white
+                painter.drawRect(legend_x, legend_y, legend_width, legend_height)
+                
+                # Draw legend title
+                painter.setPen(QPen(QColor(0, 0, 0), 1))
+                font.setPointSize(10)
+                font.setBold(True)
+                painter.setFont(font)
+                painter.drawText(legend_x + 10, legend_y + 20, "Axis direction")
+                
+                # Draw legend items
+                font.setPointSize(8)
+                font.setBold(False)
+                painter.setFont(font)
+                
+                # X-axis legend
+                painter.setPen(QPen(QColor(255, 0, 0), 2))
+                painter.drawLine(legend_x + 10, legend_y + 35, legend_x + 30, legend_y + 35)
+                painter.setPen(QPen(QColor(0, 0, 0), 1))
+                painter.drawText(legend_x + 35, legend_y + 40, "X axis")
+                
+                # Y-axis legend
+                painter.setPen(QPen(QColor(0, 255, 0), 2))
+                painter.drawLine(legend_x + 10, legend_y + 55, legend_x + 30, legend_y + 55)
+                painter.setPen(QPen(QColor(0, 0, 0), 1))
+                painter.drawText(legend_x + 35, legend_y + 60, "Y axis")
+
             def wheelEvent(self, event):
                 angle = event.angleDelta().y()
                 factor = 1.15 if angle > 0 else 0.85
@@ -644,3 +722,42 @@ class Map:
         viewer = PathViewer(list(self.nodes), list(self.edges), path)
         viewer.show()
         app.exec_()
+
+    def sample_cycle(self, start_node, min_len=3, max_len=6, max_attempts=1000):
+        """
+        Randomly sample a cycle starting and ending at `start_node` within [min_len, max_len] length.
+
+        Returns:
+            A list of Node instances representing the cycle, or None if not found.
+        """
+
+        def dfs(current, path, visited):
+            if len(path) > max_len:
+                return None
+            neighbors = list(self.adjacency_list[current])
+            random.shuffle(neighbors)  # randomize exploration
+            for neighbor in neighbors:
+                if neighbor == start_node and len(path) >= min_len:
+                    return path + [start_node]
+                if neighbor not in visited:
+                    result = dfs(neighbor, path + [neighbor], visited | {neighbor})
+                    if result:
+                        return result
+            return None
+
+        for _ in range(max_attempts):
+            result = dfs(start_node, [start_node], {start_node})
+            if result:
+                return result
+        return None
+    
+
+if __name__ == "__main__":
+    random.seed(42)
+    map = Map(Config())
+    map.initialize_map_from_file()
+    node = map.get_random_node()
+    print(node)
+    cycle = map.sample_cycle(node, min_len=5, max_len=10)
+    print(cycle)
+    # map.visualize_path(cycle)

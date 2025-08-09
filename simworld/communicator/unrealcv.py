@@ -495,6 +495,36 @@ class UnrealCV(object):
         with self.lock:
             self.client.request(cmd)
 
+    def add_vehicle_signal(self, intersection_name, vehicle_signal_name):
+        """Add vehicle signal.
+
+        Args:
+            intersection_name: Name of the intersection to add traffic signal to.
+            vehicle_signal_name: Name of the vehicle signal to add.
+        """
+        cmd = f'vbp {intersection_name} AddVehicleSignal {vehicle_signal_name}'
+        with self.lock:
+            self.client.request(cmd)
+
+    def add_pedestrian_signal(self, intersection_name, pedestrian_signal_name):
+        """Add pedestrian signal.
+
+        Args:
+            intersection_name: Name of the intersection to add pedestrian signal to.
+            pedestrian_signal_name: Name of the pedestrian signal to add.
+        """ 
+        cmd = f'vbp {intersection_name} AddPedSignal {pedestrian_signal_name}'
+        with self.lock:
+            self.client.request(cmd)
+
+    def traffic_signal_start_simulation(self, intersection_name):
+        """Start traffic signal simulation.
+        """
+        cmd = f'vbp {intersection_name} StartSimulation'
+        with self.lock:
+            self.client.request(cmd)
+
+
     ##############################################################
     # Robot System
     ##############################################################

@@ -384,6 +384,29 @@ class Communicator:
         if traffic_signal_id not in self.traffic_signal_id_to_name:
             self.traffic_signal_id_to_name[traffic_signal_id] = f'GEN_BP_TrafficSignal_{traffic_signal_id}'
         return self.traffic_signal_id_to_name[traffic_signal_id]
+    
+    def add_traffic_signal(self, intersection_name, traffic_signal):
+        """Add traffic signal.
+        """
+        if traffic_signal.type == 'both':
+            self.unrealcv.add_vehicle_signal(intersection_name, self.get_traffic_signal_name(traffic_signal.id))
+        elif traffic_signal.type == 'pedestrian':
+            self.unrealcv.add_pedestrian_signal(intersection_name, self.get_traffic_signal_name(traffic_signal.id))
+        else:
+            raise ValueError(f'Invalid traffic signal type: {traffic_signal.type}')
+    
+    def traffic_signal_start_simulation(self, intersection_name):
+        """Start traffic signal simulation.
+        
+        Args:
+            intersection_name: Name of the intersection to start simulation for.
+        """
+        self.unrealcv.traffic_signal_start_simulation(intersection_name)
+    
+
+    ##############################################################
+    # Waypoint-related methods
+    ##############################################################
 
     def get_waypoint_mark_name(self, waypoint_mark_id):
         """Get waypoint mark name.
@@ -695,6 +718,11 @@ class Communicator:
             self.unrealcv.set_scale((1, 1, 1), name)  # Default scale
             self.unrealcv.set_collision(name, True)
             self.unrealcv.set_movable(name, False)
+
+    def spawn_intersection(self, intersection_name, model_path):
+        """Spawn intersection.
+        """
+        self.unrealcv.spawn_bp_asset(model_path, intersection_name)
 
     def spawn_waypoint_mark(self, waypoints, model_path):
         """Spawn waypoint marks.
