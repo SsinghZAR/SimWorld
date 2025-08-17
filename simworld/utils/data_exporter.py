@@ -260,7 +260,7 @@ class DataExporter:
                     #     'z': 1.0
                     # }
                     'scale': {
-                        'x': 1.1,
+                        'x': 0.88,
                         'y': 1.0,
                         'z': 1.0
                     }

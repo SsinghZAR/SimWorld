@@ -439,6 +439,27 @@ class UnrealCV(object):
         with self.lock:
             self.client.request(cmd)
 
+    def p_movement_simulation(self, object_name):
+        """Start pedestrian movement simulation.
+
+        Args:
+            object_name: Object name.
+        """
+        cmd = f'vbp {object_name} MovementSimulation'
+        with self.lock:
+            self.client.request(cmd)
+
+    def p_set_waypoints(self, object_name, waypoints):
+        """Set pedestrian waypoints.
+
+        Args:
+            object_name: Object name.
+            waypoints: String of waypoints. Use semicolon to separate waypoints and use comma to separate coordinates. Example: "100,100;200,200;300,300"
+        """
+        cmd = f'vbp {object_name} SetWaypoints {waypoints}'
+        with self.lock:
+            self.client.request(cmd)
+
     def tl_set_vehicle_green(self, object_name: str):
         """Set vehicle traffic light to green.
 
@@ -1100,3 +1121,106 @@ class UnrealCV(object):
         cmd = f'vbp {object_name} UpdateObjects'
         with self.lock:
             self.client.request(cmd)
+
+    ##############################################################
+    # Weather
+    ##############################################################
+    def set_sun_direction(self, weather_manager_name, pitch, yaw):
+        """Set sun direction.
+
+        Args:
+            weather_manager_name: Name of the weather manager.
+            pitch: Pitch of the sun. -89 - 89
+            yaw: Yaw of the sun. 0 - 360
+        """
+        cmd = f'vbp {weather_manager_name} SetSunDirection {pitch} {yaw}'
+        with self.lock:
+            self.client.request(cmd)
+
+    def get_sun_direction(self, weather_manager_name):
+        """Get sun direction.
+
+        Args:
+            weather_manager_name: Name of the weather manager.
+
+        Returns:
+            Sun direction.
+        """
+        cmd = f'vbp {weather_manager_name} GetSunDirection'
+        with self.lock:
+            return self.client.request(cmd)
+        
+    def set_sun_intensity(self, weather_manager_name, intensity):
+        """Set sun intensity.
+        
+        Args:
+            weather_manager_name: Name of the weather manager.
+            intensity: Intensity of the sun. 0 - 100
+        """
+        cmd = f'vbp {weather_manager_name} SetSunIntensity {intensity}'
+        with self.lock:
+            self.client.request(cmd)
+        
+    def get_sun_intensity(self, weather_manager_name):
+        """Get sun intensity.
+        
+        Args:
+            weather_manager_name: Name of the weather manager.
+        
+        Returns:
+            Sun intensity.
+        """
+        cmd = f'vbp {weather_manager_name} GetSunIntensity'
+        with self.lock:
+            return self.client.request(cmd)
+
+    def set_fog(self, weather_manager_name, density, distance, falloff):
+        """Set fog.
+
+        Args:
+            weather_manager_name: Name of the weather manager.
+            density: Density of the fog. 0 - 100
+            distance: Distance of the fog. 0 - 5000, cm
+            falloff: Falloff of the fog. 0 - 2
+        """
+        cmd = f'vbp {weather_manager_name} SetFog {density} {distance} {falloff}'
+        with self.lock:
+            self.client.request(cmd)
+
+    def get_fog(self, weather_manager_name):
+        """Get fog.
+
+        Args:
+            weather_manager_name: Name of the weather manager.
+
+        Returns:
+            Fog.
+        """ 
+        cmd = f'vbp {weather_manager_name} GetFog'
+        with self.lock:
+            return self.client.request(cmd)
+
+    def set_atmosphere(self, weather_manager_name, rayleigh, mie):
+        """Set atmosphere.
+
+        Args:
+            weather_manager_name: Name of the weather manager.
+            rayleigh: RayleighScatteringScale of the atmosphere. 0 - 2.
+            mie: MieScatteringScale of the atmosphere. 0 - 5. 
+        """
+        cmd = f'vbp {weather_manager_name} SetAtmosphere {rayleigh} {mie}'
+        with self.lock:
+            self.client.request(cmd)
+
+    def get_atmosphere(self, weather_manager_name):
+        """Get atmosphere.
+
+        Args:
+            weather_manager_name: Name of the weather manager.
+
+        Returns:
+            Atmosphere.
+        """
+        cmd = f'vbp {weather_manager_name} GetAtmosphere'
+        with self.lock:
+            return self.client.request(cmd)
