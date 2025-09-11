@@ -533,22 +533,21 @@ class UnrealCV(object):
         Args:
             intersection_name: Name of the intersection to add pedestrian signal to.
             pedestrian_signal_name: Name of the pedestrian signal to add.
-        """ 
+        """
         cmd = f'vbp {intersection_name} AddPedSignal {pedestrian_signal_name}'
         with self.lock:
             self.client.request(cmd)
 
     def traffic_signal_start_simulation(self, intersection_name):
-        """Start traffic signal simulation.
-        """
+        """Start traffic signal simulation."""
         cmd = f'vbp {intersection_name} StartSimulation'
         with self.lock:
             self.client.request(cmd)
 
-
     ##############################################################
     # Robot System
     ##############################################################
+
     def dog_move(self, robot_name, action):
         """Apply transition action.
 
@@ -607,6 +606,7 @@ class UnrealCV(object):
 
     ##############################################################
     # Humanoid System
+    # For '/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C'
     ##############################################################
 
     def humanoid_move_forward(self, object_name):
@@ -860,6 +860,27 @@ class UnrealCV(object):
         with self.lock:
             self.client.request(cmd)
 
+    def humanoid_set_path(self, object_name, path):
+        """Set humanoid path.
+
+        Args:
+            object_name: Name of the humanoid object.
+            path: String of path. Use semicolon to separate waypoints and use comma to separate coordinates. Example: "100,100;200,200;300,300"
+        """
+        cmd = f'vbp {object_name} SetPath {path}'
+        with self.lock:
+            self.client.request(cmd)
+
+    def humanoid_follow_path(self, object_name):
+        """Follow path.
+
+        Args:
+            object_name: Name of the humanoid object.
+        """
+        cmd = f'vbp {object_name} FollowPath'
+        with self.lock:
+            self.client.request(cmd)
+
     ##############################################################
     # Camera
     ##############################################################
@@ -893,7 +914,7 @@ class UnrealCV(object):
             camera_id: ID of the camera to get rotation.
 
         Returns:
-            Rotation (pitch, yaw, roll) of the camera.
+            Rotation (yaw, pitch, roll) of the camera.
         """
         cmd = f'vget /camera/{camera_id}/rotation'
         with self.lock:
@@ -906,7 +927,7 @@ class UnrealCV(object):
             camera_id: ID of the camera to get field of view.
 
         Returns:
-            Field of view of the camera.
+            Horizontal field of view of the camera.
         """
         cmd = f'vget /camera/{camera_id}/fov'
         with self.lock:
@@ -952,7 +973,7 @@ class UnrealCV(object):
 
         Args:
             camera_id: ID of the camera to set field of view.
-            fov: Field of view of the camera.
+            fov: Horizontal field of view of the camera.
         """
         cmd = f'vset /camera/{camera_id}/fov {fov}'
         with self.lock:
@@ -1092,9 +1113,18 @@ class UnrealCV(object):
         Returns:
             Decoded image.
         """
-        img = np.asarray(PIL.Image.open(BytesIO(res)))
-        img = img[:, :, :-1]  # delete alpha channel
-        img = img[:, :, ::-1]  # transpose channel order
+        # img = np.asarray(PIL.Image.open(BytesIO(res)))
+        # img = img[:, :, :-1]  # delete alpha channel
+        # img = img[:, :, ::-1]  # transpose channel order
+        # return img
+        pil_img = PIL.Image.open(BytesIO(res))
+
+        rgb_img = pil_img.convert('RGB')
+
+        img = np.asarray(rgb_img)
+
+        img = img[:, :, ::-1]
+
         return img
 
     def _decode_bmp(self, res, channel=4):
@@ -1149,10 +1179,10 @@ class UnrealCV(object):
         cmd = f'vbp {weather_manager_name} GetSunDirection'
         with self.lock:
             return self.client.request(cmd)
-        
+
     def set_sun_intensity(self, weather_manager_name, intensity):
         """Set sun intensity.
-        
+
         Args:
             weather_manager_name: Name of the weather manager.
             intensity: Intensity of the sun. 0 - 100
@@ -1160,13 +1190,13 @@ class UnrealCV(object):
         cmd = f'vbp {weather_manager_name} SetSunIntensity {intensity}'
         with self.lock:
             self.client.request(cmd)
-        
+
     def get_sun_intensity(self, weather_manager_name):
         """Get sun intensity.
-        
+
         Args:
             weather_manager_name: Name of the weather manager.
-        
+
         Returns:
             Sun intensity.
         """
@@ -1195,7 +1225,7 @@ class UnrealCV(object):
 
         Returns:
             Fog.
-        """ 
+        """
         cmd = f'vbp {weather_manager_name} GetFog'
         with self.lock:
             return self.client.request(cmd)
@@ -1206,7 +1236,7 @@ class UnrealCV(object):
         Args:
             weather_manager_name: Name of the weather manager.
             rayleigh: RayleighScatteringScale of the atmosphere. 0 - 2.
-            mie: MieScatteringScale of the atmosphere. 0 - 5. 
+            mie: MieScatteringScale of the atmosphere. 0 - 5.
         """
         cmd = f'vbp {weather_manager_name} SetAtmosphere {rayleigh} {mie}'
         with self.lock:

@@ -330,6 +330,20 @@ class Communicator:
 
         self.unrealcv.p_set_states(self.ue_manager_name, pedestrians_states_str)
 
+    def p_set_waypoints(self, pedestrian_id, waypoints):
+        """Set pedestrian waypoints.
+
+        Args:
+            pedestrian_id: Pedestrian ID.
+            waypoints: List of waypoints (Vector).
+        """
+        name = self.get_pedestrian_name(pedestrian_id)
+        str_waypoints = ''
+        for waypoint in waypoints:
+            str_waypoints += f'{waypoint.x},{waypoint.y};'
+        str_waypoints = str_waypoints[:-1]
+        self.unrealcv.p_set_waypoints(name, str_waypoints)
+
     def get_pedestrian_name(self, pedestrian_id):
         """Get pedestrian name.
 
