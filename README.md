@@ -10,6 +10,7 @@
 </div>
 
 ## 🔥 News
+ - 2025.9 **SimWorld** has been accepted to NeurIPS 2025 main track as **Spotlight** paper! 🎉
  - 2025.6 The first formal release of **SimWorld** has been published! 🚀
  - 2025.3 Our demo of **SimWolrd** been accepted by CVPR 2025 Demostration Tack! 🎉
 
