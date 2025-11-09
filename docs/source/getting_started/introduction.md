@@ -9,7 +9,7 @@ SimWorld also integrates seamlessly with large language models (LLMs) and vision
 
 ## Architecture
 
-```{image} ../assets/arch.png
+```{image} ../assets/Arch.png
 :width: 800px
 :align: center
 :alt: SimWorld Architecture

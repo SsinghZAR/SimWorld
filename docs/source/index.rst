@@ -35,7 +35,6 @@ With SimWorld, researchers can explore embodied intelligence at scale, enabling 
 
    getting_started/introduction
    getting_started/quick_start
-   simworld-robotics/simworld_robotics
 
 .. toctree::
    :maxdepth: 2
