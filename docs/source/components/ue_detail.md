@@ -40,10 +40,8 @@ These assets collectively enable the creation of complex, dynamic, and realistic
 :align: center
 :alt: A Subset of Collected Assets
 ```
-
-.. raw:: html
-
-   <br><br>
+ 
+ 
 
 ### Asset Generation Pipeline
 
