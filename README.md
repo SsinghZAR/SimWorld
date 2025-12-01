@@ -111,52 +111,77 @@ from simworld.communicator.communicator import Communicator
 from simworld.agent.humanoid import Humanoid
 from simworld.utils.vector import Vector
 
+
 # Connect to the running Unreal Engine instance via UnrealCV
 ucv = UnrealCV()
 comm = Communicator(ucv)
 
-# Define your customized environment logic
+
 class Env:
-    def __init__(self, comm: Communicator, agent: Humanoid, target: Vector):
+    def __init__(self, comm: Communicator):
         self.comm = comm
-        self.agent = agent
-        self.target = target
+        self.agent: Humanoid | None = None
+        self.agent_name: str | None = None
+        self.target: Vector | None = None
 
     def reset(self):
+        """Clear the UE scene and (re)spawn the humanoid and target."""
         # Clear spawned objects
         self.comm.clear_env()
-        
+
         # Blueprint path for the humanoid agent to spawn in the UE level
         agent_bp = "/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C"
-        
-        # Initial spawn position and facing direction for the humanoid
+
+        # Initial spawn position and facing direction for the humanoid (2D)
         spawn_location = Vector(0, 0)
         spawn_forward = Vector(0, 1)
-        agent = Humanoid(spawn_location, spawn_forward)
-        
+        self.agent = Humanoid(spawn_location, spawn_forward)
+
         # Spawn the humanoid agent in the Unreal world
-        self.comm.spawn_agent(agent=agent, model_path=agent_bp)
+        # NOTE: name is ignored for humanoid type, but required by the API.
+        self.comm.spawn_agent(self.agent, name=None, model_path=agent_bp, type="humanoid")
+
+        # Cache the generated UE actor name
         self.agent_name = self.comm.get_humanoid_name(self.agent.id)
-        
+
         # Define a target position the agent is encouraged to move toward (example value)
-        target = Vector(1000, 0)
+        self.target = Vector(1000, 0)
+
+        # Return initial observation (optional, but RL-style)
+        observation = self.comm.get_camera_observation(self.agent.camera_id, "lit")
+        return observation
 
     def step(self):
+        """Move the humanoid forward a bit and compute reward."""
+        assert self.agent is not None and self.agent_name is not None and self.target is not None, \
+            "Call reset() before step()."
+
+        # Apply a simple forward motion
         self.comm.humanoid_step_forward(self.agent.id, 2.0)
-        location = self.comm.unrealcv.get_location(self.agent_name)
-        observation = self.comm.get_camera_observation(self.agent.camera_id, 'lit')
-        reward = -distance(location, self.target)
+
+        # Get current location from UE (x, y, z) and convert to 2D Vector
+        loc_3d = self.comm.unrealcv.get_location(self.agent_name)
+        # loc_3d is a numpy array; explicitly use x, y to build our 2D Vector
+        location = Vector(loc_3d[0], loc_3d[1])
+
+        # Camera observation for RL
+        observation = self.comm.get_camera_observation(self.agent.camera_id, "lit")
+
+        # Reward: negative Euclidean distance in 2D plane
+        reward = -location.distance(self.target)
 
         return observation, reward
 
-# Create the environment wrapper
-env = Env(comm, agent, target)
-env.reset()
 
-# Roll out a short trajectory
-for _ in range(100):
-    observation, reward = env.step()
-    # Plug this into your RL loop / logging as needed
+if __name__ == "__main__":
+    # Create the environment wrapper
+    env = Env(comm)
+    obs = env.reset()
+
+    # Roll out a short trajectory
+    for _ in range(100):
+        observation, reward = env.step()
+        # Plug this into your RL loop / logging as needed
 ```
 
 
