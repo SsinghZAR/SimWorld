@@ -135,7 +135,7 @@ class Env:
         agent = Humanoid(spawn_location, spawn_forward)
         
         # Spawn the humanoid agent in the Unreal world
-        self.comm.spawn_agent(agent, agent_bp)
+        self.comm.spawn_agent(agent=agent, model_path=agent_bp)
         self.agent_name = self.comm.get_humanoid_name(self.agent.id)
         
         # Define a target position the agent is encouraged to move toward (example value)
