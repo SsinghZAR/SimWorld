@@ -103,26 +103,73 @@ To set up your own configuration:
 
 #### Simple Running Example
 
-Once the SimWorld UE5 environment is running (open the map in UE and press **Play**), you can connect from Python and control an in-world humanoid agent in just a few lines:
+Once the SimWorld UE5 environment is running, you can connect from Python and control an in-world humanoid agent in just a few lines:
 
 ```python
-from simworld.communicator.unrealcv import UnrealCV
-from simworld.communicator.communicator import Communicator
-from simworld.agent.humanoid import Humanoid
-from simworld.utils.vector import Vector
+from simworld.communicator.unrealcv import UnrealCV  # UnrealCV wrapper, used to communicate with a running UE instance
+from simworld.communicator.communicator import Communicator  # Higher-level communication wrapper, provides agent/vehicle operations
+from simworld.agent.humanoid import Humanoid  # Humanoid (pedestrian) agent class
+from simworld.utils.vector import Vector  # 2D/3D vector utility class
 
-# Connect to the running UE instance
+# Create a connection to the running Unreal Engine instance
 ucv = UnrealCV()
 comm = Communicator(ucv)
 
-# 1. Spawn a humanoid agent in the world
+# Blueprint path of the humanoid agent to be spawned in UE
 agent_bp = "/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C"
-agent = Humanoid(Vector(0, 0), Vector(0, 1))
-comm.spawn_agent(agent, agent_bp)
 
-# 2. Make the agent walk forward and turn left
-comm.humanoid_step_forward(agent.id, 2.0)
-comm.humanoid_rotate(agent.id, 90, "left")
+# Create a humanoid agent
+agent = Humanoid(Vector(0, 0), Vector(1, 0))
+
+# Name of the agent in UE (used as identifier in UnrealCV)
+agent_name = "test_agent"
+
+# Spawn a humanoid agent in the UE scene
+comm.spawn_agent(agent=agent, name=agent_name, model_path=agent_bp)
+
+
+def reset():
+    # Teleport the agent to the origin position (x=0, y=0, z=0)
+    comm.unrealcv.set_location(agent_name, [0, 0, 0])
+    # Reset the agent's Euler orientation to (pitch=0, yaw=0, roll=0)
+    comm.unrealcv.set_orientation(agent_name, [0, 0, 0])
+    return get_state()
+
+
+def step():
+    # Move the humanoid agent forward by 2.0 units (meters or engine units)
+    comm.humanoid_step_forward(agent.id, 2.0)
+
+    # Capture a rendered image frame from camera with id=0 in 'lit' mode (usually RGB)
+    obs = comm.get_camera_observation(0, "lit")
+
+    # Get the current accumulated collision count for this agent
+    collision = comm.get_collision_number(agent.id)
+
+    # Read the latest position and orientation of the agent from UE
+    state = get_state()
+    return obs, collision, state
+
+
+def get_state():
+    # Get the agent's world position from UE
+    position = comm.unrealcv.get_location(agent_name)
+    # Get the agent's Euler orientation from UE
+    orientation = comm.unrealcv.get_orientation(agent_name)
+    state = {
+        "position": position,
+        "orientation": orientation,
+    }
+    return state
+
+
+# Reset the scene first and get the initial state
+state = reset()
+
+# Run 10 simulation steps and print the observation, collision count, and state at each step
+for i in range(10):
+    obs, collision, state = step()
+    print(f"Step {i}: obs={obs}, collision={collision}, state={state}")
 ```
 
 
