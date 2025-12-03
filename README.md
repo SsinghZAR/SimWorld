@@ -154,9 +154,6 @@ class Env:
 
     def step(self, action):
         """Move the humanoid forward a bit and compute reward."""
-        assert self.agent is not None and self.agent_name is not None and self.target is not None, \
-            "Call reset() before step()."
-
         # Parse the action text and map it to the action space
         if "step_forward" in action:
             self.comm.humanoid_step_forward(self.agent.id, 2.0)
