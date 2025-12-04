@@ -104,6 +104,7 @@ To set up your own configuration:
 #### Simple Running Example
 
 Once the SimWorld UE5 environment is running, you can connect from Python and control an in-world humanoid agent in just a few lines:
+(The whole example of minimal demo is shown in : [`examples/minimal_demo.ipynb`](https://github.com/SimWorld-AI/SimWorld/blob/hotfix-examples/examples/minimal_demo.ipynb))
 
 ```python
 from simworld.communicator.unrealcv import UnrealCV
