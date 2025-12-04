@@ -259,6 +259,11 @@ class DataExporter:
                         'y': round(scale_y * 0.9, 4),
                         'z': 1.0
                     }
+                    # 'scale': {
+                    #     'x': 0.88,
+                    #     'y': 1.0,
+                    #     'z': 1.0
+                    # }
                 }
             }
             world_data['nodes'].append(obj)

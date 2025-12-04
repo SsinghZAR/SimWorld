@@ -1,26 +1,37 @@
-# SimWorld: A World Simulator for Scaling Photorealistic Multi-Agent Interactions
-![Overview](https://github.com/user-attachments/assets/6246ad14-2851-4a51-a534-70f59a40e460)
+# SimWorld: An Open-ended Realistic Simulator for Autonomous Agents in Physical and Social Worlds
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/5d2da588-9470-44ef-82a9-5d45d592497a" width="840" height="795" alt="image" />
+</p>
 
-**SimWorld** is a simulation platform for developing and evaluating **LLM/VLM-powered** AI agents in complex physical and social environments.
+
+**SimWorld** is a simulation platform for developing and evaluating **LLM/VLM** AI agents in complex physical and social environments.
 
 <div align="center">
-    <a href="http://simworld-cvpr2025.maitrix.org/"><img src="https://img.shields.io/badge/Website-SimWorld-blue" alt="Website" /></a>
+    <a href="https://simworld-ai.github.io/"><img src="https://img.shields.io/badge/Website-SimWorld-blue" alt="Website" /></a>
     <a href="https://github.com/maitrix-org/SimWorld"><img src="https://img.shields.io/github/stars/maitrix-org/SimWorld?style=social" alt="GitHub Stars" /></a>
     <a href="https://simworld.readthedocs.io/en/latest"><img src="https://img.shields.io/badge/Documentation-Read%20Docs-green" alt="Documentation" /></a>
 </div>
 
 ## 🔥 News
+ - 2025.9 **SimWorld** has been accepted to NeurIPS 2025 main track as **spotlight** paper! 🎉
  - 2025.6 The first formal release of **SimWorld** has been published! 🚀
  - 2025.3 Our demo of **SimWolrd** been accepted by CVPR 2025 Demostration Tack! 🎉
 
 ## 💡 Introduction
-Most existing embodied simulators focus on indoor environments. While there are urban simulators, many either lack realism or are limited to specific domains, such as autonomous driving. Moreover, these simulators often don't allow users to dynamically generate new scenes or define custom AI tasks. The main goal of SimWorld is to help bridge the gap between agent performance in structured digital domains and the dynamic challenges of the real world. To do so, the platform is designed to be a foundational tool for advancing real-world agent intelligence across a variety of disciplines.
-
-SimWorld is built on Unreal Engine 5 and offers core capabilities to meet the needs of modern agent development. It provides (1) realistic, open-ended world simulation with accurate physics and language-based procedural generation. Control and interaction are handled through (2) a rich interface for LLM/VLM agents, supporting multi-modal perception and natural language actions. Finally, SimWorld includes (3) diverse and customizable physical and social reasoning scenarios, enabling systematic training and evaluation of complex agent behaviors like navigation, planning, and strategic cooperation.
+SimWorld is built on Unreal Engine 5 and offers core capabilities to meet the needs of modern agent development. It provides:
+- Realistic, open-ended world simulation with accurate physics and language-based procedural generation.
+- Rich interface for LLM/VLM agents, supporting multi-modal perception and natural language actions.
+- Diverse and customizable physical and social reasoning scenarios, enabling systematic training and evaluation of complex agent behaviors like navigation, planning, and strategic cooperation.
 
 ## 🏗️ Architecture
+<p align="center">
+    <img width="799" height="671" alt="image" src="https://github.com/user-attachments/assets/2e67356a-7dca-4eba-ab57-de1226e080bb" />
+</p>
 
-![Architecture](https://github.com/user-attachments/assets/f5f43638-7583-483f-aadc-1ddf5d6ff27a)
+**SimWorld** consists of three layers: 
+- the Unreal Engine Backend, providing diverse and open-ended environments, rich assets and realistic physics simulation; 
+- the Environment layer, supporting procedural city generation, language-driven scene editing, gym-like APIs for LLM/VLM agents and traffic simulation; 
+- the Agent layer, enabling LLM/VLM agents to reason over multimodal observations and history while executing actions via an action planner;
 
 SimWorld's architecture is designed to be modular and flexible, supporting an array of functionalities such as dynamic world generation, agent control, and performance benchmarking. The components are seamlessly integrated to provide a robust platform for **Embodied AI** and **Agents** research and applications.
 
@@ -90,10 +101,97 @@ To set up your own configuration:
    config = Config('path/to/your_config')    # use absolute path here
    ```
 
+#### Simple Running Example
+
+Once the SimWorld UE5 environment is running, you can connect from Python and control an in-world humanoid agent in just a few lines:
+
+```python
+from simworld.communicator.unrealcv import UnrealCV
+from simworld.communicator.communicator import Communicator
+from simworld.agent.humanoid import Humanoid
+from simworld.utils.vector import Vector
+from simworld.llm.base_llm import BaseLLM
+
+
+# Connect to the running Unreal Engine instance via UnrealCV
+ucv = UnrealCV()
+comm = Communicator(ucv)
+
+
+class Env:
+    def __init__(self, comm: Communicator):
+        self.comm = comm
+        self.agent: Humanoid | None = None
+        self.agent_name: str | None = None
+        self.target: Vector | None = None
+
+    def reset(self):
+        """Clear the UE scene and (re)spawn the humanoid and target."""
+        # Clear spawned objects
+        self.comm.clear_env()
+
+        # Blueprint path for the humanoid agent to spawn in the UE level
+        agent_bp = "/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C"
+
+        # Initial spawn position and facing direction for the humanoid (2D)
+        spawn_location = Vector(0, 0)
+        spawn_forward = Vector(0, 1)
+        self.agent = Humanoid(spawn_location, spawn_forward)
+
+        # Spawn the humanoid agent in the Unreal world
+        # NOTE: name is ignored for humanoid type, but required by the API.
+        self.comm.spawn_agent(self.agent, name=None, model_path=agent_bp, type="humanoid")
+
+        # Cache the generated UE actor name
+        self.agent_name = self.comm.get_humanoid_name(self.agent.id)
+
+        # Define a target position the agent is encouraged to move toward (example value)
+        self.target = Vector(1000, 0)
+
+        # Return initial observation (optional, but RL-style)
+        observation = self.comm.get_camera_observation(self.agent.camera_id, "lit")
+        return observation
+
+    def step(self, action):
+        """Move the humanoid forward a bit and compute reward."""
+        # Parse the action text and map it to the action space
+        if "step_forward" in action:
+            self.comm.humanoid_step_forward(self.agent.id, 2.0)
+
+        # Get current location from UE (x, y, z) and convert to 2D Vector
+        loc_3d = self.comm.unrealcv.get_location(self.agent_name)
+        # loc_3d is a numpy array; explicitly use x, y to build our 2D Vector
+        location = Vector(loc_3d[0], loc_3d[1])
+
+        # Camera observation for RL
+        observation = self.comm.get_camera_observation(self.agent.camera_id, "lit")
+
+        # Reward: negative Euclidean distance in 2D plane
+        reward = -location.distance(self.target)
+
+        return observation, reward
+
+
+if __name__ == "__main__":
+    # Create the environment wrapper
+    env = Env(comm)
+    obs = env.reset()
+    llm = BaseLLM("GPT-4o")  # Make sure OPENAI_API_KEY is set as an environment variable
+
+    system_prompt = "Your system prompt here"
+
+    # Roll out a short trajectory
+    for _ in range(100):
+        user_prompt = f"Current observation: {obs}\nPlease output an action."
+        action = llm.generate_text(system_prompt, user_prompt)
+        obs, reward = env.step(action)
+        # Plug this into your RL loop / logging as needed
+```
 
 
 ## For Contributors
 ### Precommit Setup
+
 We use Google docstring format for our docstrings and the pre-commit library to check our code. To install pre-commit, run the following command:
 
 ```bash
