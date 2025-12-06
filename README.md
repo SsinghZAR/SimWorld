@@ -104,6 +104,7 @@ To set up your own configuration:
 #### Simple Running Example
 
 Once the SimWorld UE5 environment is running, you can connect from Python and control an in-world humanoid agent in just a few lines:
+(The whole example of minimal demo is shown in : [`examples/minimal_demo.ipynb`](https://github.com/SimWorld-AI/SimWorld/blob/hotfix-examples/examples/minimal_demo.ipynb))
 
 ```python
 from simworld.communicator.unrealcv import UnrealCV
@@ -124,7 +125,7 @@ class Agent:
         self.system_prompt = f"You are an intelligent agent in a 3D world. Your goal is to: {self.goal}."
 
     def action(self, obs):
-        prompt = f"{self.system_prompt}\n You are currently at: {obs}\nWhat is your next goal?"
+        prompt = f"{self.system_prompt}\n You are currently at: {obs}\nWhat is your next action?"
         action = self.llm.generate_text(system_prompt=self.system_prompt, user_prompt=prompt)
         return action
 
