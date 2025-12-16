@@ -247,3 +247,7 @@ feat: add user login API
 + Add comments or documentation if needed.
 
 We appreciate clean, well-described contributions! 🚀
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=SimWorld-AI/SimWorld&type=date&legend=bottom-right)](https://www.star-history.com/#SimWorld-AI/SimWorld&type=date&legend=bottom-right)
