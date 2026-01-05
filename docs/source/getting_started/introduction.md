@@ -23,9 +23,13 @@ At its core, the *Unreal Engine Backend* provides high-fidelity scenes, assets, 
 
 We release two versions of SimWorld: the base version and the additional environments version, both versions include the core features of SimWorld, while the additional environments version offers extra pre-defined environments for more diverse simulation scenarios.
 
-| version | pre-defined scenes |
-|---------|--------------------|
-| base version | 1 (Procedural Generated City) |
-| additional environments version | 100+ (Procedural Generated City, Industrial Area, Natural Environment, etc.) |
+| Package | Scenes/Maps Included |
+| --- | --- |
+| Base | Foundation procedural generated city scenes |
+| Environments Pack | 100+ maps (includes Base) |
+
+**Note:**
+1. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#usage) for usage instructions of the **100+ Maps** version.
+2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Environments Pack (100+ Maps)**.
 
 The usage of the additional version can be shown in the [Additional Environments](../getting_started/additional_environments) page.

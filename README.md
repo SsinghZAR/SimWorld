@@ -74,10 +74,11 @@ Download the SimWorld server executable from S3:
 
 | Platform | Package | Scenes/Maps Included | Download | Notes |
 | --- | --- | --- | --- | --- |
-| Windows | Base | Foundation scenes | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
+| Windows | Base | Foundation procedural generated city scenes | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
 | Windows | Environments Pack | 100+ maps (includes Base) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-100Maps.zip) | Full agent features; larger download. |
-| Linux | Base | Foundation scenes | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
+| Linux | Base | Foundation procedural generated city scenes | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
 | Linux | Environments Pack | 100+ maps (includes Base) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-100Maps.zip) | Full agent features; larger download. |
+
 
 **Note:**
 1. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#usage) for usage instructions of the **100+ Maps** version.

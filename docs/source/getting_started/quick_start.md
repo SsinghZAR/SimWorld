@@ -3,18 +3,22 @@
 This page shows how to download and install the packaged version of SimWorld. The package includes the executable file of SimWorld server and the Python client library.
 
 ## Before you begin
-The following requirements should be fulfilled before installing SimWorld:
+The following device requirements should be fulfilled before installing SimWorld:
 
-+ System requirements. SimWorld is built for Windows and Linux systems.
-+ An adequate GPU. SimWorld aims for realistic simulations, so the server needs at least a 6 GB GPU although we would recommend 8 GB. A dedicated GPU is highly recommended.
-+ Memory. A 32 GB memory or above is recommended.
-+ Disk space. The base version of SimWorld requires about 50 GB of disk space. Please allow at least 200 GB if you need the 100-map version.
-+ Python. SimWorld supports Python 3.10 or higher.
-+ Two TCP ports and good internet connection. 9000 and 9001 by default. Make sure that these ports are not blocked by firewalls or any other applications.
+| Category | Minimum | Recommended |
+|---|---|---|
+| OS | Windows / Linux | Windows / Linux |
+| GPU | ≥ 6 GB VRAM (dedicated GPU recommended) | ≥ 8 GB VRAM (dedicated GPU strongly recommended) |
+| Memory (RAM) | 32 GB | 32 GB+ |
+| Disk Space | 50 GB (Base version) | 200 GB+ (Additional environments / 100+ maps) |
+
+**Note:**
+1. Python: Python 3.10 or later is required.
+2. Network: A stable internet connection and two available TCP ports (9000 and 9001 by default) are required.
 
 ## Installation
 ### SimWorld Python Client Library
-Download the Python library from GitHub:
+SimWorld Python Client contains code for SimWorld's agent and environment layer. Download the Python library from GitHub:
 
 [SimWorld Python Client Library](https://github.com/SimWorld-AI/SimWorld.git)
 
@@ -30,11 +34,15 @@ pip install -e .
 
 
 ### Unreal Engine Backend
-Download the SimWorld Unreal Engine backend executable from S3, choose the version according to your OS and the edition you want to use, the usage of the additional environments version can be shown in the [Additional Environments](../getting_started/additional_environments) page.
+Download the SimWorld Unreal Engine backend executable from AWS S3, choose the version according to your OS and the edition you want to use, the usage of the additional environments version can be shown in the [Additional Environments](../getting_started/additional_environments) page.
 
-| OS | Edition | Download |
-| --- | --- | --- |
-| Windows | Base | [SimWorld Windows 64-bit Unreal Engine Backend (v0.1.0) - base version](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-Foundation.zip) |
-| Windows | Additional environments | [SimWorld Windows 64-bit Unreal Engine Backend (v0.1.0) - additional environments version](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-100Maps.zip) |
-| Linux | Base | [SimWorld Linux 64-bit Unreal Engine Backend (v0.1.0) - base version](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) |
-| Linux | Additional environments | [SimWorld Linux 64-bit Unreal Engine Backend (v0.1.0) - additional environments version](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-100Maps.zip) |
+| Platform | Package | Scenes/Maps Included | Download | Notes |
+| --- | --- | --- | --- | --- |
+| Windows | Base | Foundation procedural generated city scenes | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
+| Windows | Additional Environment | 100+ maps (includes Base) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-100Maps.zip) | Full agent features; larger download. |
+| Linux | Base | Foundation procedural generated city scenes | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
+| Linux | Additional Environment | 100+ maps (includes Base) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-100Maps.zip) | Full agent features; larger download. |
+
+**Note:**
+1. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#usage) for usage instructions of the **100+ Maps** version.
+2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Environments Pack (100+ Maps)**.
