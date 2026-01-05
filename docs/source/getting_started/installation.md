@@ -12,6 +12,8 @@ The following device requirements should be fulfilled before installing SimWorld
 | Memory (RAM) | 32 GB | 32 GB+ |
 | Disk Space | 50 GB (Base version) | 200 GB+ (Additional environments / 100+ maps) |
 
+| We use RTX 4090 with 24 GB VRAM for demo video recording, and hardware raytracing is enabled for enhanced visual fidelity. |
+
 **Note:**
 1. Python: Python 3.10 or later is required.
 2. Network: A stable internet connection and two available TCP ports (9000 and 9001 by default) are required.
