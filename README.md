@@ -79,7 +79,9 @@ Download the SimWorld server executable from S3:
 | Linux | Base | Foundation scenes | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
 | Linux | Environments Pack | 100+ maps (includes Base) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-100Maps.zip) | Full agent features; larger download. |
 
-**Tip:** If you only need core functionality for development/testing, use **Base**. If you want richer demos and more scenes, use **Environments Pack (100+ Maps)**.
+**Note:**
+1. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/addisional_envrionments.html#usage) for usage instructions of the **100+ Maps** version.
+2. If you only need core functionality for development/testing, use **Base**. If you want richer demos and more scenes, use **Environments Pack (100+ Maps)**.
 
 ### Quick Start
 
