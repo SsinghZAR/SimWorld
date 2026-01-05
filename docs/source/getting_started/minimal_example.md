@@ -1,6 +1,6 @@
 # Minimal Example
 
-Walk through the `examples/minimal_demo.ipynb` notebook with a step-by-step setup. This example launches a simple LLM-driven humanoid that plans in natural language and executes via the Local Planner.
+Walk through the `examples/gym_interface_demo.ipynb` notebook with a step-by-step setup. This example launches a simple LLM-driven humanoid that plans in natural language and executes via the Local Planner.
 
 ## Prerequisites
 - Install the Python client and have the UE backend running (see [Installation](../getting_started/installation.md)).
