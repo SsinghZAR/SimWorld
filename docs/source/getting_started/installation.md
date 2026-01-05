@@ -1,4 +1,4 @@
-# Quick Start
+# Installation
 
 This page shows how to download and install the packaged version of SimWorld. The package includes the executable file of SimWorld server and the Python client library.
 
@@ -44,5 +44,4 @@ Download the SimWorld Unreal Engine backend executable from AWS S3, choose the v
 | Linux | Additional Environment | 100+ maps (includes Base) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-100Maps.zip) | Full agent features; larger download. |
 
 **Note:**
-1. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#usage) for usage instructions of the **100+ Maps** version.
-2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Environments Pack (100+ Maps)**.
+If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Environments Pack (100+ Maps)**.

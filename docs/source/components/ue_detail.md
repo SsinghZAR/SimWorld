@@ -14,7 +14,7 @@ SimWorld supports two scene-building modes: procedural generation and pre-built 
 
 The procedural generation module enables the creation of virtually unlimited city layouts populated with diverse buildings, roads, and street elements. This allows users to dynamically render coherent and realistic urban environments at runtime, making it ideal for large-scale experimentation under customizable conditions. (See [Procedual City Generation](../components/citygen.md) for details.)
 
-In addition to procedurally generated cities, SimWorld also provides a rich collection of pre-built maps. These manually designed scenes can be created by users or imported from external sources such as the Unreal Engine Marketplace. The current release includes 102 curated scenes spanning a wide range of visual and structural styles—such as ancient towns, natural landscapes, futuristic cities, and fictional worlds. Each map offers distinct visual cues, spatial layouts, and interaction dynamics, enabling diverse and comprehensive evaluation of embodied agents.
+In addition to procedurally generated cities, SimWorld also provides a rich collection of pre-built maps (See [Additional Environments](../getting_started/additional_environments.md)). These manually designed scenes can be created by users or imported from external sources such as the Unreal Engine Marketplace. The current release includes 102 curated scenes spanning a wide range of visual and structural styles—such as ancient towns, natural landscapes, futuristic cities, and fictional worlds. Each map offers distinct visual cues, spatial layouts, and interaction dynamics, enabling diverse and comprehensive evaluation of embodied agents.
 
 ## Assets
 
