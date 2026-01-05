@@ -6,7 +6,7 @@ simworld:
 citygen:
   input_layout: false
   input_roads: "<your path here>"
-  input_bounding_boxes: "<your path here>"
+  input_bounding_boxes: "<your path here>"  # e.g., ./data/bounding_boxes.json
   output_dir: "<your path here>"
   world_json: "<your path here>"
   ue_asset_path: "<your path here>"
@@ -59,7 +59,7 @@ citygen:
 
 assets_rp:
   input_description_map: "<your path here>"
-  input_sample_dataset: "<your path here>"
+  input_sample_dataset: "<your path here>"  # e.g., ./data/building_images
   input_dir: "output"
   output_dir: "output_rp"
   env_description_retrieval_model: "paraphrase-MiniLM-L6-v2"

@@ -4,7 +4,7 @@ This folder contains example code demonstrating various functionalities of SimWo
 
 ## Example List
 
-### `minimal_demo.ipynb`
+### `gym_interface_demo.ipynb`
 Minimal demo showing how to create an LLM-based agent with a Gym-like environment interface. Demonstrates Agent-Environment interaction loop and goal-oriented tasks.
 
 ### `world_generation.ipynb`
