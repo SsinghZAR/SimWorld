@@ -113,6 +113,20 @@ To set up your own configuration:
    from simworld.config import Config
    config = Config('path/to/your_config')    # use absolute path here
    ```
+   
+#### Agent Action Space
+SimWorld provides a comprehensive action space for pedestrians, vehicles and robots (e.g., move forward, sit down, pick up). For more details, see [actions](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#actions) and `examples/ue_command.ipynb`.
+
+#### Using the Camera
+SimWorld supports a variety of sensors, including RGB images, segmentation maps, and depth images. For more details, please refer to the [sensors](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#sensors) and the example script `examples/camera.ipynb`.
+
+#### Commonly Used APIs
+All APIs are located in `simworld/communicator`. Some of the most commonly used ones are listed below:
+- `communicator.get_camera_observation`
+- `communicator.spawn_object`
+- `communicator.spawn_agent`
+- `communicator.generate_world`
+- `communicator.clear_env`
 
 #### Simple Running Example
 
