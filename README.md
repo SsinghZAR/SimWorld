@@ -80,12 +80,12 @@ Download the SimWorld server executable from S3:
 | Linux | Environments Pack | 100+ maps (includes Base) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-100Maps.zip) | Full agent features; larger download. |
 
 **Note:**
-1. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/addisional_envrionments.html#usage) for usage instructions of the **100+ Maps** version.
-2. If you only need core functionality for development/testing, use **Base**. If you want richer demos and more scenes, use **Environments Pack (100+ Maps)**.
+1. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#usage) for usage instructions of the **100+ Maps** version.
+2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Environments Pack (100+ Maps)**.
 
 ### Quick Start
 
-We provide several examples of code in `scripts/`, showcasing how to use the basic functionalities of SimWorld, including city layout generation, traffic simulation, asset retrieval, and activity-to-actions. Please follow the examples to see how SimWorld works.
+We provide several examples of code in `examples/`, showcasing how to use the basic functionalities of SimWorld, including city layout generation, traffic simulation, asset retrieval, and activity-to-actions. Please follow the examples to see how SimWorld works.
 
 #### Configuration
 
