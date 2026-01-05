@@ -17,7 +17,7 @@
  - 2025.11 The white paper of **SimWorld** has been on arxiv!
  - 2025.9 **SimWorld** has been accepted to NeurIPS 2025 main track as **spotlight** paper! 🎉
  - 2025.6 The first formal release of **SimWorld** has been published! 🚀
- - 2025.3 Our demo of **SimWorld** been accepted by CVPR 2025 Demonstration Track! 🎉
+ - 2025.3 Our demo of **SimWorld** has been accepted by CVPR 2025 Demonstration Track! 🎉
 
 ## 💡 Introduction
 SimWorld is built on Unreal Engine 5 and offers core capabilities to meet the needs of modern agent development. It provides:
@@ -122,6 +122,7 @@ from simworld.communicator.communicator import Communicator
 from simworld.agent.humanoid import Humanoid
 from simworld.utils.vector import Vector
 from simworld.llm.base_llm import BaseLLM
+from simworld.local_planner.local_planner import LocalPlanner
 
 
 # Connect to the running Unreal Engine instance via UnrealCV
@@ -158,7 +159,7 @@ class Environment:
         # Initial spawn position and facing direction for the humanoid (2D)
         spawn_location, spawn_forward = Vector(0, 0), Vector(0, 1)
         self.agent = Humanoid(spawn_location, spawn_forward)
-        self.action_planner = LocalPlanner(agent=self.agent,model=self.action_planner_llm,rule_based=False)
+        self.action_planner = LocalPlanner(agent=self.agent, model=self.agent.llm, rule_based=False)
 
         # Spawn the humanoid agent in the Unreal world
         self.comm.spawn_agent(self.agent, name=None, model_path=agent_bp, type="humanoid")
@@ -193,7 +194,7 @@ class Environment:
 if __name__ == "__main__":
     # Create the environment wrapper
     agent = Agent(goal='Go to (1700, -1700) and pick up GEN_BP_Box_1_C.')
-    env = Environment(communicator)
+    env = Environment(comm)
 
     obs = env.reset()
 

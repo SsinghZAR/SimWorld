@@ -3,7 +3,7 @@ The additional environments version of SimWorld includes over 100 pre-defined sc
 
 ## Usage
 ### CLI
-If you run the SimWorld on the server, to load and use these additional environments in SimWorld, you can refer to [Unreal Engine Official Document](https://dev.epicgames.com/documentation/en-us/unreal-engine/command-line-arguments-in-unreal-engine) to specify the desired Map URI when start the unreal engine backend. For example:
+If you run the SimWorld on the server, to load and use these additional environments in SimWorld, you can refer to [Unreal Engine Official Document](https://dev.epicgames.com/documentation/en-us/unreal-engine/command-line-arguments-in-unreal-engine) to specify the desired Map URI when starting the unreal engine backend. For example:
 
 on Windows:
 ```bash
@@ -24,7 +24,7 @@ If you run the SimWorld on the machine that has the GUI, you can switch the map 
 
 
 ## Scene List
-The following table lists the scene and their corresponding Map URIs included in the additional environments version of SimWorld:
+The following table lists the scenes and their corresponding Map URIs included in the additional environments version of SimWorld:
 
 | Scene | Map URI |
 |---|---|
@@ -129,7 +129,6 @@ The following table lists the scene and their corresponding Map URIs included in
 | Modular Sci-Fi Indoor/Outdoor environment pack - Rocky Swampy Planet | /Game/ModularSciFi/Levels/PreviewSceneIndoor.umap |
 | Egyptian Pyramid Modular kit Nanite | /Game/Pyramids/Levels/L_pyramids.umap |
 | Dungeon Environment / 135+ Assets | /Game/Dungeon/Levels/Dungeon_Demo_00.umap |
-| Downtown West Modular Pack | /Game/Downtown_West/Maps/Demo_Environment.umap |
 | Downtown West Modular Pack | /Game/Downtown_West/Maps/Demo_Environment.umap |
 | Korean Traditional Palace | /Game/HwaseongHaenggung/Maps/Demo.umap |
 | Modular Building Set | /Game/ModularBuildingSet/Demo_Scene.umap |
