@@ -13,7 +13,7 @@ The following requirements should be fulfilled before installing SimWorld:
 + Two TCP ports and good internet connection. 9000 and 9001 by default. Make sure that these ports are not blocked by firewalls or any other applications.
 
 ## Installation
-### Client
+### Agent and Environment Client
 Download the Python library from GitHub:
 
 [SimWorld Python Client Library](https://github.com/maitrix-org/SimWorld)
@@ -29,13 +29,12 @@ pip install -e .
 ```
 
 
-### Server
-Download the SimWorld server executable from S3:
+### Unreal Engine Backend
+Download the SimWorld Unreal Engine backend executable from S3, choose the version according to your OS and the edition you want to use, the usage of the additional environments version can be shown in the [Additional Environments](additional_envrionments.md) page.:
 
-#### Windows
-
-Download the [SimWorld Windows 64-bit Server (v0.1.0)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-Foundation.zip) and unzip it.
-
-#### Linux
-
-Download the [SimWorld Linux 64-bit Server (v0.1.0)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) and unzip it.
+| OS | Edition | Download |
+| --- | --- | --- |
+| Windows | Base | [SimWorld Windows 64-bit Unreal Engine Backend (v0.1.0) - base version](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-Foundation.zip) |
+| Windows | Additional environments | [SimWorld Windows 64-bit Unreal Engine Backend (v0.1.0) - additional environments version](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-Foundation.zip) |
+| Linux | Base | [SimWorld Linux 64-bit Unreal Engine Backend (v0.1.0) - base version](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) |
+| Linux | Additional environments | [SimWorld Linux 64-bit Unreal Engine Backend (v0.1.0) - additional environments version](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) |

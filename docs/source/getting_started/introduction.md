@@ -19,17 +19,13 @@ SimWorld employs a three-tier hierarchical architecture that separates the high-
 
 At its core, the *Unreal Engine Backend* provides high-fidelity scenes, assets, and physics, forming the foundation for realistic simulation. Built upon it, the *Environment* layer serves as an intermediary that abstracts low-level rendering and physics into structured representations, supporting procedural city generation, traffic simulation, and a Gym-like interface for agent interaction via *UnrealCV+*. On top of this, the *Agent* layer integrates LLM/VLM agents capable of interpreting multimodal observations from the environment, reasoning about goals, and issuing actions that are executed through the environment’s connection to the Unreal backend. Together, these components form a closed perception–planning–action loop, enabling intelligent agents to interact, learn, and adapt in rich, dynamic worlds.
 
+## Version Comparison
 
-```{image} ../assets/architecture.png
-:width: 800px
-:align: center
-:alt: SimWorld Server-Client Architecture
-```
+We release two versions of SimWorld: the base version and the additional environments version, both versions include the core features of SimWorld, while the additional environments version offers extra pre-defined environments for more diverse simulation scenarios.
 
-SimWorld adopts a robust and scalable client-server design that enables efficient simulation and agent control. The server component, built on Unreal Engine 5, serves as the simulation backbone, handling critical tasks such as sensor rendering, physical simulation and updates on the world-state.
+| version | pre-defined scenes |
+|---------|--------------------|
+| base version | 1 (Procedural Generated City) |
+| additional environments version | 100+ (Procedural Generated City, Industrial Area, Natural Environment, etc.) |
 
-The client component, implemented in Python, provides a flexible and developer-friendly interface for:
-- Agent control logic and decision-making
-- Seamless integration with LLM/VLM models
-- Custom scenario configuration and management
-
+The usage of the additional version can be shown in the [Additional Environments](additional_envrionments.md) page.
