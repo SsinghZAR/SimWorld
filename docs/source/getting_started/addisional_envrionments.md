@@ -2,13 +2,22 @@
 The additional environments version of SimWorld includes over 100 pre-defined scenes sourced from the Unreal Marketplace. These environments cover a wide range of settings, including urban areas, industrial zones, natural landscapes, and interior spaces. Below is a list of some of the included scenes along with their corresponding Map URIs:
 
 ## Usage
-To load and use these additional environments in SimWorld, you can refer to specify the desired Map URI when start the unreal engine backend. For example:
+### CLI
+If you run the SimWorld on the server, to load and use these additional environments in SimWorld, you can refer to [Unreal Engine Official Document](https://dev.epicgames.com/documentation/en-us/unreal-engine/command-line-arguments-in-unreal-engine) to specify the desired Map URI when start the unreal engine backend. For example:
 
+on Windows:
 ```bash
 ./gym_citynav.exe /Game/TokyoStylizedEnvironment/Maps/Tokyo.umap
 ```
 
-or if you have the GUI, you can open the map by using the console command in the console window:
+or on Linux:
+
+```bash
+./gym_citynav.sh /Game/TokyoStylizedEnvironment/Maps/Tokyo.umap
+```
+
+### GUI
+If you run the SimWorld on the machine that have the GUI, you can switch the map after launching the SimWorld unreal engine backend by using the console command in the console window:
 
 1. press `~` to open the console window
 2. type `open /Game/TokyoStylizedEnvironment/Maps/Tokyo.umap` and press enter
