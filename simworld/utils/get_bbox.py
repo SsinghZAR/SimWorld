@@ -4,7 +4,7 @@ import json
 import unreal
 
 bbox_dict = {}
-file_path = 'D:/Projects/SimWorld/input/Bbox.json'
+file_path = 'D:/Projects/SimWorld/input/bounding_boxes.json'
 
 selected_actors = unreal.EditorLevelLibrary.get_selected_level_actors()
 

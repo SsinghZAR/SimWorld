@@ -73,7 +73,6 @@ The Local Planner is designed with extensibility and modularity in mind. Users c
 In summary, the Local Planner serves as a crucial abstraction layer that decouples high-level social reasoning from low-level physical execution, empowering users to design and experiment with custom agent architectures (e.g., observation models, memory systems, or reasoning engines) tailored to their research needs.
 
 **Related files:** `local_planner.py`.
-
 ## Base LLM
 SimWorld provides a `BaseLLM` class as a foundational interface for LLMs into the framework. It is designed to be extensible and robust, with automatic retry mechanisms built into all public methods to improve reliability when interacting with external APIs.
 
@@ -139,4 +138,4 @@ action_space = local_planner.parse(plan)
 local_planner.execute(action_space)
 ```
 
-A complete example can be found in `scripts/local_planner_test.ipynb`.
+A complete example can be found in `scripts/action_planner_test.ipynb`.
