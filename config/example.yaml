@@ -59,7 +59,7 @@ citygen:
 
 assets_rp:
   input_description_map: "<your path here>"
-  input_sample_dataset: "<your path here>"  # e.g., ./data/building_images
+  input_sample_dataset: "<your path here>"  # e.g., ./data/asset_images
   input_dir: "output"
   output_dir: "output_rp"
   env_description_retrieval_model: "paraphrase-MiniLM-L6-v2"

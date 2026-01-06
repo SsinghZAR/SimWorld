@@ -6,5 +6,4 @@
 | description_map.json | Textual descriptions for assets to support retrieval/placement from natural language. | AssetsRP (simworld/assets_rp/AssetsRP.py) through ReferenceAssetsRetriever. | Used to match prompts to assets and surroundings. |
 | vehicle_types.json | Vehicle archetypes (length/width/reference blueprint) for traffic simulation. | VehicleManager (simworld/traffic/manager/vehicle_manager.py) via `traffic.vehicle.model_file_path`. | Populate traffic spawns with varied vehicle types. |
 | ue_assets.json | UE asset manifest referenced by config. | Path set in `citygen.ue_asset_path` (simworld/config/default.yaml); intended for UE-side asset mapping. | Used to map asset references in the UE backend. |
-| building_images/ | Image set for asset retrieval (CLIP matching) in AssetsRP. | AssetsRP uses `assets_rp.input_sample_dataset` (default `building_images`) when calling `retrieve_target_asset`. | Add or replace images here to steer retrieval results. |
-
+| asset_images/ | Image set for asset retrieval (CLIP matching) in AssetsRP. | AssetsRP uses `assets_rp.input_sample_dataset` (default `asset_images`) when calling `retrieve_target_asset`. | Add or replace images here to steer retrieval results. |
