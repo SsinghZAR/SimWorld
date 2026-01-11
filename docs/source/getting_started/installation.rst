@@ -40,7 +40,7 @@ Installation
 SimWorld Python Client Library
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The SimWorld Python Client Library contains code for SimWorld's agent and environment layer. Download the Python library from GitHub: `SimWorld Python Client Library <https://github.com/SimWorld-AI/SimWorld.git>`
+The SimWorld Python Client Library contains code for SimWorld's agent and environment layer. Download the Python library from GitHub: [SimWorld Python Client Library](https://github.com/SimWorld-AI/SimWorld.git)
 
 .. code-block:: bash
 
