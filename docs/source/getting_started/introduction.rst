@@ -29,7 +29,7 @@ At its core, the *Unreal Engine Backend* provides high-fidelity scenes, assets, 
 Version Comparison
 ------------------
 
-We release two versions of SimWorld: the base version and the additional environments version. Both versions include the core features of SimWorld, while the additional environments version offers extra pre-defined environments for more diverse simulation scenarios.
+We release the base version of SimWorld and the additional environments paks. Base versions include the core features of SimWorld, while the additional environments paks offer extra pre-defined environments for more diverse simulation scenarios.
 
 .. list-table::
    :header-rows: 1

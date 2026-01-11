@@ -55,7 +55,7 @@ The SimWorld Python Client Library contains code for SimWorld's agent and enviro
 Unreal Engine Backend
 ~~~~~~~~~~~~~~~~~~~~~
 
-Download the SimWorld Unreal Engine backend executable from AWS S3. Choose the version according to your OS and the edition you want to use. The usage of the Additional Environments version can be found on the :doc:`additional_environments` page.
+Download the SimWorld Unreal Engine backend executable from huggingface. Choose the version according to your OS and the edition you want to use. The usage of the Additional Environments version can be found on the :doc:`additional_environments` page.
 
 .. list-table::
    :header-rows: 1
