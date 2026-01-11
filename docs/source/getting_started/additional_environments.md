@@ -1,19 +1,26 @@
 # Additional Environments
-The additional environments are packages as .pak files which includes over 100 pre-defined scenes sourced from the Unreal Marketplace. These environments cover a wide range of settings, including urban areas, industrial zones, natural landscapes, and interior spaces. In addition, you can make your own .pak files to extend the environment or agent library of SimWorld by following the [Make Your Own `.pak` Files](../getting_started/make_your_own_pak) guide.
+The additional environments are packages as .pak files which includes over 100 pre-defined scenes sourced from the Unreal Marketplace. These environments cover a wide range of settings, including urban areas, industrial zones, natural landscapes, and interior spaces. In addition, you can make your own .pak files to extend the environment or agent library of SimWorld by following the [Make Your Own Pak Files](../getting_started/make_your_own_pak) guide.
 
 ## Download and Installation
 ### Download
 To use the additional environments, download the environments paks as you need from the huggingface link below:
 
-**Note:**
-You can refer to `Predefined Environments List` table at the end of this page for ChunkID and Asset Library information.
+.. important::
+
+   You can refer to `Predefined Environments List` table at the end of this page for ChunkID and Asset Library information.
 
 ### Installation
 After downloading the pak files, place them in the `<SimWorld_Path>/SimWorld/Content/Paks/`, then start the `SimWorld.exe` or `SimWorld.sh` to load the additional environments.
 
 ## Usage
 ### CLI
-If you run the SimWorld on a server, to load and use these additional environments in SimWorld, you can refer to [Unreal Engine Official Document](https://dev.epicgames.com/documentation/en-us/unreal-engine/command-line-arguments-in-unreal-engine) to specify the desired Map URI when launching the unreal engine backend. For example:
+If you run the SimWorld on a server, to load and use these additional environments in SimWorld, you can refer to [Unreal Engine Official Document](https://dev.epicgames.com/documentation/en-us/unreal-engine/command-line-arguments-in-unreal-engine) to specify the desired Map URI when launching the unreal engine backend. 
+
+.. seealso::
+
+   For more details on command line arguments, see the [Unreal Engine Official Documentation](https://dev.epicgames.com/documentation/en-us/unreal-engine/command-line-arguments-in-unreal-engine)
+
+For example:
 
 on Windows:
 ```bash

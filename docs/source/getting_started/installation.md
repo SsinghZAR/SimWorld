@@ -13,16 +13,19 @@ The following device requirements should be fulfilled before installing SimWorld
 | Disk Space | 50 GB (Base) | 200 GB+ (Additional Environments) |
 
 
-**Note:**
-1. Python: Python 3.10 or later is required.
-2. Network: A stable internet connection and available TCP port (9000 by default) are required.
-3. In our demo video, we use RTX 4090 with 24 GB VRAM for video recording, and hardware raytracing is enabled for enhanced visual fidelity.
+.. warning::
+
+   1. Python: Python 3.10 or later is required.
+   2. Network: A stable internet connection and available TCP port (9000 by default) are required.
+   3. In our demo video, we use RTX 4090 with 24 GB VRAM for video recording, and hardware raytracing is enabled for enhanced visual fidelity.
 
 ## Installation
 ### SimWorld Python Client Library
 The SimWorld Python Client Library contains code for SimWorld's agent and environment layer. Download the Python library from GitHub:
 
-[SimWorld Python Client Library](https://github.com/SimWorld-AI/SimWorld.git)
+.. tip::
+
+   [SimWorld Python Client Library](https://github.com/SimWorld-AI/SimWorld.git)
 
 ```bash
 git clone https://github.com/SimWorld-AI/SimWorld.git
@@ -42,5 +45,6 @@ Download the SimWorld Unreal Engine backend executable from AWS S3. Choose the v
 | Windows | Base | Empty map for procedural generation | [Download (Base)](https://huggingface.co/SimWorld-AI/SimWorld/resolve/main/Windows.zip) | Full agent features; smaller download. |
 | Linux | Base | Empty map for procedural generation | [Download (Base)](https://huggingface.co/SimWorld-AI/SimWorld/resolve/main/Linux.zip) | Full agent features; smaller download. |
 
-**Note:**
-If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, see [Additional Environments](../getting_started/additional_environments) page to setup addition environments.
+.. note::
+
+   If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, see [Additional Environments](../getting_started/additional_environments) page to setup addition environments.

@@ -9,6 +9,10 @@ SimWorld also integrates seamlessly with large language models (LLMs) and vision
 
 ## Architecture
 
+.. important::
+
+   SimWorld employs a three-tier hierarchical architecture that separates the high-performance *Unreal Engine Backend* from two Python-side layers: the *Environment* layer and the *Agent* layer.
+
 ```{image} ../assets/Arch.png
 :width: 800px
 :align: center
@@ -28,8 +32,9 @@ We release two versions of SimWorld: the base version and the additional environ
 | Base | Empty map for procedural generation | Full agent features; smaller download. |
 | Environments Pack | 100+ maps | Full agent features; Need install; Download as needed. |
 
-**Note:**
-1. Please check the [Addition Environments](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html) for downloading and setup instructions of the **100+ Maps** version.
-2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Environments Pack (100+ Maps)**.
+.. note::
+
+   1. Please check the [Addition Environments](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html) for downloading and setup instructions of the **100+ Maps** version.
+   2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Environments Pack (100+ Maps)**.
 
 The usage of the additional version can be found on the [Additional Environments](../getting_started/additional_environments) page.
