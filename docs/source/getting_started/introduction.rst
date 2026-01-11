@@ -41,13 +41,11 @@ We release the base version of SimWorld and the additional environments paks. Ba
    * - Base
      - Empty map for procedural generation
      - Full agent features; smaller download.
-   * - Environments Pack
+   * - Environments Packs
      - 100+ maps
      - Full agent features; Need install; Download as needed.
 
 .. note::
 
    1. Please check the `Addition Environments <https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html>`_ for downloading and setup instructions of the **100+ Maps** version.
-   2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Environments Pack (100+ Maps)**.
-
-The usage of the additional version can be found on the :doc:`additional_environments` page.
+   2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, download and install the **Environments Packs** as your need.

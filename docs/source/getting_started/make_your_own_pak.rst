@@ -45,7 +45,7 @@ Import your desired assets into the project. You can use assets from the Unreal 
    :alt: Import Assets
    :class: with-margin
 
-1. Setup Chunk Package
+4. Setup Chunk Package
 -----------------------
 
 Open project settings by navigating to ``Edit > Project Settings``. In the Project Settings window, go to the ``Packaging`` section and enable the ``Use Pak File`` option, **disenable** ``Use Io Store``, and enable ``Generate Chunks``.
