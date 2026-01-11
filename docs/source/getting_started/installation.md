@@ -34,16 +34,13 @@ conda activate simworld
 pip install -e .
 ```
 
-
 ### Unreal Engine Backend
 Download the SimWorld Unreal Engine backend executable from AWS S3. Choose the version according to your OS and the edition you want to use. The usage of the Additional Environments version can be found on the [Additional Environments](../getting_started/additional_environments) page.
 
 | Platform | Package | Scenes/Maps Included | Download | Notes |
 | --- | --- | --- | --- | --- |
-| Windows | Base | Empty map for procedural generation | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
-| Windows | Additional Environments | 100+ maps (including the empty one) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Win64-v0_1_0-100Maps.zip) | Full agent features; larger download. |
-| Linux | Base | Empty map for procedural generation | [Download (Base)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-Foundation.zip) | Full agent features; smaller download. |
-| Linux | Additional Environments | 100+ maps (including the empty one) | [Download (100+ Maps)](https://simworld-release.s3.us-east-1.amazonaws.com/SimWorld-Linux-v0_1_0-100Maps.zip) | Full agent features; larger download. |
+| Windows | Base | Empty map for procedural generation | [Download (Base)](https://huggingface.co/SimWorld-AI/SimWorld/resolve/main/Windows.zip) | Full agent features; smaller download. |
+| Linux | Base | Empty map for procedural generation | [Download (Base)](https://huggingface.co/SimWorld-AI/SimWorld/resolve/main/Linux.zip) | Full agent features; smaller download. |
 
 **Note:**
-If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Additional Environments (100+ Maps)**.
+If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, see [Additional Environments](../getting_started/additional_environments) page to setup addition environments.
