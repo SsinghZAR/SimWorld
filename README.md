@@ -33,7 +33,7 @@ SimWorld is built on Unreal Engine 5 and offers core capabilities to meet the ne
 **SimWorld** consists of three layers:
 - the Unreal Engine Backend, providing diverse and open-ended environments, rich assets and realistic physics simulation;
 - the Environment layer, supporting procedural city generation, language-driven scene editing, gym-like APIs for LLM/VLM agents and traffic simulation;
-- the Agent layer, enabling LLM/VLM agents to reason over multimodal observations and history while executing actions via a local action planner;
+- the Agent layer, enabling LLM/VLM agents to reason over multimodal observations and history while executing actions via a local action planner.
 
 SimWorld's architecture is designed to be modular and flexible, supporting an array of functionalities such as dynamic world generation, agent control, and performance benchmarking. The components are seamlessly integrated to provide a robust platform for **Embodied AI** and **Agents** research and applications.
 
@@ -70,7 +70,7 @@ pip install -e .
 ```
 
 + UE server
-Download the SimWorld server executable from huggingface. Choose the version according to your OS and the edition you want to use.:
+Download the SimWorld server executable from huggingface. Choose the version according to your OS and the edition you want to use.
 
 We offer two versions of the SimWorld UE package: the base version, which comes with an empty map, and the additional environments version, which provides extra pre-defined environments for more diverse simulation scenarios. Both versions include all the core features of SimWorld.
 
@@ -96,7 +96,7 @@ SimWorld uses YAML-formatted configuration files for system settings. The defaul
 - `simworld/config/default.yaml` serves as the default configuration file.
 - `config/example.yaml` is provided as a template for custom configurations.
 
-Users can switch between different configurations by specifying a custom configuration file path through the `Config` class:
+Users can switch between different configurations by specifying a custom configuration file path through the `Config` class.
 
 To set up your own configuration:
 
@@ -105,7 +105,7 @@ To set up your own configuration:
    cp config/example.yaml config/your_config.yaml
    ```
 
-2. Modify the configuration values in `your_config.yaml` according to your needs
+2. Modify the configuration values in `your_config.yaml` according to your needs.
 
 3. Load your custom configuration in your code:
    ```python
