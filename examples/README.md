@@ -19,7 +19,7 @@ Similar to `layout_generation.ipynb` but includes visualization features to disp
 ### `traffic_simulation.ipynb`
 Simulate traffic flow in the city. Initialize traffic controller, spawn vehicles and traffic signals, and run real-time traffic simulation.
 
-### `action_planner.ipynb`
+### `local_action_planner.ipynb`
 Test the local action planner module. Initialize humanoid agents, parse natural language instructions using LLM, and execute complex action sequences (e.g., navigation, object pickup).
 
 ### `asset_rp.ipynb`
@@ -33,6 +33,10 @@ Test map and waypoint systems. Initialize map data, visualize road networks, and
 
 ### `ue_command.ipynb`
 Complete UE interaction command set with detailed demonstration of all available UE commands, including agent actions, object spawning, and environment control. Suitable as an API reference manual.
+
+### `example_city`
+Contains example outputs produced by `layout_generation.ipynb`.
+
 
 ## Prerequisites
 
