@@ -68,7 +68,7 @@ The following table lists the scenes and their corresponding Map URIs included i
      - Map URI
    * - 2001
      - QA Modular Parking
-     - ``/Game/QA_ModularParking/Maps/Map_demostration.umap``
+     - ``/Game/QA_ModularParking/Maps/Map_demonstration.umap``
    * - 2002
      - University Classroom Interior Environment / School Room
      - ``/Game/UNIVERSITY_CLASSROOM/Levels/Showcase.umap``

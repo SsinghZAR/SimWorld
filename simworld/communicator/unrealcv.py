@@ -1043,7 +1043,7 @@ class UnrealCV(object):
 
         Args:
             cam_id: Camera ID.
-            viewmode: View mode.
+            viewmode: View mode. Possible values are 'rgb', 'depth', 'object_mask'.
             mode: Mode.
             img_path: Image path.
         """
