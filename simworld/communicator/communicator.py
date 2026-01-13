@@ -197,7 +197,7 @@ class Communicator:
 
         Args:
             cam_id: Camera ID.
-            viewmode: View mode.
+            viewmode: View mode. Possible values are 'rgb', 'depth', 'object_mask'.
             mode: Mode, possible values are 'direct', 'file', 'fast'.
 
         Returns:
