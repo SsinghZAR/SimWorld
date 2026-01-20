@@ -14,7 +14,7 @@
 </div>
 
 ## 🔥 News
- - 2026.1 **SimWorld** now supports importing [customized environments and agents](#-make-your-simworld)!
+ - 2026.1 **SimWorld** now supports importing [customized environments and agents](https://simworld.readthedocs.io/en/latest/getting_started/make_your_own_pak.html)!
  - 2026.1 **SimWorld** Unreal Engine packages have been moved to [huggingface](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main)!
  - 2025.11 The white paper of **SimWorld** is available on arxiv!
  - 2025.9 **SimWorld** has been accepted to NeurIPS 2025 main track as a **spotlight** paper! 🎉
