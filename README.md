@@ -14,7 +14,8 @@
 </div>
 
 ## 🔥 News
- - 2026.1 Move **SimWorld** Unreal Engine packages to [huggingface](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main)!
+ - 2026.1 **SimWorld** now supports importing customized environments and agents!
+ - 2026.1 **SimWorld** Unreal Engine packages have been moved to [huggingface](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main)!
  - 2025.11 The white paper of **SimWorld** is available on arxiv!
  - 2025.9 **SimWorld** has been accepted to NeurIPS 2025 main track as a **spotlight** paper! 🎉
  - 2025.6 The first formal release of **SimWorld** has been published! 🚀
@@ -62,7 +63,7 @@ README.md
 
 ## ⚙️ Setup
 ### Installation
-+ Python Client
++ Python Client.
 Make sure to use Python 3.10 or later.
 ```bash
 git clone https://github.com/SimWorld-AI/SimWorld.git
@@ -72,7 +73,7 @@ conda activate simworld
 pip install -e .
 ```
 
-+ UE server
++ UE server.
 Download the SimWorld server executable from huggingface. Choose the version according to your OS and the edition you want to use.
 
 We offer two versions of the SimWorld UE package: the base version, which comes with an empty map, and the additional environments version, which provides extra pre-defined environments for more diverse simulation scenarios. Both versions include all the core features of SimWorld.
@@ -224,6 +225,10 @@ if __name__ == "__main__":
         print(f"obs: {obs}, reward: {reward}")
         # Plug this into your RL loop / logging as needed
 ```
+
+## 🛠️ Make Your SimWorld
+Users can extend SimWorld's environment and agent library by creating custom package files. See full instructions in [Make Your Own Pak Files](https://simworld.readthedocs.io/en/latest/getting_started/make_your_own_pak.html).
+
 
 ## 🔮 Next Steps
 
