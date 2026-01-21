@@ -16,15 +16,15 @@ from simworld.utils.logger import Logger
 class CityFunctionCall:
     """Function call interface for city generation operations."""
 
-    def __init__(self, config: Config, seed: int = None, num_segments: int = None, generate_element: bool = False, generate_route: bool = False):
+    def __init__(self, config: Config, seed: int = None, num_segments: int = None, generate_element: bool = None, generate_route: bool = None):
         """Initialize the city function call with configuration.
 
         Args:
             config: Configuration object with simulation parameters.
             seed: Seed for the random number generator.
             num_segments: Number of road segments to generate.
-            generate_element: Whether to generate elements.
-            generate_route: Whether to generate routes.
+            generate_element: Whether to generate elements. If None, uses config value.
+            generate_route: Whether to generate routes. If None, uses config value.
         """
         self.config = config
         self.city_generator = CityGenerator(self.config, seed, num_segments, generate_element, generate_route)
