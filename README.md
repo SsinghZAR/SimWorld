@@ -123,15 +123,16 @@ Start the SimWorld UE server first, then run the Python examples. From the extra
 
 - **Windows:** double-click `SimWorld.exe`, or launch it from the command line:
   ```bash
-  ./SimWorld.exe <MAP_NAME>
+  ./SimWorld.exe <MAP_PATH>
   ```
 
 - **Linux:** run:
     ```bash
-    ./SimWorld.sh <MAP_NAME>
+    ./SimWorld.sh <MAP_PATH>
     ```
 
-If <MAP_NAME> is not specified, the default map will be open.
+**Note:** \
+`<MAP_PATH>` refers to the Unreal Engine internal path to a map file (e.g., `/Game/TokyoStylizedEnvironment/Maps/Tokyo.umap`). SimWorld includes 100+ additional environments. See the [Additional Environments](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#predefined-environments-list) for a complete list of available map paths. If `<MAP_PATH>` is not specified, the default map will be open.
 
 #### Step 2. Run a Minimal Gym-Style Example
 
