@@ -96,21 +96,18 @@ We provide two UE packages: **Base** (an empty map with a smaller download; best
 
 We provide several examples of code in `examples/`, showcasing how to use the basic functionalities of SimWorld, including city layout generation, traffic simulation, asset retrieval, and activity-to-actions. Please follow the examples to see how SimWorld works.
 
-#### Configuration
+#### Step 1. Configuration
 
-SimWorld uses YAML-formatted configuration files for system settings. The default configuration files are located in the `simworld/config` directory while user configurations are placed in the `config` directory.
+SimWorld uses a YAML configuration file to control **global simulator settings** (e.g., `seed`, `dt`, UE blueprint paths) and **module behaviors** (e.g., city generation, traffic simulation, asset retrieval, and agent/LLM options).
 
-- `simworld/config/default.yaml` serves as the default configuration file.
-- `config/example.yaml` is provided as a template for custom configurations.
-
-Users can switch between different configurations by specifying a custom configuration file path through the `Config` class.
+- `simworld/config/default.yaml` contains the **built-in defaults** shipped with the package (reference/fallback). We recommend **not editing** this file.
+- `config/example.yaml` is a **user template** with placeholders for local paths. Copy it to create your own config.
 
 To set up your own configuration:
 
-1. Create your custom configuration by copying the example template:
+1. Create a custom config from the template:
    ```bash
    cp config/example.yaml config/your_config.yaml
-   ```
 
 2. Modify the configuration values in `your_config.yaml` according to your needs.
 
@@ -120,21 +117,16 @@ To set up your own configuration:
    config = Config('path/to/your_config')    # use absolute path here
    ```
 
-#### Agent Action Space
-SimWorld provides a comprehensive action space for pedestrians, vehicles and robots (e.g., move forward, sit down, pick up). For more details, see [actions](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#actions) and `examples/ue_command.ipynb`.
+#### Step 2. Start the UE Server
+Start the SimWorld UE server first, then run the Python examples.
 
-#### Using the Camera
-SimWorld supports a variety of sensors, including RGB images, segmentation maps, and depth images. For more details, please refer to the [sensors](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#sensors) and the example script `examples/camera.ipynb`.
+- **Windows:** open the server by double-clicking `gym_citynav.exe`.
 
-#### Commonly Used APIs
-All APIs are located in `simworld/communicator`. Some of the most commonly used ones are listed below:
-- `communicator.get_camera_observation`
-- `communicator.spawn_object`
-- `communicator.spawn_agent`
-- `communicator.generate_world`
-- `communicator.clear_env`
+- **Linux:** `cd` to the extracted UE server package directory and run:
+  ```bash
+  ./gym_citynav.sh <MAP_NAME>
 
-#### Simple Running Example
+#### Step 3. Run a Minimal Example
 
 Once the SimWorld UE5 environment is running, you can connect from Python and control an in-world humanoid agent in just a few lines:
 (The whole example of minimal demo is shown in `examples/gym_interface_demo.ipynb`)
@@ -228,6 +220,22 @@ if __name__ == "__main__":
         print(f"obs: {obs}, reward: {reward}")
         # Plug this into your RL loop / logging as needed
 ```
+
+### More Examples and References
+
+#### Agent Action Space
+SimWorld provides a comprehensive action space for pedestrians, vehicles and robots (e.g., move forward, sit down, pick up). For more details, see [actions](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#actions) and `examples/ue_command.ipynb`.
+
+#### Using the Camera
+SimWorld supports a variety of sensors, including RGB images, segmentation maps, and depth images. For more details, please refer to the [sensors](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#sensors) and the example script `examples/camera.ipynb`.
+
+#### Commonly Used APIs
+All APIs are located in `simworld/communicator`. Some of the most commonly used ones are listed below:
+- `communicator.get_camera_observation`
+- `communicator.spawn_object`
+- `communicator.spawn_agent`
+- `communicator.generate_world`
+- `communicator.clear_env`
 
 ## 🛠️ Make Your SimWorld
 Users can extend SimWorld's environment and agent library by creating custom package files. See full instructions in [Make Your Own Pak Files](https://simworld.readthedocs.io/en/latest/getting_started/make_your_own_pak.html).
