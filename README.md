@@ -63,7 +63,8 @@ README.md
 
 ## ⚙️ Setup
 ### Installation
-+ Python Client.
+#### Step 1. Install the Python Client
+
 Make sure to use Python 3.10 or later.
 ```bash
 git clone https://github.com/SimWorld-AI/SimWorld.git
@@ -73,41 +74,40 @@ conda activate simworld
 pip install -e .
 ```
 
-+ UE server.
-Download the SimWorld server executable from huggingface. Choose the version according to your OS and the edition you want to use.
+#### Step 2. Download the UE Server Package.
 
-We offer two versions of the SimWorld UE package: the base version, which comes with an empty map, and the additional environments version, which provides extra pre-defined environments for more diverse simulation scenarios. Both versions include all the core features of SimWorld.
+Download the SimWorld server executable from [huggingface](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main). Choose the version according to your OS and the edition you want to use.
+
+We provide two UE packages: **Base** (an empty map with a smaller download; best for core feature development and testing; supports procedural city generation) and **Additional Environments (100+ Maps)** (a much larger download that includes 100+ ready-to-use maps for diverse scenarios and demos).
 
 | Platform | Package | Scenes/Maps Included | Download | Notes |
 | --- | --- | --- | --- | --- |
-| Windows | Base | Empty map for procedural generation | [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Windows.zip) | Full agent features; smaller download. |
-| Linux | Base | Empty map for procedural generation | [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Linux.zip) | Full agent features; smaller download. |
+| Windows | Base | Empty map for procedural city generation | [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Windows.zip) | Smaller download; recommended for development/testing. |
+| Linux | Base | Empty map for procedural city generation | [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Linux.zip) | Smaller download; recommended for development/testing. |
+| Windows | Additional Environments (100+ Maps) | 100+ pre-built maps (including the empty one) | [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/AdditionEnvironmentPaks/Windows) | Larger download; best for demos and diverse scenes. |
+| Linux | Additional Environments (100+ Maps) | 100+ pre-built maps (including the empty one) | [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/AdditionEnvironmentPaks/Linux) | Larger download; best for demos and diverse scenes. |
 
-Additional environment paks are available on the [environments paks page](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/AdditionEnvironmentPaks). You may download them as needed according to the OS you are using.
 
 **Note:**
-1. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#usage) for usage instructions of the **100+ Maps** version.
-2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Additional Environments (100+ Maps)**.
+1. The **Additional Environments (100+ Maps)** package is organized as separate `.pak` files. You can download only the maps you need (instead of the full set) based on your OS. Please check the [documentation](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#usage) for usage instructions, including how to load specific maps and what each `.pak` contains.
+2. If you only need core functionality for development or testing, use **Base**. If you want richer demonstrations and more scenes, use the **Additional Environments**.
 
 ### Quick Start
 
 We provide several examples of code in `examples/`, showcasing how to use the basic functionalities of SimWorld, including city layout generation, traffic simulation, asset retrieval, and activity-to-actions. Please follow the examples to see how SimWorld works.
 
-#### Configuration
+#### Step 1. Configuration
 
-SimWorld uses YAML-formatted configuration files for system settings. The default configuration files are located in the `simworld/config` directory while user configurations are placed in the `config` directory.
+SimWorld uses a YAML configuration file to control **global simulator settings** (e.g., `seed`, `dt`, UE blueprint paths) and **module behaviors** (e.g., city generation, traffic simulation, asset retrieval, and agent/LLM options).
 
-- `simworld/config/default.yaml` serves as the default configuration file.
-- `config/example.yaml` is provided as a template for custom configurations.
-
-Users can switch between different configurations by specifying a custom configuration file path through the `Config` class.
+- `simworld/config/default.yaml` contains the **built-in defaults** shipped with the package (reference/fallback). We recommend **not editing** this file.
+- `config/example.yaml` is a **user template** with placeholders for local paths. Copy it to create your own config.
 
 To set up your own configuration:
 
-1. Create your custom configuration by copying the example template:
+1. Create a custom config from the template:
    ```bash
    cp config/example.yaml config/your_config.yaml
-   ```
 
 2. Modify the configuration values in `your_config.yaml` according to your needs.
 
@@ -117,21 +117,22 @@ To set up your own configuration:
    config = Config('path/to/your_config')    # use absolute path here
    ```
 
-#### Agent Action Space
-SimWorld provides a comprehensive action space for pedestrians, vehicles and robots (e.g., move forward, sit down, pick up). For more details, see [actions](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#actions) and `examples/ue_command.ipynb`.
+#### Step 2. Start the UE Server
+Start the SimWorld UE server first, then run the Python examples.
 
-#### Using the Camera
-SimWorld supports a variety of sensors, including RGB images, segmentation maps, and depth images. For more details, please refer to the [sensors](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#sensors) and the example script `examples/camera.ipynb`.
+- **Windows:** open the server by double-clicking `gym_citynav.exe` or using the command line:
+    ```bash
+    ./gym_citynav.exe <MAP_NAME>
+    ```
 
-#### Commonly Used APIs
-All APIs are located in `simworld/communicator`. Some of the most commonly used ones are listed below:
-- `communicator.get_camera_observation`
-- `communicator.spawn_object`
-- `communicator.spawn_agent`
-- `communicator.generate_world`
-- `communicator.clear_env`
+- **Linux:** `cd` to the extracted UE server package directory and run:
+    ```bash
+    ./gym_citynav.sh <MAP_NAME>
+    ```
 
-#### Simple Running Example
+If <MAP_NAME> is not specified, the default map (an empty map) will be open.
+
+#### Step 3. Run a Minimal Example
 
 Once the SimWorld UE5 environment is running, you can connect from Python and control an in-world humanoid agent in just a few lines:
 (The whole example of minimal demo is shown in `examples/gym_interface_demo.ipynb`)
@@ -226,6 +227,22 @@ if __name__ == "__main__":
         # Plug this into your RL loop / logging as needed
 ```
 
+## 📚 More Examples and References
+
+### Agent Action Space
+SimWorld provides a comprehensive action space for pedestrians, vehicles and robots (e.g., move forward, sit down, pick up). For more details, see [actions](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#actions) and `examples/ue_command.ipynb`.
+
+### Using UE Cameras and Sensors
+SimWorld supports a variety of sensors, including RGB images, segmentation maps, and depth images. For more details, please refer to the [sensors](https://simworld.readthedocs.io/en/latest/components/ue_detail.html#sensors) and the example script `examples/camera.ipynb`.
+
+### Commonly Used APIs
+All APIs are located in `simworld/communicator`. Some of the most commonly used ones are listed below:
+- `communicator.get_camera_observation`
+- `communicator.spawn_object`
+- `communicator.spawn_agent`
+- `communicator.generate_world`
+- `communicator.clear_env`
+
 ## 🛠️ Make Your SimWorld
 Users can extend SimWorld's environment and agent library by creating custom package files. See full instructions in [Make Your Own Pak Files](https://simworld.readthedocs.io/en/latest/getting_started/make_your_own_pak.html).
 
@@ -234,7 +251,7 @@ Users can extend SimWorld's environment and agent library by creating custom pac
 
 The SimWorld framework is under active development. Future releases will include:
 
-- [x] **Plugin System**: Extensible interaction modules that can be seamlessly integrated into existing projects.
+- [x] **Plugin System**: Support for importing user-defined custom environments and agents to extend SimWorld's capabilities.
 - [ ] **Comprehensive Agent Framework**: A unified training and evaluation pipeline for autonomous agents.
 - [ ] **Code Generation for Scenes**: AI-powered coding agents capable of generating diverse simulation scenarios programmatically.
 - [ ] **Interactive Layout Editor**: Web-based interface for real-time city layout visualization and editing.
