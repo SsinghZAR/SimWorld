@@ -269,7 +269,7 @@ All APIs are located in [simworld/communicator](simworld/communicator). Some of 
 - [communicator.clear_env](simworld/communicator/communicator.py#L880)
 
 <a id="make-your-simworld"></a>
-### 🛠️ Make Your SimWorld
+## 🛠️ Make Your SimWorld
 
 Bring your own Unreal Engine environments, assets, and agent models into SimWorld. This lets you add new maps, objects, and characters beyond the built-in library. For example, you can turn almost any idea into a playable world, such as a rainy campus, a night market, or a sci-fi city, and then drop agents into it to explore, interact, and learn. To import your content into SimWorld, package it as a custom `.pak` file. See full instructions in [Make Your Own Pak Files](https://simworld.readthedocs.io/en/latest/getting_started/make_your_own_pak.html).
 
