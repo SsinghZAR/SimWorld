@@ -123,6 +123,7 @@ Start the SimWorld UE server first, then run the Python examples. From the extra
 - **Windows:** double-click `gym_citynav.exe`, or launch it from the command line:
   ```bash
   .\gym_citynav.exe <MAP_NAME>
+  ```
 
 - **Linux:** run:
     ```bash
