@@ -55,32 +55,18 @@ The SimWorld Python Client Library contains code for SimWorld's agent and enviro
 Unreal Engine Backend
 ~~~~~~~~~~~~~~~~~~~~~
 
-Download the SimWorld Unreal Engine backend executable from Hugging Face. The **Base** package is required and includes a lightweight city scene for quickly testing SimWorld's core features, including core agent interaction and procedural city generation.
+First, download and extract the **Base** UE server package for your OS. The Base package includes a lightweight city scene for quickly testing SimWorld’s core features, including core agent interaction and procedural city generation.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 15 15 30 25 15
+* **Base (Required)**
 
-   * - Platform
-     - Package
-     - Scenes/Maps Included
-     - Download
-     - Notes
-   * - Windows
-     - Base (Required)
-     - Lightweight city scene for quickly testing core features (procedural generation supported)
-     - `Download for Windows <https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Windows.zip>`_
-     - Full agent features; smaller download.
-   * - Linux
-     - Base (Required)
-     - Lightweight city scene for quickly testing core features (procedural generation supported)
-     - `Download for Linux <https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Linux.zip>`_
-     - Full agent features; smaller download.
+  * **Windows:** `Download <https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Windows.zip>`_
+  * **Linux:** `Download <https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Linux.zip>`_
 
-.. note::
+If you want more pre-built scenes for demos and diverse scenarios, you can optionally install **Additional Environments (100+ Maps)**. This is an add-on map pack that extends the Base installation. Download the maps you need and copy the ``.pak`` files into the Base server folder at: ``SimWorld/Content/Paks/``.
 
-   If you want more pre-built scenes for demos and diverse scenarios, you can optionally install **Additional Environments (100+ Maps)**. This is an add-on map pack that extends the Base installation. Download the maps you need from Hugging Face and copy the ``.pak`` files into the Base server folder at::
+* **Additional Environments (Optional, 100+ Maps)**
 
-      SimWorld/Content/Paks/
+  * **Windows:** `Download <https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/AdditionEnvironmentPaks/Windows>`_
+  * **Linux:** `Download <https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/AdditionEnvironmentPaks/Linux>`_
 
-   See :doc:`additional_environments` for the download links, folder structure, and how to load specific maps.
+The Additional Environments package is organized as separate ``.pak`` files, so you can download only the maps you need. Please check the :doc:`additional_environments` documentation for usage instructions, including how to load specific maps and what each ``.pak`` contains.
