@@ -19,3 +19,11 @@ simworld.citygen.element.element\_manager module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.citygen.element
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -11,3 +11,11 @@ simworld.map.map module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.map
+   :members:
+   :undoc-members:
+   :show-inheritance:

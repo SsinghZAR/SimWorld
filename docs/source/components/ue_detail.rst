@@ -43,180 +43,7 @@ These assets collectively enable the creation of complex, dynamic, and realistic
    :align: center
    :alt: A Subset of Collected Assets
 
-.. _actions-section:
-
-Actions
--------
-
-To enhance realism and interactivity in the simulation, we provide a comprehensive **Action Space**, with a strong focus on animations for pedestrians. These actions are essential for simulating lifelike behaviors such as walking, running, waving, interacting with objects, and more. All actions are sourced from the Unreal Engine Marketplace to ensure quality and compatibility.
-
-The actions of robot dog are in :doc:`SimWorld-Robotics <../simworld-robotics/simworld_robotics>`
-
-Here are some examples of actions available in the simulator:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 22 18 18 42
-
-   * - Action
-     - Agent Type
-     - Category
-     - Description
-   * - Move Forward
-     - Humanoid
-     - Navigation
-     - Keep moving in the current direction
-   * - Step Forward/Backward
-     - Humanoid
-     - Navigation
-     - Step forward/backward for a fixed time
-   * - Rotate
-     - Humanoid
-     - Navigation
-     - Turn the body to face a new direction
-   * - Stop
-     - Humanoid
-     - Navigation
-     - Stop moving
-   * - Look Up/Down
-     - Humanoid
-     - Observation
-     - Adjust the gaze upward/downward by a degree
-   * - Focus
-     - Humanoid
-     - Observation
-     - Adjust the field of view
-   * - Pick Up
-     - Humanoid
-     - Object Interaction
-     - Grasp and lift an object
-   * - Drop Off
-     - Humanoid
-     - Object Interaction
-     - Release a held object at the target location
-   * - Set Throttle/Brake/Steering
-     - Vehicle
-     - Driving
-     - Control a vehicle
-   * - Sit Down
-     - Humanoid
-     - Object Interaction
-     - Transition to a seated position
-   * - Stand Up
-     - Humanoid
-     - Object Interaction
-     - Rise from a seated position
-   * - Enter Car
-     - Humanoid
-     - Object Interaction
-     - Get into a vehicle
-   * - Exit Car
-     - Humanoid
-     - Object Interaction
-     - Leave a vehicle
-   * - Get On Scooter
-     - Humanoid
-     - Object Interaction
-     - Get on a scooter
-   * - Get Off Scooter
-     - Humanoid
-     - Object Interaction
-     - Get off a scooter
-   * - Have Conversation
-     - Humanoid
-     - Social Action
-     - Exchange verbal communication
-   * - Point Direction
-     - Humanoid
-     - Social Action
-     - Gesture to indicate direction
-   * - Wave Hand
-     - Humanoid
-     - Social Action
-     - Signal or greet with a hand wave
-   * - Discuss
-     - Humanoid
-     - Social Action
-     - Engage in dialogue or explanation
-   * - Argue with Body Language
-     - Humanoid
-     - Social Action
-     - Express disagreement using gestures
-
-Demo for human action space:
-
-.. code-block:: python
-
-   # Initialize a humanoid agent with position (0, 0) and facing direction (1, 0)
-   humanoid = Humanoid(Vector(0, 0), Vector(1, 0))
-   humanoid_name = 'GEN_BP_Humanoid_0'
-
-   # Spawn the humanoid in the simulator using the specified model path
-   communicator.spawn_agent(humanoid, humanoid_model_path)
-
-   # Make the humanoid sit down
-   ucv.humanoid_sit_down(humanoid_name)
-
-   # Make the humanoid stand up
-   ucv.humanoid_stand_up(humanoid_name)
-
-   # Play an "argue" animation (the number may represent the type or intensity)
-   ucv.humanoid_argue(humanoid_name, 0)
-
-   # Play a "discuss" animation
-   ucv.humanoid_discuss(humanoid_name, 0)
-
-   # Play a "listening" animation
-   ucv.humanoid_listen(humanoid_name)
-
-   # Make the humanoid point or gesture along a path
-   ucv.humanoid_directing_path(humanoid_name)
-
-   # Play a waving gesture directed toward a dog
-   ucv.humanoid_wave_to_dog(humanoid_name)
-
-   # Make the humanoid pick up an object (e.g., a mug)
-   ucv.humanoid_pick_up_object(humanoid_name, "BP_Mug_C_1")
-
-   # Drop the currently held object
-   ucv.humanoid_drop_object(humanoid_name)
-
-   # Command the humanoid to enter a specific vehicle
-   ucv.humanoid_enter_vehicle(humanoid_name, "BP_VehicleBase_Destruction_C_1")
-
-   # Command the humanoid to exit that vehicle
-   ucv.humanoid_exit_vehicle(humanoid_name, "BP_VehicleBase_Destruction_C_1")
-
-   # Create a scooter object at position (100, 0) facing direction (0, 1)
-   scooter = Scooter(Vector(100, 0), Vector(0, 1))
-
-   # Spawn the scooter into the simulation
-   communicator.spawn_scooter(scooter, scooter_path)
-
-   # Make the humanoid get on the scooter
-   communicator.humanoid_get_on_scooter(agent.id)
-
-   # Set scooter attributes: speed = 0.5, direction = 0, angular velocity = 0
-   communicator.set_scooter_attributes(agent.scooter_id, 0.5, 0, 0)
-
-   # Make the humanoid get off the scooter
-   communicator.humanoid_get_off_scooter(agent.id, scooter.id)
-
-   # Make the humanoid step forward for 2 seconds
-   communicator.humanoid_step_forward(agent.id, 2)
-
-   # Rotate the humanoid 90 degrees to the left
-   communicator.humanoid_rotate(agent.id, 90, 'left')
-
-   # Start continuous forward movement
-   communicator.humanoid_move_forward(agent.id)
-
-   # Stop movement, optionally play a stop animation for 2 seconds
-   communicator.humanoid_stop(agent.id, 2)
-
-**Related files:** ``communicator.py``, ``unrealcv.py``.
-
-A complete example can be found in ``examples/ue_command.ipynb``.
+.. _ue_detail-sensors:
 
 Sensors
 -------
@@ -234,18 +61,18 @@ How to get images
 .. code-block:: python
 
    # viewmode can be 'lit', 'depth' and 'object_mask'
-   image = communicator.get_camera_observation(camera_id, viewmode)
+   image = communicator.get_camera_observation(camera_id, viewmode)  # Get camera image observation
 
    # adjust camera
-   ucv.get_cameras()
-   ucv.get_camera_location(camera_id)
-   ucv.get_camera_rotation(camera_id)
-   ucv.get_camera_fov(camera_id)
-   ucv.get_camera_resolution(camera_id)
-   ucv.set_camera_location(camera_id)
-   ucv.set_camera_rotation(camera_id)
-   ucv.set_camera_fov(camera_id)
-   ucv.set_camera_resolution(camera_id)
+   ucv.get_cameras()                                   # Get list of all available cameras
+   ucv.get_camera_location(camera_id)                  # Get camera position (x, y, z)
+   ucv.get_camera_rotation(camera_id)                  # Get camera rotation (pitch, yaw, roll)
+   ucv.get_camera_fov(camera_id)                       # Get camera field of view
+   ucv.get_camera_resolution(camera_id)                # Get camera resolution (width, height)
+   ucv.set_camera_location(camera_id, location)        # Set camera position (location: tuple of x, y, z)
+   ucv.set_camera_rotation(camera_id, rotation)        # Set camera rotation (rotation: tuple of pitch, yaw, roll)
+   ucv.set_camera_fov(camera_id, fov)                  # Set camera field of view (fov: float)
+   ucv.set_camera_resolution(camera_id, resolution)    # Set camera resolution (resolution: tuple of width, height)
 
 **Related files:** ``communicator.py``, ``unrealcv.py``.
 

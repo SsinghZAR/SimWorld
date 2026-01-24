@@ -27,3 +27,11 @@ simworld.traffic.manager.vehicle\_manager module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.traffic.manager
+   :members:
+   :undoc-members:
+   :show-inheritance:

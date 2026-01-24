@@ -28,6 +28,14 @@ simworld.utils.data\_importer module
    :undoc-members:
    :show-inheritance:
 
+simworld.utils.get\_bbox module
+-------------------------------
+
+.. automodule:: simworld.utils.get_bbox
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 simworld.utils.load\_json module
 --------------------------------
 
@@ -88,6 +96,22 @@ simworld.utils.vector module
 ----------------------------
 
 .. automodule:: simworld.utils.vector
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+simworld.utils.video\_recorder module
+-------------------------------------
+
+.. automodule:: simworld.utils.video_recorder
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.utils
    :members:
    :undoc-members:
    :show-inheritance:

@@ -35,13 +35,20 @@ With SimWorld, researchers can explore embodied intelligence at scale, enabling 
 
    getting_started/introduction
    getting_started/installation
+   getting_started/configuration
    getting_started/minimal_example
+   getting_started/base_environments
    getting_started/additional_environments
-   getting_started/make_your_own_pak
 
 .. toctree::
    :maxdepth: 2
-   :caption: SIMWORLD COMPONENTS
+   :caption: CUSTOMIZATION
+
+   customization/make_your_own_pak
+
+.. toctree::
+   :maxdepth: 2
+   :caption: SIMWORLD MODULES
 
    components/overview
    components/ue_detail

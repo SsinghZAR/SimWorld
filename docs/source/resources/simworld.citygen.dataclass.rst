@@ -11,3 +11,11 @@ simworld.citygen.dataclass.dataclass module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.citygen.dataclass
+   :members:
+   :undoc-members:
+   :show-inheritance:

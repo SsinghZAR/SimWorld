@@ -19,3 +19,11 @@ simworld.communicator.unrealcv module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.communicator
+   :members:
+   :undoc-members:
+   :show-inheritance:

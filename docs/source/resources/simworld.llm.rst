@@ -27,3 +27,11 @@ simworld.llm.retry module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.llm
+   :members:
+   :undoc-members:
+   :show-inheritance:
