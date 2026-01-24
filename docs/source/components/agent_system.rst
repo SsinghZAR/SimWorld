@@ -29,7 +29,7 @@ SimWorld provides a foundational class ``BaseAgent`` for all types of agents. Th
 
 For LLM/VLM integration, SimWorld provides a basic LLM interface (:ref:`Base LLM <base-llm>`).
 
-**Related files:** ``base_agent.py``.
+**Related files:** ``agent/base_agent.py``.
 
 Get Camera Observation
 ----------------------
@@ -51,7 +51,7 @@ After initializing the agent, the image observation can be obtained by calling t
 
     The resolution of the image is default to (640, 480). To customize, you can use the ``set_camera_resolution()`` to set the resolution.
 
-Check :doc:`UnrealCV <../resources/simworld.communicator>` to see more details.
+Check :doc:`UnrealCV <../resources/simworld.communicator>` and :ref:`Unreal Engine Backend Sensors <ue_detail-sensors>` to see more details.
 
 Local Planner
 -------------
@@ -124,7 +124,7 @@ See the complete action tables below for a full overview of supported actions ac
 
 This modular design encourages extensibility and users are welcome to define custom actions to suit task-specific needs.
 
-**Related files:** ``action_space.py``.
+**Related files:** ``local_planner/action_space.py``.
 
 Complete Action Reference
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -319,6 +319,141 @@ The following table provides a comprehensive overview of all actions available i
 .. note::
     Robot Dog actions support both continuous and discrete control modes except for Look Up/Down actions, which are discrete only. The transition and rotation actions allow fine-grained control over parameters like step length, movement speed, rotation angle, and direction.
 
+Demo for human action space
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   # Initialize a humanoid agent with position (0, 0) and facing direction (1, 0)
+   humanoid = Humanoid(Vector(0, 0), Vector(1, 0))
+   humanoid_name = 'GEN_BP_Humanoid_0'
+
+   # Spawn the humanoid in the simulator using the specified model path
+   communicator.spawn_agent(humanoid, humanoid_model_path)
+
+   # Make the humanoid sit down
+   ucv.humanoid_sit_down(humanoid_name)
+
+   # Make the humanoid stand up
+   ucv.humanoid_stand_up(humanoid_name)
+
+   # Play an "argue" animation (the number may represent the type or intensity)
+   ucv.humanoid_argue(humanoid_name, 0)
+
+   # Play a "discuss" animation
+   ucv.humanoid_discuss(humanoid_name, 0)
+
+   # Play a "listening" animation
+   ucv.humanoid_listen(humanoid_name)
+
+   # Make the humanoid point or gesture along a path
+   ucv.humanoid_directing_path(humanoid_name)
+
+   # Play a waving gesture directed toward a dog
+   ucv.humanoid_wave_to_dog(humanoid_name)
+
+   # Make the humanoid pick up an object (e.g., a mug)
+   ucv.humanoid_pick_up_object(humanoid_name, "BP_Mug_C_1")
+
+   # Drop the currently held object
+   ucv.humanoid_drop_object(humanoid_name)
+
+   # Command the humanoid to enter a specific vehicle
+   ucv.humanoid_enter_vehicle(humanoid_name, "BP_VehicleBase_Destruction_C_1")
+
+   # Command the humanoid to exit that vehicle
+   ucv.humanoid_exit_vehicle(humanoid_name, "BP_VehicleBase_Destruction_C_1")
+
+   # Create a scooter object at position (100, 0) facing direction (0, 1)
+   scooter = Scooter(Vector(100, 0), Vector(0, 1))
+
+   # Spawn the scooter into the simulation
+   communicator.spawn_scooter(scooter, scooter_path)
+
+   # Make the humanoid get on the scooter
+   communicator.humanoid_get_on_scooter(agent.id)
+
+   # Set scooter attributes: speed = 0.5, direction = 0, angular velocity = 0
+   communicator.set_scooter_attributes(agent.scooter_id, 0.5, 0, 0)
+
+   # Make the humanoid get off the scooter
+   communicator.humanoid_get_off_scooter(agent.id, scooter.id)
+
+   # Make the humanoid step forward for 2 seconds
+   communicator.humanoid_step_forward(agent.id, 2)
+
+   # Rotate the humanoid 90 degrees to the left
+   communicator.humanoid_rotate(agent.id, 90, 'left')
+
+   # Start continuous forward movement
+   communicator.humanoid_move_forward(agent.id)
+
+   # Stop movement, optionally play a stop animation for 2 seconds
+   communicator.humanoid_stop(agent.id, 2)
+
+Demo for robot action space
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # Specify robot name and asset
+    robot_name = "Demo_Robot"
+    robot_asset = "/Game/Robot_Dog/Blueprint/BP_SpotRobot.BP_SpotRobot_C"
+
+    # Spawn robot in the simulator
+    ucv.spawn_bp_asset(robot_asset, robot_name)
+    ucv.enable_controller(robot_name, True)
+
+    # Robot - look up / look down
+    ucv.dog_look_up(robot_name)    # look up
+    ucv.dog_look_down(robot_name)  # look down
+
+    # Robot Movement
+    # direction: 0 = forward, 1 = backward, 2 = left, 3 = right
+    for direction in [0, 1, 2, 3]:
+        speed = 200
+        duration = 1
+        move_parameter = [speed, duration, direction]
+        ucv.dog_move(robot_name, move_parameter)
+        time.sleep(duration)
+
+    # Robot Rotation
+    # clockwise: 1 = right turn, -1 = left turn
+    for angle, clockwise in [(90, 1), (-90, -1)]:
+        duration = 0.7
+        rotate_parameter = [duration, angle, clockwise]
+        ucv.dog_rotate(robot_name, rotate_parameter)
+        time.sleep(duration)
+
+See :doc:`SimWorld-Robotics <../simworld-robotics/simworld_robotics>` for more details.
+
+Demo for vehicle action space
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # Specify vehicle name and asset
+    vehicle_name = "Demo_Vehicle"
+    vehicle_asset = "/Game/TrafficSystem/Vehicle/Vehicle1.Vehicle1_C"
+
+    # Spawn vehicle in the simulator
+    ucv.spawn_bp_asset(vehicle_asset, vehicle_name)
+    ucv.enable_controller(vehicle_name, True)
+
+    # Set vehicle throttle, brake, and steering
+    throttle = 0.5  # Throttle value between 0.0 and 1.0
+    brake = 0.0     # Brake value between 0.0 and 1.0
+    steering = 0.1  # Steering value between -1.0 (left) and 1.0 (right)
+    ucv.v_set_state(vehicle_name, throttle, brake, steering)
+
+    # Let the vehicle make a U turn
+    ucv.v_make_u_turn(vehicle_name)
+
+
+**Related files:** ``communicator.py``, ``unrealcv.py``.
+
+A complete example can be found in ``examples/ue_command.ipynb``.
+
 Using Local Planner
 --------------------
 The Local Planner should be used with an agent.
@@ -405,4 +540,3 @@ These asset paths are used with the communicator's ``spawn_agent()`` method:
 Related Documentation
 ~~~~~~~~~~~~~~~~~~~~~
 - For detailed spawning procedures, see :doc:`UnrealCV+ <unrealcv+>`
-- For available actions per agent type, see :ref:`Actions <actions-section>` in the UE Detail documentation
