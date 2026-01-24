@@ -107,7 +107,7 @@ pip install -e .
 
 #### Step 2. Download the UE Server Package
 
-First, download and extract the **Base** UE server package for your OS. The Base package includes a lightweight city scene for quickly testing SimWorld’s core features, including core agent interaction and procedural city generation.
+First, download and extract the **Base** UE server package for your OS. The Base package includes two lightweight city scenes and one empty map for quickly testing SimWorld’s core features, including core agent interaction and procedural city generation.
 
 - **Base (Required)**
   - **Windows:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/resolve/main/Base/Windows.zip)
@@ -140,7 +140,7 @@ Start the SimWorld UE server first, then run the Python examples. From the extra
     ./SimWorld.sh <MAP_PATH>
     ```
 
-`<MAP_PATH>` refers to the Unreal Engine internal path to a map file (e.g., `/Game/hospital/map/demo.umap`). SimWorld includes 100+ additional environments. See the [Additional Environments](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#predefined-environments-list) for a complete list of available map paths. If `<MAP_PATH>` is not specified, the default map will be open.
+`<MAP_PATH>` refers to the Unreal Engine internal path to a map file (e.g., `/Game/hospital/map/demo.umap`). SimWorld includes 100+ additional environments. See the [Additional Environments](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#predefined-environments-list) for a complete list of available map paths. If `<MAP_PATH>` is not specified, SimWorld will open the default lightweight city map (`/Game/Maps/demo_1.umap`).
 
 #### Step 2. Run a Minimal Gym-Style Example
 
@@ -273,11 +273,11 @@ SimWorld supports a variety of sensors, including RGB images, segmentation maps,
 
 #### Commonly Used APIs
 All APIs are located in [simworld/communicator](simworld/communicator). Some of the most commonly used ones are listed below:
-- [communicator.get_camera_observation](simworld/communicator/communicator.py#L195)
-- [communicator.spawn_object](simworld/communicator/communicator.py#L574)
-- [communicator.spawn_agent](simworld/communicator/communicator.py#L603)
-- [communicator.generate_world](simworld/communicator/communicator.py#L812)
-- [communicator.clear_env](simworld/communicator/communicator.py#L880)
+- [communicator.get_camera_observation](simworld/communicator/communicator.py#L195) (Get camera images: RGB, depth, or segmentation mask)
+- [communicator.spawn_object](simworld/communicator/communicator.py#L574) (Spawn objects in the environment at specified position)
+- [communicator.spawn_agent](simworld/communicator/communicator.py#L603) (Spawn agents like humanoids or robots in the environment)
+- [communicator.generate_world](simworld/communicator/communicator.py#L812) (Generate procedural city world from configuration)
+- [communicator.clear_env](simworld/communicator/communicator.py#L880) (Clear all objects from the environment)
 
 <a id="make-your-simworld"></a>
 ## 🛠️ Make Your SimWorld
