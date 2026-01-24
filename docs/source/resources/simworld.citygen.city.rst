@@ -11,3 +11,11 @@ simworld.citygen.city.city\_generator module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.citygen.city
+   :members:
+   :undoc-members:
+   :show-inheritance:

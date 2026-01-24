@@ -24,7 +24,7 @@
   </a>
 </p> -->
 <p align="center">
-  <a href="https://www.youtube.com/@SimWorld-AI" target="_blank" rel="noopener noreferrer">
+  <a href="https://www.youtube.com/watch?v=OvV6gUhLVK4" target="_blank" rel="noopener noreferrer">
     <img
       src="docs/source/assets/video_cover.png"
       alt="SimWorld Demo Video"

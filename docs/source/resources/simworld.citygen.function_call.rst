@@ -11,3 +11,11 @@ simworld.citygen.function\_call.city\_function\_call module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.citygen.function_call
+   :members:
+   :undoc-members:
+   :show-inheritance:

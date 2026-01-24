@@ -19,3 +19,11 @@ simworld.citygen.route.route\_manager module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.citygen.route
+   :members:
+   :undoc-members:
+   :show-inheritance:

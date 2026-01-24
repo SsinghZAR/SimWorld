@@ -11,3 +11,11 @@ simworld.citygen.render.visualization module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: simworld.citygen.render
+   :members:
+   :undoc-members:
+   :show-inheritance:

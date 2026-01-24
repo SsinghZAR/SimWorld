@@ -11,3 +11,11 @@ Subpackages
    simworld.traffic.base
    simworld.traffic.controller
    simworld.traffic.manager
+
+Module contents
+---------------
+
+.. automodule:: simworld.traffic
+   :members:
+   :undoc-members:
+   :show-inheritance:
