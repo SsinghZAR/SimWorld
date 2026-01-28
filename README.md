@@ -88,7 +88,7 @@ README.md
 
 This section walks through the minimal setup to run SimWorld using our provided UE packages and the Python client. If you want to use your own custom environments, assets, or agent models, you can import them via `.pak` files. See [Make Your SimWorld](#make-your-simworld) for instructions.
 
-**System Requirements:** SimWorld requires Windows or Linux operating system, a dedicated GPU with ≥6GB VRAM, 32GB RAM, and 50-200GB disk space depending on the package. For detailed hardware requirements and recommendations, see the [installation guide](https://simworld.readthedocs.io/en/latest/getting_started/installation.html).
+**System Requirements:** SimWorld requires Windows or Linux operating system, a dedicated GPU with ≥6GB VRAM, 32GB RAM, and 50-200GB disk space depending on the package. For detailed hardware requirements and recommendations, see the [Device Requirement](https://simworld.readthedocs.io/en/latest/getting_started/installation.html).
 
 
 ### Installation
@@ -108,8 +108,8 @@ pip install -e .
 First, download and extract the **Base** UE server package for your OS. The Base package includes two lightweight city scenes and one empty map for quickly testing SimWorld’s core features, including core agent interaction and procedural city generation.
 
 - **Base (required, 2 city maps and 1 empty map)**
-  - **Windows:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/Base)
-  - **Linux:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/Base)
+  - **Windows:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/blob/main/Base/Windows.zip)
+  - **Linux:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/blob/main/Base/Linux.zip)
 
 If you want more pre-built scenes for demos and diverse scenarios, you can optionally install **Additional Environments (100+ Maps)**. This is an add-on map pack that extends the Base installation. Download the maps you need and copy the `.pak` files into the Base server folder at:
 `SimWorld/Content/Paks/`.
