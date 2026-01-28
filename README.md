@@ -38,11 +38,11 @@
 </p>
 
 ## 🔥 News
- - 2026.1 **SimWorld** now supports importing customized environments and agents!
- - 2025.11 The white paper of **SimWorld** is available on arxiv!
- - 2025.9 **SimWorld** has been accepted to NeurIPS 2025 main track as a **spotlight** paper! 🎉
- - 2025.6 The first formal release of **SimWorld** has been published! 🚀
- - 2025.3 Our demo of **SimWorld** has been accepted by CVPR 2025 Demonstration Track! 🎉
+ - 2026.1 **SimWorld** now supports importing customized environments and agents([doc](https://simworld.readthedocs.io/en/latest/customization/make_your_own_pak.html))!
+ - 2025.11 The [white paper](https://simworld.org/assets/white_paper.pdf) of **SimWorld** is available on arxiv!
+ - 2025.9 **SimWorld** has been accepted to NeurIPS 2025 main track as a **spotlight** [paper](https://neurips.cc/virtual/2025/loc/san-diego/poster/119002)! 🎉
+ - 2025.6 The first formal [release](https://x.com/Lianhuiq/status/1995585268121002381?s=20) of **SimWorld** has been published! 🚀
+ - 2025.3 Our [demo](https://www.youtube.com/@SimWorld-AI) of **SimWorld** has been accepted by CVPR 2025 Demonstration Track! 🎉
 
 ## 💡 Introduction
 SimWorld is built on Unreal Engine 5 and offers core capabilities to meet the needs of modern agent development. It provides:
