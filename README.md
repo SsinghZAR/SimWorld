@@ -348,6 +348,9 @@ The SimWorld framework is under active development. Future releases will include
 - [ ] **Arbitrary Natural Language → UE Actions**: ground free-form language instructions into executable UE actions/tools ([details](https://simworld.readthedocs.io/en/latest/next_steps/next_step.html#next-steps-nl-to-ue-actions)).
 - [ ] **RL Training Pipeline**: provide a unified RL interface and training pipeline for SimWorld embodied tasks ([details](https://simworld.readthedocs.io/en/latest/next_steps/next_step.html#next-steps-rl-training-pipeline)).
 - [ ] **City-Scale Multi-Agent Simulation**: support large-scale “city society” environments with 1K+ concurrent agents running in the same city ([details](https://simworld.readthedocs.io/en/latest/next_steps/next_step.html#next-steps-city-scale-multi-agent)).
+- [ ] **Video-to-Scene Generation**: Support generating simulation-ready UE scenes from input videos, including dynamic object reconstruction, scene layout inference, and asset placement consistent with the video context ([details](https://simworld.readthedocs.io/en/latest/next_steps/next_step.html#next-steps-video-to-scene)).
+- [ ] **MuJoCo Integration**: Integrate MuJoCo as an optional physics backend to enable high-frequency, high-fidelity simulation for robotics and control research while maintaining compatibility with existing SimWorld environments ([details](https://simworld.readthedocs.io/en/latest/next_steps/next_step.html#next-steps-mujoco)).
+- [ ] **Expanded Agents, Actions, and Interactable Objects**: Expand the simulator’s embodied ecosystem by introducing additional agent types (e.g., drones), richer and more standardized action spaces, and a broader set of interactable objects to support more diverse tasks and research settings ([details](https://simworld.readthedocs.io/en/latest/next_steps/next_step.html#next-steps-expand-agent-action-objects)).
 
 <a id="contributing"></a>
 ## 🤝 Contributing
