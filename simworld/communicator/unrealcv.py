@@ -271,12 +271,8 @@ class UnrealCV(object):
             actor_name: Actor name.
 
         Returns:
-            json: {
-                "HumanCollision": 0,
-                "ObjectCollision": 0,
-                "BuildingCollision": 0,
-                "VehicleCollision": 0
-            }
+            dict: Collision counts keyed by ``HumanCollision``, ``ObjectCollision``,
+            ``BuildingCollision``, and ``VehicleCollision``.
         """
         with self.lock:
             res = self.client.request(f'vbp {actor_name} GetCollisionNum')

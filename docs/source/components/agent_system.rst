@@ -455,7 +455,7 @@ In summary, the Local Planner serves as a crucial abstraction layer that decoupl
 **Related files:** ``local_planner/local_planner.py``.
 
 Demo for using Local Planner
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The Local Planner should be used with an agent.
 
 .. code-block:: python

@@ -66,6 +66,12 @@ With SimWorld, researchers can explore embodied intelligence at scale, enabling 
 
 .. toctree::
    :maxdepth: 2
+   :caption: ADDITIONAL CONFIGURATION
+
+   additional_configuration/configuration
+
+.. toctree::
+   :maxdepth: 2
    :caption: PYTHON API REFERENCE
 
    resources/modules

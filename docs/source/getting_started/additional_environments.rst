@@ -1,7 +1,7 @@
 Additional Environments
 ========================
 
-The additional environments are packaged as .pak files which include over 100 pre-defined scenes sourced from the Unreal Marketplace. These environments cover a wide range of settings, including urban areas, industrial zones, natural landscapes, and interior spaces. In addition, you can make your own .pak files to extend the environment or agent library of SimWorld by following the :doc:`make_your_own_pak` guide.
+The additional environments are packaged as .pak files which include over 100 pre-defined scenes sourced from the Unreal Marketplace. These environments cover a wide range of settings, including urban areas, industrial zones, natural landscapes, and interior spaces. In addition, you can make your own .pak files to extend the environment or agent library of SimWorld by following the :doc:`../customization/make_your_own_pak` guide.
 
 Download and Installation
 -------------------------
