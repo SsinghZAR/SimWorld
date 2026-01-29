@@ -69,7 +69,7 @@ The agent uses an LLM to decide actions based on its current position, direction
    You can only output ONE of the following actions:
    - "forward <duration>": Move forward for <duration> seconds (e.g., "forward 2")
    - "rotate <angle> <direction>": Rotate <angle> degrees in <direction> (left/right) (e.g., "rotate 45 left")
-   - "wait": Do nothing for 1 seconds
+   - "wait": Do nothing for 1 second
 
    Output ONLY the action command, nothing else."""
 
@@ -114,8 +114,7 @@ The agent uses an LLM to decide actions based on its current position, direction
    Choose your next action to move closer to the target."""
            action, time = self.llm.generate_text(system_prompt=self.system_prompt, user_prompt=prompt)
 
-           print(f"Raw response: {action}")
-           return action.strip()
+           return action
 
 **Key features:**
 

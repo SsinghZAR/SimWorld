@@ -115,13 +115,19 @@ README.md
 ## 🚀 Quick Tour
 Here's a minimal example showing how to create an LLM-driven navigation task in SimWorld. This demo creates a humanoid agent that autonomously navigates to a target location using natural language reasoning and a Gym-like interface.
 
-For the complete implementation, see [examples/gym_interface_demo.ipynb](examples/gym_interface_demo.ipynb). More examples are available in the [examples/](examples/) directory.
+Note that the code is simplified for demonstration. For the complete implementation, see [examples/gym_interface_demo.ipynb](examples/gym_interface_demo.ipynb). More examples are available in the [examples/](examples/) directory.
 
 ```python
+import sys
+import os
+import time
+import re
 import math
+from simworld.config import Config
 from simworld.communicator.communicator import Communicator
 from simworld.communicator.unrealcv import UnrealCV
 from simworld.llm.base_llm import BaseLLM
+from simworld.map.map import Map
 from simworld.agent.humanoid import Humanoid
 from simworld.utils.vector import Vector
 
