@@ -345,6 +345,9 @@ The SimWorld framework is under active development. Future releases will include
 - [ ] **Comprehensive Agent Framework**: A unified training and evaluation pipeline for autonomous agents.
 - [ ] **Code Generation for Scenes**: AI-powered coding agents capable of generating diverse simulation scenarios programmatically.
 - [ ] **Interactive Layout Editor**: Web-based interface for real-time city layout visualization and editing.
+- [ ] **Arbitrary Natural Language → UE Actions**: ground free-form language instructions into executable UE actions/tools.
+- [ ] **RL Training Pipeline**: provide a unified RL interface and training pipeline for SimWorld embodied tasks.
+- [ ] **City-Scale Multi-Agent Simulation**: support large-scale “city society” environments with 1K+ concurrent agents running in the same city.
 
 <a id="contributing"></a>
 ## 🤝 Contributing
