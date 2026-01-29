@@ -341,7 +341,7 @@ Bring your own Unreal Engine environments, assets, and agent models into SimWorl
 
 The SimWorld framework is under active development. Future releases will include (see the `Next Steps` page for more details and contact information):
 
-- [x] **Plugin System**: Support for importing user-defined custom environments and agents to extend SimWorld's capabilities ([doc](https://simworld.readthedocs.io/en/latest/customization/make_your_own_pak.html), [details](https://simworld.readthedocs.io/en/latest/next_steps/next_step.html#next-steps-plugin-system)).
+- [x] **Plugin System**: Support for importing user-defined custom environments and agents to extend SimWorld's capabilities ([doc](https://simworld.readthedocs.io/en/latest/customization/make_your_own_pak.html)).
 - [ ] **Comprehensive Agent Framework**: A unified training and evaluation pipeline for autonomous agents ([details](https://simworld.readthedocs.io/en/latest/next_steps/next_step.html#next-steps-comprehensive-agent-framework)).
 - [ ] **Code Generation for Scenes**: AI-powered coding agents capable of generating diverse simulation scenarios programmatically.
 - [ ] **Interactive Layout Editor**: Web-based interface for real-time city layout visualization and editing.
