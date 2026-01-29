@@ -6,6 +6,13 @@
 
 **SimWorld** is a simulation platform for developing and evaluating **LLM/VLM** AI agents in complex physical and social environments.
 
+In summary, SimWorld supports three levels of usage:
+- **[Base](#base-package)**: use the Base package (two lightweight city scenes + one empty map) for core agent interaction and quick testing.
+- **[Additional Environments](#additional-environments)**: optionally expand Base with 100+ pre-built maps for richer scenarios.
+- **[Customization](#make-your-simworld)**: bring your own UE environments, assets, and agent models to SimWorld for fully customized simulations.
+
+See [Setup](#setup) and [Make Your SimWorld](#make-your-simworld) for details.
+
 <div align="center">
     <a href="https://simworld-ai.github.io/"><img src="https://img.shields.io/badge/Website-SimWorld-blue" alt="Website" /></a>
     <a href="https://github.com/maitrix-org/SimWorld"><img src="https://img.shields.io/github/stars/maitrix-org/SimWorld?style=social" alt="GitHub Stars" /></a>
@@ -13,6 +20,22 @@
     <a href="https://arxiv.org/abs/2512.01078"><img src="https://img.shields.io/badge/arXiv-2512.01078-b31b1b?logo=arxiv&logoColor=white" alt="arXiv:2512.01078" /></a>
 </div>
 
+## 📌 Table of Contents
+- [🎬 Demonstration](#demonstration)
+- [🔥 News](#news)
+- [💡 Introduction](#introduction)
+- [🏗️ Architecture](#architecture)
+- [🚀 Quick Tour](#quick-tour) — minimal LLM-driven navigation example
+- [⚙️ Setup](#setup) — Python install + UE server download
+- [🚀 Quick Start](#quick-start) — run a minimal example
+- [📚 Configuration and API Reference](#configuration-and-api-reference) — configs + commonly used APIs
+- [🛠️ Make Your SimWorld](#make-your-simworld) — bring your own env/assets/agents
+- [🔮 Next Steps](#next-steps)
+- [🤝 Contributing](#contributing)
+- [⭐ Star History](#star-history)
+
+
+<a id="demonstration"></a>
 ## 🎬 Demonstration
 <!-- <p align="center">
   <a href="https://youtu.be/-e19MzwDhy4" target="_blank" rel="noopener noreferrer">
@@ -37,6 +60,7 @@
   </a>
 </p>
 
+<a id="news"></a>
 ## 🔥 News
  - 2026.1 **SimWorld** now supports importing customized environments and agents([doc](https://simworld.readthedocs.io/en/latest/customization/make_your_own_pak.html))!
  - 2025.11 The [white paper](https://simworld.org/assets/white_paper.pdf) of **SimWorld** is available on arxiv!
@@ -44,12 +68,14 @@
  - 2025.6 The first formal [release](https://x.com/Lianhuiq/status/1995585268121002381?s=20) of **SimWorld** has been published! 🚀
  - 2025.3 Our [demo](https://www.youtube.com/@SimWorld-AI) of **SimWorld** has been accepted by CVPR 2025 Demonstration Track! 🎉
 
+<a id="introduction"></a>
 ## 💡 Introduction
 SimWorld is built on Unreal Engine 5 and offers core capabilities to meet the needs of modern agent development. It provides:
 - Realistic, open-ended world simulation with accurate physics and language-based procedural generation.
 - Rich interface for LLM/VLM agents, supporting multi-modal perception and natural language actions.
 - Diverse and customizable physical and social reasoning scenarios, enabling systematic training and evaluation of complex agent behaviors like navigation, planning, and strategic cooperation.
 
+<a id="architecture"></a>
 ## 🏗️ Architecture
 <p align="center">
     <img width="799" height="671" alt="image" src="https://github.com/user-attachments/assets/2e67356a-7dca-4eba-ab57-de1226e080bb" />
@@ -84,6 +110,7 @@ docs/                   # Documentation source files
 README.md
 ```
 
+<a id="quick-tour"></a>
 ## 🚀 Quick Tour
 Here's a minimal example showing how to create an LLM-driven navigation task in SimWorld. This demo creates a humanoid agent that autonomously navigates to a target location using natural language reasoning and a Gym-like interface.
 
@@ -199,6 +226,7 @@ for i in range(100):
             break
 ```
 
+<a id="setup"></a>
 ## ⚙️ Setup
 
 This section walks through the minimal setup to run SimWorld using our provided UE packages and the Python client. If you want to use your own custom environments, assets, or agent models, you can import them via `.pak` files. See [Make Your SimWorld](#make-your-simworld) for instructions.
@@ -222,6 +250,7 @@ pip install -e .
 
 First, download and extract the **Base** UE server package for your OS. The Base package includes two lightweight city scenes and one empty map for quickly testing SimWorld’s core features, including core agent interaction and procedural city generation.
 
+<a id="base-package"></a>
 - **Base (required, 2 city maps and 1 empty map)**
   - **Windows:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/blob/main/Base/Windows.zip)
   - **Linux:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/blob/main/Base/Linux.zip)
@@ -229,6 +258,7 @@ First, download and extract the **Base** UE server package for your OS. The Base
 If you want more pre-built scenes for demos and diverse scenarios, you can optionally install **Additional Environments (100+ Maps)**. This is an add-on map pack that extends the Base installation. Download the maps you need and copy the `.pak` files into the Base server folder at:
 `SimWorld/Content/Paks/`.
 
+<a id="additional-environments"></a>
 - **Additional Environments (optional, 100+ maps)**
   - **Windows:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/AdditionEnvironmentPaks/Windows)
   - **Linux:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/tree/main/AdditionEnvironmentPaks/Linux)
@@ -236,6 +266,7 @@ If you want more pre-built scenes for demos and diverse scenarios, you can optio
 The Additional Environments package is organized as separate `.pak` files, so you can download only the maps you need. Please check the [download and installation](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html#download-and-installation) for usage instructions, including how to load specific maps and what each `.pak` contains.
 
 
+<a id="quick-start"></a>
 ### Quick Start
 
 We provide several examples of code in [examples/](examples/), showcasing how to use the basic functionalities of SimWorld, including city layout generation, traffic simulation, asset retrieval, and activity-to-actions. Please follow the examples to see how SimWorld works.
@@ -255,6 +286,7 @@ Start the SimWorld UE server first, then run the Python examples. From the extra
 
 `<MAP_PATH>` refers to the Unreal Engine internal path to a map file (e.g., `/Game/hospital/map/demo.umap`). SimWorld's **base** binary contains 2 city maps and 1 empty map. See [Base Environments](https://simworld.readthedocs.io/en/latest/getting_started/base_environments.html) for details. In addition, users can download 100+ **additional environment paks**. See the [Additional Environments](https://simworld.readthedocs.io/en/latest/getting_started/additional_environments.html) for the installation and complete list of available map paths. If `<MAP_PATH>` is not specified, the default map (`/Game/Maps/demo_1`) will be open.
 
+<a id="configuration-and-api-reference"></a>
 ## 📚 Configuration and API Reference
 
 ### Configuration
@@ -303,6 +335,7 @@ All APIs are located in [simworld/communicator](simworld/communicator). Some of 
 
 Bring your own Unreal Engine environments, assets, and agent models into SimWorld. This lets you add new maps, objects, and characters beyond the built-in library. For example, you can turn almost any idea into a playable world, such as a rainy campus, a night market, or a sci-fi city, and then drop agents into it to explore, interact, and learn. To import your content into SimWorld, package it as a custom `.pak` file. See full instructions in [Make Your Own Pak Files](https://simworld.readthedocs.io/en/latest/customization/make_your_own_pak.html).
 
+<a id="next-steps"></a>
 ## 🔮 Next Steps
 
 The SimWorld framework is under active development. Future releases will include:
@@ -312,10 +345,12 @@ The SimWorld framework is under active development. Future releases will include
 - [ ] **Code Generation for Scenes**: AI-powered coding agents capable of generating diverse simulation scenarios programmatically.
 - [ ] **Interactive Layout Editor**: Web-based interface for real-time city layout visualization and editing.
 
+<a id="contributing"></a>
 ## 🤝 Contributing
 
 We welcome contributions from the community! Whether you want to report bugs, suggest features, or submit code improvements, your input is valuable. Please check out our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started.
 
+<a id="star-history"></a>
 ## ⭐ Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=SimWorld-AI/SimWorld&type=date&legend=bottom-right)](https://www.star-history.com/#SimWorld-AI/SimWorld&type=date&legend=bottom-right)
