@@ -89,7 +89,7 @@ Here's a minimal example showing how to create an LLM-driven navigation task in 
 
 For the complete implementation, see [examples/gym_interface_demo.ipynb](examples/gym_interface_demo.ipynb). More examples are available in the [examples/](examples/) directory.
 
-```python {42-49,53,56,61,75,78}
+```python
 import math
 from simworld.communicator.communicator import Communicator
 from simworld.communicator.unrealcv import UnrealCV
@@ -130,26 +130,26 @@ class Environment:
         spawn_forward = Vector(1, 0)
 
         # Spawn humanoid agent in UE world
-        self.agent = Humanoid(
+        self.agent = Humanoid(  # <=========== Create humanoid agent
             communicator=self.communicator,
             position=spawn_location,
             direction=spawn_forward,
             config=self.config,
             map=self.map
         )
-        self.communicator.spawn_agent(self.agent, name=None, model_path=agent_bp, type="humanoid")
+        self.communicator.spawn_agent(self.agent, name=None, model_path=agent_bp, type="humanoid")  # <=========== Spawn in UE
         self.target = Vector(1700, -1700)
 
         # Get initial observation (position, direction, and ego-view camera)
-        loc_3d = self.communicator.unrealcv.get_location(self.agent_name)  # Returns [x, y, z]
+        loc_3d = self.communicator.unrealcv.get_location(self.agent_name)  # <=========== Get agent position
         position = Vector(loc_3d[0], loc_3d[1])
 
-        orientation = self.communicator.unrealcv.get_orientation(self.agent_name)  # Returns [pitch, yaw, roll]
+        orientation = self.communicator.unrealcv.get_orientation(self.agent_name)  # <=========== Get agent orientation
         yaw = orientation[1]  # Yaw angle in degrees
         # Convert yaw to direction vector
         direction = Vector(math.cos(math.radians(yaw)), math.sin(math.radians(yaw)))
 
-        ego_view = self.communicator.get_camera_observation(self.agent.camera_id, "lit")
+        ego_view = self.communicator.get_camera_observation(self.agent.camera_id, "lit")  # <=========== Get camera view
 
         observation = {
             'position': position,
@@ -163,10 +163,10 @@ class Environment:
         # Parse action string (e.g., "forward 2", "rotate 45 left")
         if action.startswith("forward"):
             # Extract duration and execute forward movement
-            self.communicator.humanoid_step_forward(self.agent.id, duration, direction=0)
+            self.communicator.humanoid_step_forward(self.agent.id, duration, direction=0)  # <=========== Move forward
         elif action.startswith("rotate"):
             # Extract angle and direction, execute rotation
-            self.communicator.humanoid_rotate(self.agent.id, angle, direction)
+            self.communicator.humanoid_rotate(self.agent.id, angle, direction)  # <=========== Rotate left/right
         # ... handle other actions ...
 
         # Get new observation and calculate reward
