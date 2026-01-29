@@ -21,7 +21,7 @@ We plan to build a **general, modular agent framework** for autonomous agents in
 - **Gym-compatible interfaces** for RL training across a wide range of embodied tasks
 - **Systematic ablations across environments** to understand what actually matters for success in long-horizon embodied tasks
 
-If you're interested in contributing designs or use cases for this framework, please reach out to **lingjun@ucsd.edu**.
+If you're interested in contributing designs or use cases for this framework, please reach out to **jic182@ucsd.edu**.
 
 .. _next-steps-codegen-scenes:
 
