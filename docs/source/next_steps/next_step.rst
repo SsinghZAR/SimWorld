@@ -2,6 +2,7 @@ Next Steps Roadmap
 ===================
 
 This page provides more details on several key directions on SimWorld's roadmap.
+We are happy to share our Unreal project files and assets to all contributors for internal development and research purposes.
 If you're interested in collaborating on any item below, please reach out to the corresponding contact listed for that project.
 
 .. contents::
@@ -22,6 +23,33 @@ We plan to build a **general, modular agent framework** for autonomous agents in
 
 If you're interested in contributing designs or use cases for this framework, please reach out to **jic182@ucsd.edu**.
 
+.. _next-steps-codegen-scenes:
+
+Code Generation for Scenes
+--------------------------
+
+We are exploring **AI-powered coding agents** that programmatically generate rich scenarios and cities:
+
+- A **scene DSL / API** that compiles to SimWorld maps, assets, traffic rules, and scripted events
+- **LLM tooling chains** that turn prompts or task specs into executable scene code with validation and preview
+- **Safety and quality checks** (asset budgets, collision-free placements, playability tests)
+- **Curated seeds and benchmarks** to evaluate diversity, controllability, and realism of generated content
+
+If you have use cases or evaluation ideas for scene code generation, please contact **x8ye@ucsd.edu**.
+
+.. _next-steps-interactive-layout-editor:
+
+Interactive Layout Editor
+-------------------------
+
+We plan to build a **web-based layout editor** for real-time city visualization and editing:
+
+- Live **map canvas** with layers for roads, zoning, traffic lights, and spawn points
+- **Asset palette and snapping** for roads, buildings, props, and scripted triggers with constraint-aware placement
+- **Co-editing and versioning** so teams can iterate together and diff/export layouts into UE or SimWorld gym wrappers
+- **Simulation-aware validation** (navmesh coverage, connectivity, spawn density, performance budget estimates)
+
+If you are interested in frontend or visualization contributions, please reach out to **x8ye@ucsd.edu**.
 
 .. _next-steps-nl-to-ue-actions:
 
@@ -75,4 +103,59 @@ Key directions include:
 
 This direction is especially relevant for research on **emergent behavior, social dynamics, and large-scale coordination**.
 If you are interested in pushing city-scale simulations or have industrial use cases, please contact **jir015@ucsd.edu**.
+
+.. _next-steps-video-to-scene:
+
+Video-to-Scene Generation
+-------------------------
+
+We aim to support **video-to-scene** pipelines that convert real videos into simulation-ready UE scenes:
+
+- **Camera pose and intrinsics estimation** plus multi-view geometry / SLAM for structure recovery
+- **Object detection, tracking, and 3D reconstruction** to infer dynamic actors and static layout
+- **Asset mapping** to replace reconstructed meshes with SimWorld-ready assets and materials
+- **Temporal consistency and evaluation** tools to check fidelity, scale, and replayability of generated scenes
+
+Reference material:
+
+- Vid2Sim: https://metadriverse.github.io/vid2sim/
+- Video2Game: https://video2game.github.io/
+
+If you work on video-to-3D or can share datasets, please contact **x8ye@ucsd.edu**.
+
+
+.. _next-steps-mujoco:
+
+MuJoCo Integration
+------------------
+
+We are prototyping **MuJoCo as an optional physics backend** to complement UE for high-frequency control:
+
+- **Interchange layer** to mirror SimWorld agents, sensors, and actions in MuJoCo while keeping scene semantics
+- **Time-sync and co-sim bridges** so planners can mix UE visuals with MuJoCo dynamics when needed
+- **Benchmark tasks** (manipulation, legged locomotion, aerial) to compare fidelity and performance across backends
+
+Reference material:
+
+- MuJoCo-Unity plugin example: https://github.com/OpenHUTB/mujoco_plugin
+- MuJoCo in Unity docs: https://mujoco.readthedocs.io/en/latest/unity.html
+- URoboViz (3D robot visualization): https://github.com/HoangGiang93/URoboViz
+- Unreal Robotics Lab: https://arxiv.org/html/2504.14135v2
+
+If you want to help shape the MuJoCo bridge or contribute tasks, please reach out to **x8ye@ucsd.edu**.
+
+
+.. _next-steps-expand-agent-action-objects:
+
+Expanded Agents, Actions, and Interactable Objects
+--------------------------------------------------
+
+We plan to expand the **embodied ecosystem** across agents, action spaces, and interactables:
+
+- New agent types (e.g., **drones, service robots, manipulation platforms**) with standardized capability profiles
+- **Richer action schemas** (continuous and symbolic) with compatibility across UE tools, RL wrappers, and planners
+- **Broader interactable set** (doors, elevators, appliances, IoT props) with consistent affordances and state machines
+- **Evaluation suites** to measure coverage, compositionality, and cross-agent interoperability
+
+If you are interested in defining new agent/action specs or supplying assets, please contact **x8ye@ucsd.edu**.
 
