@@ -6,13 +6,6 @@
 
 **SimWorld** is a simulation platform for developing and evaluating **LLM/VLM** AI agents in complex physical and social environments.
 
-In summary, SimWorld supports three levels of usage:
-- **[Base](#base-package)**: use the Base package (two lightweight city scenes + one empty map) for core agent interaction and quick testing.
-- **[Additional Environments](#additional-environments)**: optionally expand Base with 100+ pre-built maps for richer scenarios.
-- **[Customization](#make-your-simworld)**: bring your own UE environments, assets, and agent models to SimWorld for fully customized simulations.
-
-See [Setup](#setup) and [Make Your SimWorld](#make-your-simworld) for details.
-
 <div align="center">
     <a href="https://simworld-ai.github.io/"><img src="https://img.shields.io/badge/Website-SimWorld-blue" alt="Website" /></a>
     <a href="https://github.com/maitrix-org/SimWorld"><img src="https://img.shields.io/github/stars/maitrix-org/SimWorld?style=social" alt="GitHub Stars" /></a>
@@ -20,14 +13,22 @@ See [Setup](#setup) and [Make Your SimWorld](#make-your-simworld) for details.
     <a href="https://arxiv.org/abs/2512.01078"><img src="https://img.shields.io/badge/arXiv-2512.01078-b31b1b?logo=arxiv&logoColor=white" alt="arXiv:2512.01078" /></a>
 </div>
 
+<br>
+
+In summary, SimWorld supports three levels of usage:
+- **[Base](#base-package)**: use the Base package (two lightweight city scenes + one empty map) for core agent interaction and quick testing.
+- **[Additional Environments](#additional-environments)**: optionally expand Base with 100+ pre-built maps for richer scenarios.
+- **[Customization](#make-your-simworld)**: bring your own UE environments, assets, and agent models to SimWorld for fully customized simulations.
+
+See [Setup](#setup) and [Make Your SimWorld](#make-your-simworld) for details.
+
 ## 📌 Table of Contents
 - [🎬 Demonstration](#demonstration)
 - [🔥 News](#news)
 - [💡 Introduction](#introduction)
 - [🏗️ Architecture](#architecture)
-- [🚀 Quick Tour](#quick-tour) — minimal LLM-driven navigation example
-- [⚙️ Setup](#setup) — Python install + UE server download
-- [🚀 Quick Start](#quick-start) — run a minimal example
+- [🚀 Quick Tour](#quick-tour) — a minimum gym-like agent example
+- [⚙️ Setup](#setup) — Python / UE server install + quick start
 - [📚 Configuration and API Reference](#configuration-and-api-reference) — configs + commonly used APIs
 - [🛠️ Make Your SimWorld](#make-your-simworld) — bring your own env/assets/agents
 - [🔮 Next Steps](#next-steps)
