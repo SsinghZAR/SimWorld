@@ -47,6 +47,12 @@ With SimWorld, researchers can explore embodied intelligence at scale, enabling 
    customization/make_your_own_pak
 
 .. toctree::
+   :maxdepth: 1
+   :caption: NEXT STEPS
+
+   next_steps/next_step
+
+.. toctree::
    :maxdepth: 2
    :caption: SIMWORLD MODULES
 

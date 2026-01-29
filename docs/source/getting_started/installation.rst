@@ -31,7 +31,7 @@ The following device requirements should be fulfilled before installing SimWorld
 .. warning::
 
    1. Python: Python 3.10 or later is required.
-   2. Network: A stable internet connection and available TCP port (9000 by default) are required.
+   2. We use port 9000 by default for communication between the SimWorld server and the Python client. Please ensure that this port is available when running SimWorld.
    3. In our demo video, we use RTX 4090 with 24 GB VRAM for video recording, and hardware raytracing is enabled for enhanced visual fidelity.
 
 Installation
@@ -55,7 +55,7 @@ The SimWorld Python Client Library contains code for SimWorld's agent and enviro
 Unreal Engine Backend
 ~~~~~~~~~~~~~~~~~~~~~
 
-First, download and extract the **Base** UE server package for your OS. The Base package includes 2 lightweight city demo map and 1 empty map for quickly testing SimWorld's core features, including core agent interaction and procedural city generation. See :doc:`base_environments` for details.
+First, download and extract the **Base** UE server package for your OS. The Base package includes 2 lightweight lightweight city scenes and 1 empty map for quickly testing SimWorld's core features, including core agent interaction and procedural city generation. See :doc:`base_environments` for details.
 
 * **Base (Required)**
 
