@@ -129,7 +129,7 @@ class Environment:
         spawn_location = Vector(0, 0)
         spawn_forward = Vector(1, 0)
 
-        # Spawn humanoid agent in UE world
+        # ============ IMPORTANT: Spawn humanoid agent in UE world ============
         self.agent = Humanoid(  # <=========== Create humanoid agent
             communicator=self.communicator,
             position=spawn_location,
@@ -140,7 +140,7 @@ class Environment:
         self.communicator.spawn_agent(self.agent, name=None, model_path=agent_bp, type="humanoid")  # <=========== Spawn in UE
         self.target = Vector(1700, -1700)
 
-        # Get initial observation (position, direction, and ego-view camera)
+        # ============ IMPORTANT: Get initial observation ============
         loc_3d = self.communicator.unrealcv.get_location(self.agent_name)  # <=========== Get agent position
         position = Vector(loc_3d[0], loc_3d[1])
 
@@ -160,7 +160,7 @@ class Environment:
 
     def step(self, action):
         """Parse and execute action, return new observation and reward."""
-        # Parse action string (e.g., "forward 2", "rotate 45 left")
+        # ============ IMPORTANT: Execute humanoid movement commands ============
         if action.startswith("forward"):
             # Extract duration and execute forward movement
             self.communicator.humanoid_step_forward(self.agent.id, duration, direction=0)  # <=========== Move forward
