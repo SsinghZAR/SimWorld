@@ -259,8 +259,8 @@ First, download and extract the **Base** UE server package for your OS. The Base
 
 <a id="base-package"></a>
 - **Base (required, 2 city maps and 1 empty map)**
-  - **Windows:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/blob/main/Base/Windows.zip)
-  - **Linux:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/blob/main/Base/Linux.zip)
+  - **Windows:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/blob/main/Base20260201/Windows.zip)
+  - **Linux:** [Download](https://huggingface.co/datasets/SimWorld-AI/SimWorld/blob/main/Base20260201/Linux.zip)
 
 If you want more pre-built scenes for demos and diverse scenarios, you can optionally install **Additional Environments (100+ Maps)**. This is an add-on map pack that extends the Base installation. Download the maps you need and copy the `.pak` files into the Base server folder at:
 `SimWorld/Content/Paks/`.
