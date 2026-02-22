@@ -33,7 +33,10 @@ setup(
         'pillow',
         'sentence-transformers',
         'faiss-cpu',
-        'openai'
+        'openai',
+        'fastapi',
+        'uvicorn[standard]',
+        'pydantic'
     ],
     extras_require={
         'dev': [
