@@ -1,58 +1,64 @@
-# SimWorld API 使用指南
+# SimWorld API User Guide
 
-SimWorld 提供了 REST API 接口，允许外部系统（如 clawbot）通过 HTTP 请求控制 SimWorld 中的 agent。
+SimWorld provides a REST API interface that allows external systems (such as clawbot) to control agents in SimWorld via HTTP requests.
 
-## 快速开始
+## Quick Start
 
-### 1. 启动 API 服务器
+### 1. Start the API Server
 
 ```bash
-# 方式1: 使用示例脚本
+# Option 1: Use the example script
 python examples/api_server_example.py
 
-# 方式2: 使用 uvicorn 直接启动
+# Option 2: Start directly with uvicorn
 uvicorn simworld.api.server:app --host 0.0.0.0 --port 8000
 ```
 
-服务器启动后，你可以访问：
-- API 文档: http://localhost:8000/docs (Swagger UI)
-- 健康检查: http://localhost:8000/health
+After the server starts, you can access:
 
-### 2. 测试 API
+* API Docs: [http://localhost:8000/docs](http://localhost:8000/docs) (Swagger UI)
+* Health Check: [http://localhost:8000/health](http://localhost:8000/health)
 
-运行客户端示例：
+### 2. Test the API
+
+Run the client example:
 
 ```bash
 python examples/api_client_example.py
 ```
 
-## API 端点
+## API Endpoints
 
-### 系统端点
+### System Endpoints
 
 #### GET `/`
-根端点，返回服务器信息
+
+Root endpoint, returns server information
 
 #### GET `/health`
-健康检查，返回服务器和 Unreal Engine 连接状态
 
-### Agent 管理
+Health check, returns server status and Unreal Engine connection status
+
+### Agent Management
 
 #### POST `/api/agents/spawn`
-生成一个新的 agent
 
-**请求体:**
+Spawn a new agent
+
+**Request Body:**
+
 ```json
 {
-  "agent_type": "humanoid",  // 或 "dog"
-  "position": [0, 0],        // [x, y] 或 [x, y, z]
+  "agent_type": "humanoid",  // or "dog"
+  "position": [0, 0],        // [x, y] or [x, y, z]
   "direction": [1, 0],       // [x, y]
-  "model_path": "...",       // 可选，自定义模型路径
-  "name": "..."              // 可选，自定义名称
+  "model_path": "...",       // optional, custom model path
+  "name": "..."              // optional, custom name
 }
 ```
 
-**响应:**
+**Response:**
+
 ```json
 {
   "success": true,
@@ -69,104 +75,120 @@ python examples/api_client_example.py
 ```
 
 #### GET `/api/agents`
-列出所有已注册的 agent
+
+List all registered agents
 
 #### GET `/api/agents/{agent_id}`
-获取指定 agent 的信息
+
+Get information for a specific agent
 
 #### DELETE `/api/agents/{agent_id}`
-销毁指定的 agent
 
-### Humanoid 动作
+Destroy a specific agent
+
+### Humanoid Actions
 
 #### POST `/api/humanoid/move`
-控制 humanoid 移动
 
-**请求体:**
+Control humanoid movement
+
+**Request Body:**
+
 ```json
 {
   "agent_id": 0,
-  "action": "move_forward",  // 或 "step_forward", "stop"
-  "duration": 2.0,          // step_forward 的持续时间（秒）
-  "direction": 0            // step_forward 的方向
+  "action": "move_forward",  // or "step_forward", "stop"
+  "duration": 2.0,           // duration in seconds for step_forward
+  "direction": 0             // direction for step_forward
 }
 ```
 
 #### POST `/api/humanoid/rotate`
-旋转 humanoid
 
-**请求体:**
+Rotate humanoid
+
+**Request Body:**
+
 ```json
 {
   "agent_id": 0,
-  "angle": 90,              // 旋转角度（度）
-  "direction": "left"       // 或 "right"
+  "angle": 90,               // rotation angle (degrees)
+  "direction": "left"        // or "right"
 }
 ```
 
 #### POST `/api/humanoid/interact`
-Humanoid 交互动作
 
-**请求体:**
+Humanoid interaction actions
+
+**Request Body:**
+
 ```json
 {
   "agent_id": 0,
-  "action": "pick_up",      // 或 "drop", "sit_down", "stand_up", 
-                            // "argue", "discuss", "listen", 
-                            // "wave_to_dog", "directing_path", "stop_action"
-  "object_name": "..."      // pick_up 时需要指定对象名称
+  "action": "pick_up",       // or "drop", "sit_down", "stand_up",
+                             // "argue", "discuss", "listen",
+                             // "wave_to_dog", "directing_path", "stop_action"
+  "object_name": "..."       // required for pick_up
 }
 ```
 
-### Dog 动作
+### Dog Actions
 
 #### POST `/api/dog/move`
-控制 dog 移动
 
-**请求体:**
+Control dog movement
+
+**Request Body:**
+
 ```json
 {
   "agent_id": 0,
-  "speed": 200,            // 移动速度
-  "duration": 1.0,         // 持续时间（秒）
-  "direction": 0            // 0=前进, 1=后退, 2=左, 3=右
+  "speed": 200,              // movement speed
+  "duration": 1.0,           // duration in seconds
+  "direction": 0             // 0=forward, 1=backward, 2=left, 3=right
 }
 ```
 
 #### POST `/api/dog/rotate`
-旋转 dog
 
-**请求体:**
+Rotate dog
+
+**Request Body:**
+
 ```json
 {
   "agent_id": 0,
-  "angle": 90,              // 旋转角度（度）
-  "duration": 0.7,          // 持续时间（秒）
-  "clockwise": 1            // 1=顺时针, -1=逆时针
+  "angle": 90,               // rotation angle (degrees)
+  "duration": 0.7,           // duration in seconds
+  "clockwise": 1             // 1=clockwise, -1=counterclockwise
 }
 ```
 
 #### POST `/api/dog/look?agent_id={id}&direction={up|down}`
-Dog 抬头/低头
 
-### 相机操作
+Make the dog look up or down
+
+### Camera Operations
 
 #### GET `/api/camera/{camera_id}/image?viewmode={lit|depth|object_mask}`
-获取相机图像（返回 base64 编码的图片）
+
+Get camera image (returns a base64-encoded image)
 
 #### GET `/api/camera/{camera_id}/info`
-获取相机信息（位置、旋转、FOV、分辨率等）
 
-## 使用示例
+Get camera information (position, rotation, FOV, resolution, etc.)
 
-### Python 客户端示例
+## Usage Examples
+
+### Python Client Example
 
 ```python
 import requests
 
 BASE_URL = "http://localhost:8000"
 
-# 1. 生成 humanoid agent
+# 1. Spawn a humanoid agent
 response = requests.post(f"{BASE_URL}/api/agents/spawn", json={
     "agent_type": "humanoid",
     "position": [0, 0],
@@ -174,29 +196,29 @@ response = requests.post(f"{BASE_URL}/api/agents/spawn", json={
 })
 agent_id = response.json()["data"]["agent_id"]
 
-# 2. 让 agent 向前移动
+# 2. Move the agent forward
 requests.post(f"{BASE_URL}/api/humanoid/move", json={
     "agent_id": agent_id,
     "action": "step_forward",
     "duration": 2.0
 })
 
-# 3. 旋转 agent
+# 3. Rotate the agent
 requests.post(f"{BASE_URL}/api/humanoid/rotate", json={
     "agent_id": agent_id,
     "angle": 90,
     "direction": "left"
 })
 
-# 4. 获取相机图像
+# 4. Get a camera image
 response = requests.get(f"{BASE_URL}/api/camera/1/image?viewmode=lit")
-image_data = response.json()["image"]  # base64 编码的图片
+image_data = response.json()["image"]  # base64-encoded image
 ```
 
-### curl 示例
+### curl Example
 
 ```bash
-# 生成 agent
+# Spawn an agent
 curl -X POST "http://localhost:8000/api/agents/spawn" \
   -H "Content-Type: application/json" \
   -d '{
@@ -205,7 +227,7 @@ curl -X POST "http://localhost:8000/api/agents/spawn" \
     "direction": [1, 0]
   }'
 
-# 移动 agent
+# Move the agent
 curl -X POST "http://localhost:8000/api/humanoid/move" \
   -H "Content-Type: application/json" \
   -d '{
@@ -215,14 +237,14 @@ curl -X POST "http://localhost:8000/api/humanoid/move" \
   }'
 ```
 
-## 集成到外部系统
+## Integration with External Systems
 
-### 从 clawbot 调用
+### Calling from clawbot
 
-clawbot 可以通过 HTTP 请求调用这些 API：
+clawbot can call these APIs via HTTP requests:
 
 ```python
-# 在 clawbot 中
+# In clawbot
 import requests
 
 class SimWorldController:
@@ -252,15 +274,15 @@ class SimWorldController:
         return response.json()
 ```
 
-## 注意事项
+## Notes
 
-1. **确保 Unreal Engine 运行**: API 服务器启动时会尝试连接 Unreal Engine，请确保 UE 已启动并启用了 UnrealCV
-2. **端口配置**: 默认 API 端口是 8000，UnrealCV 端口是 9000，确保端口未被占用
-3. **CORS**: API 服务器已启用 CORS，允许跨域访问
-4. **异步操作**: 某些动作（如移动、旋转）可能需要时间完成，API 会等待动作完成后再返回
+1. **Make sure Unreal Engine is running**: The API server will try to connect to Unreal Engine when starting up. Please ensure UE is running and UnrealCV is enabled.
+2. **Port configuration**: The default API port is 8000, and the UnrealCV port is 9000. Make sure these ports are not occupied.
+3. **CORS**: The API server has CORS enabled, allowing cross-origin access.
+4. **Asynchronous operations**: Some actions (such as movement and rotation) may take time to complete. The API will wait until the action is completed before returning.
 
-## 故障排除
+## Troubleshooting
 
-- **连接失败**: 检查 Unreal Engine 是否运行，UnrealCV 是否启用
-- **Agent 未找到**: 确保 agent_id 正确，agent 已成功生成
-- **动作执行失败**: 检查 agent 类型是否匹配（humanoid vs dog）
+* **Connection failed**: Check whether Unreal Engine is running and whether UnrealCV is enabled.
+* **Agent not found**: Make sure the `agent_id` is correct and the agent was successfully spawned.
+* **Action execution failed**: Check whether the agent type matches the endpoint (`humanoid` vs `dog`).

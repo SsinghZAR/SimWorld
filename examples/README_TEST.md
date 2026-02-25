@@ -1,45 +1,46 @@
-# 快速测试指南
+# Quick Test Guide
 
-## 文件位置说明
+## File Location Notes
 
-所有文件都在 `SimWorld/` 子目录下，所以需要使用完整路径。
+All files are located under the `SimWorld/` subdirectory, so you need to use the full path.
 
-## 测试步骤
+## Test Steps
 
-### 1. 启动 Unreal Engine
-确保 UE 已启动并启用了 UnrealCV。
+### 1. Start Unreal Engine
 
-### 2. 启动 API 服务器
+Make sure Unreal Engine is running and UnrealCV is enabled.
 
-在项目根目录 (`/home/lingjun/SimWorld`) 运行：
+### 2. Start the API Server
+
+From the project root (`/home/lingjun/SimWorld`), run:
 
 ```bash
 python SimWorld/examples/api_server_example.py
 ```
 
-或者：
+Or:
 
 ```bash
 cd SimWorld
 python examples/api_server_example.py
 ```
 
-### 3. 运行测试脚本
+### 3. Run the Test Script
 
-在另一个终端，同样在项目根目录运行：
+In another terminal, also from the project root, run:
 
 ```bash
 python SimWorld/examples/test_spawn_agent.py
 ```
 
-或者：
+Or:
 
 ```bash
 cd SimWorld
 python examples/test_spawn_agent.py
 ```
 
-## 或者使用 curl 直接测试
+## Or Test Directly with curl
 
 ```bash
 curl -X POST "http://localhost:8000/api/agents/spawn" \
@@ -51,7 +52,7 @@ curl -X POST "http://localhost:8000/api/agents/spawn" \
   }'
 ```
 
-## 检查服务器状态
+## Check Server Status
 
 ```bash
 curl http://localhost:8000/health

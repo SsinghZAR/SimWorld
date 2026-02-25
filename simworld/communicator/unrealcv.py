@@ -37,19 +37,19 @@ class UnrealCV(object):
         """
         self.ip = ip
         # Build a client to connect to the environment
-        print(f"正在创建 UnrealCV 客户端 ({ip}:{port})...")
+        print(f"Creating UnrealCV client ({ip}:{port})...")
         self.client = unrealcv.Client((ip, port))
-        print("正在连接 UnrealCV 服务器...")
+        print("Connecting to UnrealCV server...")
         self.client.connect()
-        print("UnrealCV 客户端连接成功")
+        print("UnrealCV client connected successfully")
 
         self.resolution = resolution
 
         self.lock = Lock()
         self.logger = Logger.get_logger('UnrealCV')
-        print("正在初始化 UnrealCV 设置...")
+        print("Initializing UnrealCV settings...")
         self.ini_unrealcv(resolution)
-        print("UnrealCV 初始化完成")
+        print("UnrealCV initialization complete")
 
     ###################################################
     # Basic Operations
@@ -64,18 +64,18 @@ class UnrealCV(object):
         Args:
             resolution: Resolution, defaults to (320, 240).
         """
-        print("  检查连接状态...")
+        print("  Checking connection status...")
         self.check_connection()
-        print("  连接状态正常")
+        print("  Connection status OK")
         [w, h] = resolution
-        print(f"  设置分辨率: {w}x{h}...")
+        print(f"  Setting resolution: {w}x{h}...")
         self.client.request(f'vrun setres {w}x{h}w', -1)  # Set resolution of display window
-        print("  分辨率设置完成")
-        print("  设置异步资源编译...")
+        print("  Resolution set")
+        print("  Enabling async asset compilation...")
         self.client.request('vrun Editor.AsyncSkinnedAssetCompilation 2', -1)  # To correctly load the character
-        print("  等待资源加载...")
+        print("  Waiting for assets to load...")
         time.sleep(1)
-        print("  资源加载完成")
+        print("  Asset loading complete")
 
     def check_connection(self):
         """Check connection status, attempt to reconnect if not connected."""

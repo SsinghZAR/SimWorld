@@ -1,24 +1,25 @@
-# SimWorld API 模块
+# SimWorld API Module
 
-这个模块提供了 REST API 接口，允许外部系统（如 clawbot）通过 HTTP 请求控制 SimWorld 中的 agent。
+This module provides a REST API interface that allows external systems (such as clawbot) to control agents in SimWorld via HTTP requests.
 
-## 快速开始
+## Quick Start
 
-### 1. 启动 API 服务器
+### 1. Start the API Server
 
-```bash
+```bash id="x1fl74"
 cd SimWorld
 python3 examples/api_server_example.py
 ```
 
-服务器会在 `http://localhost:8000` 启动。
+The server will start at `http://localhost:8000`.
 
-### 2. 从外部系统（如 clawbot）连接
+### 2. Connect from an External System (e.g., clawbot)
 
-clawbot 只需要发送 HTTP 请求即可。例如：
+clawbot only needs to send HTTP requests. For example:
 
-**生成 agent:**
-```bash
+**Spawn an agent:**
+
+```bash id="1q122n"
 curl -X POST "http://localhost:8000/api/agents/spawn" \
   -H "Content-Type: application/json" \
   -d '{
@@ -28,8 +29,9 @@ curl -X POST "http://localhost:8000/api/agents/spawn" \
   }'
 ```
 
-**控制 agent 移动:**
-```bash
+**Move an agent:**
+
+```bash id="tzmfgu"
 curl -X POST "http://localhost:8000/api/humanoid/move" \
   -H "Content-Type: application/json" \
   -d '{
@@ -39,8 +41,9 @@ curl -X POST "http://localhost:8000/api/humanoid/move" \
   }'
 ```
 
-**旋转 agent:**
-```bash
+**Rotate an agent:**
+
+```bash id="omgqbo"
 curl -X POST "http://localhost:8000/api/humanoid/rotate" \
   -H "Content-Type: application/json" \
   -d '{
@@ -50,24 +53,24 @@ curl -X POST "http://localhost:8000/api/humanoid/rotate" \
   }'
 ```
 
-## 主要 API 端点
+## Main API Endpoints
 
-- **生成 agent**: `POST /api/agents/spawn`
-- **列出 agents**: `GET /api/agents`
-- **Humanoid 移动**: `POST /api/humanoid/move`
-- **Humanoid 旋转**: `POST /api/humanoid/rotate`
-- **Humanoid 交互**: `POST /api/humanoid/interact`
-- **Dog 移动**: `POST /api/dog/move`
-- **Dog 旋转**: `POST /api/dog/rotate`
-- **获取相机图像**: `GET /api/camera/{camera_id}/image`
+* **Spawn agent**: `POST /api/agents/spawn`
+* **List agents**: `GET /api/agents`
+* **Humanoid movement**: `POST /api/humanoid/move`
+* **Humanoid rotation**: `POST /api/humanoid/rotate`
+* **Humanoid interaction**: `POST /api/humanoid/interact`
+* **Dog movement**: `POST /api/dog/move`
+* **Dog rotation**: `POST /api/dog/rotate`
+* **Get camera image**: `GET /api/camera/{camera_id}/image`
 
-## 完整 API 文档
+## Full API Documentation
 
-- **Swagger UI**: http://localhost:8000/docs (服务器启动后访问)
-- **详细文档**: 参考 `docs/API_USAGE.md`
+* **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs) (available after the server starts)
+* **Detailed documentation**: see `docs/API_USAGE.md`
 
-## 注意事项
+## Notes
 
-1. 确保 Unreal Engine 已启动并启用了 UnrealCV
-2. API 服务器默认端口是 8000
-3. 所有 API 都支持跨域访问（CORS 已启用）
+1. Make sure Unreal Engine is running and UnrealCV is enabled.
+2. The default port for the API server is 8000.
+3. All APIs support cross-origin access (CORS is enabled).
