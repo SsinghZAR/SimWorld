@@ -39,6 +39,8 @@ class A2ALLM(BaseLLM):
             return self._generate_instructions_openai(system_prompt, user_prompt, images, max_tokens, temperature, top_p, response_format)
         elif self.provider == 'openrouter':
             return self._generate_instructions_openrouter(system_prompt, user_prompt, images, max_tokens, temperature, top_p, response_format)
+        elif self.provider == 'local':
+            return self._generate_instructions_local(system_prompt, user_prompt, images, max_tokens, temperature, top_p, response_format)
         else:
             raise ValueError(f'Invalid provider: {self.provider}')
 
@@ -107,6 +109,63 @@ class A2ALLM(BaseLLM):
             action_json = self._extract_json_and_fix_escapes(action_response)
 
         return action_json, time.time() - start_time
+
+    def _generate_instructions_local(self, system_prompt, user_prompt, images=[], max_tokens=None, temperature=0.7, top_p=1.0, response_format=BaseModel):
+        """Generate instructions with a local OpenAI-compatible endpoint.
+
+        Local servers such as vLLM, Ollama, and LM Studio generally expose the
+        stable chat completions API, but not OpenAI's beta parse helper.
+        """
+
+        start_time = time.time()
+        user_content = []
+        schema_instruction = self._get_schema_instruction(response_format)
+        if schema_instruction:
+            user_prompt += schema_instruction
+        user_content.append({'type': 'text', 'text': user_prompt})
+
+        for image in images:
+            img_data = self._process_image_to_base64(image)
+            user_content.append({
+                'type': 'image_url',
+                'image_url': {'url': f'data:image/jpeg;base64,{img_data}'}
+            })
+
+        try:
+            request_kwargs = {
+                'model': self.model_name,
+                'messages': [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_content}],
+                'temperature': temperature,
+                'top_p': top_p,
+                'response_format': {'type': 'json_object'},
+            }
+            if max_tokens is not None:
+                request_kwargs['max_tokens'] = max_tokens
+
+            try:
+                response = self.client.chat.completions.create(**request_kwargs)
+            except Exception:
+                # Some OpenAI-compatible local servers do not implement JSON mode.
+                # The prompt still contains the schema, so retry with plain chat.
+                request_kwargs.pop('response_format', None)
+                response = self.client.chat.completions.create(**request_kwargs)
+
+            action_response = response.choices[0].message.content
+            action_json = self._extract_json_and_fix_escapes(action_response)
+        except Exception as e:
+            self.logger.error(f'Error in generate_instructions_local: {e}')
+            action_json = None
+
+        return action_json, time.time() - start_time
+
+    def _get_schema_instruction(self, response_format):
+        if hasattr(response_format, 'to_json_schema'):
+            return (
+                '\nPlease respond with one valid JSON object that is an instance of this schema, not the schema itself: '
+                + str(response_format.to_json_schema())
+                + '\nDo not include markdown, prose, or schema metadata keys like name, strict, schema, properties, or required.'
+            )
+        return '\nPlease respond with one valid JSON object and no markdown or prose.'
 
     def _process_image_to_base64(self, image: np.ndarray) -> str:
         """Convert numpy array image to base64 string.

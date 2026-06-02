@@ -449,3 +449,5 @@ docs/source/_static/
 
 # Output
 output*/
+runs/profiles/*
+!runs/profiles/.gitkeep
