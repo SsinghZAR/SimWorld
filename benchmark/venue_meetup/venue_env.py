@@ -13,6 +13,7 @@ import numpy as np
 from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn, sanitize_turn
 from benchmark.venue_meetup._core.comms import BroadcastRouter, CommsRouter, MessageBus, messages_from_turns
 from benchmark.venue_meetup.building_catalog import asset_path
+from benchmark.venue_meetup.navigation import Obstacle, building_obstacles, path_length, plan_path
 from benchmark.venue_meetup.scenario import Region, Scenario, Venue
 from benchmark.venue_meetup.scoring import episode_score, final_venue_from_positions, venue_decision_facts
 from simworld.agent.humanoid import Humanoid
@@ -116,6 +117,18 @@ class VenueMeetupEnv:
         agent_blueprint: str = AGENT_BLUEPRINT,
         inspect_range: float = 5000.0,
         inspect_min_mask_pixels: int = 50,
+        navigate_max_tries: int = 4,
+        navigate_mode: str = "teleport",
+        walk_clearance: float = 700.0,
+        walk_landmark_radius: float = 2000.0,
+        walk_arrive_radius: float = 700.0,
+        walk_waypoint_radius: float = 250.0,
+        walk_max_bursts: int = 24,
+        walk_block_ratio: float = 0.3,
+        walk_max_stalls: int = 2,
+        walk_max_replans: int = 5,
+        walk_discovery_radius: float = 900.0,
+        walk_discovery_ahead: float = 500.0,
         entrance_block_radius: float = 400.0,
         sun_rotation: tuple[float, float, float] = (-50.0, 180.0, 180.0),
         no_communication: bool = False,
@@ -157,6 +170,29 @@ class VenueMeetupEnv:
         self.agent_blueprint = agent_blueprint
         self.inspect_range = inspect_range
         self.inspect_min_mask_pixels = inspect_min_mask_pixels
+        self.navigate_max_tries = max(1, int(navigate_max_tries))
+        # NAVIGATE locomotion: "teleport" drops the agent at the meeting region
+        # (abstracted movement, fast social-only runs); "walk" plans an
+        # obstacle-aware route and physically walks it with real StepForward
+        # locomotion so the agent traverses the world instead of teleporting.
+        if navigate_mode not in ("teleport", "walk"):
+            raise ValueError(f"navigate_mode must be 'teleport' or 'walk', got {navigate_mode!r}")
+        self.navigate_mode = navigate_mode
+        self.walk_clearance = walk_clearance
+        self.walk_landmark_radius = walk_landmark_radius
+        self.walk_arrive_radius = walk_arrive_radius
+        self.walk_waypoint_radius = walk_waypoint_radius
+        self.walk_max_bursts = max(1, int(walk_max_bursts))
+        self.walk_block_ratio = walk_block_ratio
+        self.walk_max_stalls = max(1, int(walk_max_stalls))
+        self.walk_max_replans = max(0, int(walk_max_replans))
+        self.walk_discovery_radius = walk_discovery_radius
+        self.walk_discovery_ahead = walk_discovery_ahead
+        # Static building keep-out discs (lazily built once; scene is fixed for
+        # the env's lifetime) and the most recent planned route per agent (for
+        # debug overlays).
+        self._obstacles: list[Obstacle] | None = None
+        self._last_path: dict[str, list[tuple[float, float]]] = {}
         self.entrance_block_radius = entrance_block_radius
         self.sun_rotation = sun_rotation
         self._sun_actor: str | None = None
@@ -463,13 +499,24 @@ class VenueMeetupEnv:
             self._target_cue(landmark.landmark_id, "landmark", landmark.landmark_type, landmark.position, position, yaw)
             for landmark in self.scenario.landmarks
         ]
+        if self.navigate_mode == "walk":
+            hint = (
+                "Use NAVIGATE (choice=5, target_venue_id) to walk to a venue: it plans a route around the buildings and "
+                "physically walks you toward that venue's meeting region (this takes real travel time and can be blocked "
+                "by a building - if 'arrived' is false, NAVIGATE again to keep going). You must be in a venue's region to "
+                "INSPECT it. STEP_FORWARD/TURN_AROUND are optional fine movement; venues are solid buildings you cannot "
+                "walk through. When a venue shows 'arrived: true' you are physically at it - INSPECT it or WAIT."
+            )
+        else:
+            hint = (
+                "Prefer NAVIGATE (choice=5, target_venue_id) to travel to a venue in one action: it places you in that "
+                "venue's meeting region. You must be in a venue's region to INSPECT it. STEP_FORWARD/TURN_AROUND are "
+                "optional fine movement; venues are solid buildings you cannot walk through. When a venue shows "
+                "'arrived: true' you are physically at it - INSPECT it or WAIT."
+            )
         navigation = {
             "frame": "world bearings (north=up/+y, east=right/+x); matches the coarse map",
-            "hint": (
-                "To head to a target: apply its suggested_action (TURN_AROUND), then STEP_FORWARD repeatedly. "
-                "Venues are solid buildings: you cannot walk through them and will stop at the facade ~20-25 m from the "
-                "marked centre. When a venue shows 'arrived: true' you are physically at it - stop advancing and INSPECT or WAIT."
-            ),
+            "hint": hint,
             "targets": targets,
         }
         return self_pose, navigation
@@ -534,7 +581,7 @@ class VenueMeetupEnv:
                     "0": "WAIT",
                     "1": "STEP_FORWARD",
                     "2": "TURN_AROUND",
-                    "3": "INSPECT target_venue_id or visible target_description",
+                    "3": "INSPECT target_venue_id (must be standing in that venue's region - NAVIGATE there first)",
                     "4": "COMMUNICATE message",
                     "5": "NAVIGATE target_venue_id (walk to a venue's meeting point)",
                 },
@@ -563,22 +610,46 @@ class VenueMeetupEnv:
             result = {"result": "WAIT"}
         return {"turn": action.compact(), **result}
 
+    def _full_stop(self, state: AgentState) -> None:
+        """Halt a pawn's locomotion as fully as the API allows before a teleport.
+
+        Pedestrian pawns keep walking on their own; ``StopAgent`` alone does not
+        reliably cancel an in-flight step, so a queued forward walk overrides the
+        next ``set_location`` (the teleport is silently swallowed). Issuing
+        ``StopAction`` as well clears the current movement.
+        """
+
+        self.communicator.humanoid_stop(state.humanoid.id)
+        try:
+            self.communicator.unrealcv.humanoid_stop_current_action(state.actor_name)
+        except Exception:  # noqa: BLE001 - older builds may lack StopAction.
+            pass
+
     def _navigate(self, agent_id: str, action: VenueAgentTurn) -> dict[str, Any]:
         """High-level move to a venue's plaza-side meeting point.
 
-        Movement is deliberately abstracted (see notes.md section 2): one NAVIGATE
-        places the agent at the target venue's arrival region so locomotion stops
-        confounding the social/coordination signal we actually measure. The agent
-        is set down at the validated open standoff (the same point used for
-        convergence) and faced toward the venue facade.
+        Dispatches on ``navigate_mode``: ``teleport`` places the agent at the
+        meeting region (abstracted movement; see notes.md section 2), while
+        ``walk`` plans an obstacle-aware route and physically walks it with real
+        engine locomotion so the agent traverses the world (no teleporting).
         """
 
         venue = self._resolve_inspect_target(agent_id, action)
         if venue is None or (action.target_venue_id and venue.venue_id != action.target_venue_id and not action.target_description):
             return {"result": "NAVIGATE_FAILED", "reason": "unknown target"}
 
+        if self.navigate_mode == "walk":
+            return self._walk_navigate(agent_id, venue)
+        return self._teleport_navigate(agent_id, venue)
+
+    def _teleport_navigate(self, agent_id: str, venue: Venue) -> dict[str, Any]:
+        """Abstracted NAVIGATE: drop the agent at the venue's meeting region.
+
+        The agent is set down at the validated open standoff (the same point used
+        for convergence) and faced toward the venue facade.
+        """
+
         state = self.get_agent_state(agent_id)
-        self.communicator.humanoid_stop(state.humanoid.id)
         location = self.communicator.unrealcv.get_location(state.actor_name)
         z = float(location[2])
         cx, cy = venue.region.center
@@ -586,18 +657,252 @@ class VenueMeetupEnv:
         index = self.agent_ids.index(agent_id)
         offset = 300.0
         angle = math.radians(90.0 * index)
-        target_x = cx + math.cos(angle) * offset
-        target_y = cy + math.sin(angle) * offset
-        self.communicator.unrealcv.set_location([target_x, target_y, z], state.actor_name)
-        self._face_point(state.actor_name, state.humanoid, (venue.position[0], venue.position[1]))
-        state.humanoid.position = Vector(target_x, target_y)
-        self._tick()
+        # Round the fan offset: math.cos(radians(90)) is 6.1e-17, not 0, so for a
+        # venue centred on x=0 the target would be ~1.8e-14 - a value Python
+        # renders in scientific notation ("1.8e-14"), which UnrealCV's set_location
+        # parser cannot read, silently dropping the teleport. Rounding collapses
+        # the float dust to a clean coordinate.
+        target_x = round(cx + math.cos(angle) * offset, 2)
+        target_y = round(cy + math.sin(angle) * offset, 2)
+
+        # Place the pawn by dropping it in from above with BOTH its AI controller
+        # and its collision temporarily disabled, then restore them and let it
+        # fall to the floor. Why each piece is needed (the engine runs async /
+        # real-time, so the movement component is live every frame):
+        #  * enable_controller(0): a live AI walk re-asserts the pawn's x,y every
+        #    frame and silently overrides set_location (nondeterministic per agent
+        #    and worsens as navigations accumulate). Disabling it stops the fight.
+        #  * set_collision(False): with the controller off, a plain set_location
+        #    is swept against intervening building collision and gets pinned at the
+        #    source. Disabling the pawn's own collision lets the placement commit.
+        #  * drop from above (not the source z): teleporting to the source's z
+        #    embeds the pawn below the destination ground (per-venue terrain height
+        #    differs, ~90-150 cm here); an embedded pawn can't move afterwards.
+        # NOTE: do NOT issue StopAgent/StopAction here (the old _full_stop). Those
+        # latch a "stop and hold position" task on the still-live controller that
+        # then swallows the very next set_location - the exact bug that stranded
+        # an agent at the previous venue. Zeroing speed is enough to keep it from
+        # walking; the controller is re-enabled (restoring gravity) before the
+        # settle so the pawn actually falls to the floor instead of hovering.
+        uc = self.communicator.unrealcv
+        actor = state.actor_name
+        place_z = 400.0
+        self.communicator.humanoid_set_speed(state.humanoid.id, 0)
+
+        def _teleport(x: float, y: float) -> tuple[float, float]:
+            uc.enable_controller(actor, 0)
+            uc.set_collision(actor, False)
+            uc.set_location([x, y, place_z], actor)
+            self._tick()
+            uc.set_collision(actor, True)
+            uc.enable_controller(actor, 1)
+            # Async real-time fall; poll until the pawn rests on the ground.
+            prev_z: float | None = None
+            for _ in range(15):
+                time.sleep(0.06)
+                self._tick()
+                cur_z = float(uc.get_location(actor)[2])
+                if prev_z is not None and abs(cur_z - prev_z) < 2.0:
+                    break
+                prev_z = cur_z
+            loc = uc.get_location(actor)
+            return float(loc[0]), float(loc[1])
+
+        arrived = False
+        for _ in range(self.navigate_max_tries):
+            ax, ay = _teleport(target_x, target_y)
+            if venue.region.contains((ax, ay)):
+                arrived = True
+                break
+        final = uc.get_location(actor)
+        # Face the facade for the post-arrival ego frame, then restore walk speed.
+        self._face_point(actor, state.humanoid, (venue.position[0], venue.position[1]))
+        self.communicator.humanoid_set_speed(state.humanoid.id, self.speed)
+        state.humanoid.position = Vector(float(final[0]), float(final[1]))
         return {
-            "result": "NAVIGATE_OK",
+            "result": "NAVIGATE_OK" if arrived else "NAVIGATE_FAILED",
             "venue_id": venue.venue_id,
-            "arrived": True,
-            "location": (round(target_x, 1), round(target_y, 1)),
+            "arrived": arrived,
+            "reason": None if arrived else "could not reach the meeting point (placement blocked)",
+            "location": (round(float(final[0]), 1), round(float(final[1]), 1)),
         }
+
+    def _meeting_target(self, agent_id: str, venue: Venue) -> tuple[float, float]:
+        """Fan agents slightly around the meeting point so they do not stack."""
+
+        cx, cy = venue.region.center
+        index = self.agent_ids.index(agent_id)
+        angle = math.radians(90.0 * index)
+        return round(cx + math.cos(angle) * 300.0, 2), round(cy + math.sin(angle) * 300.0, 2)
+
+    def _walk_navigate(self, agent_id: str, venue: Venue) -> dict[str, Any]:
+        """Walk-mode NAVIGATE: plan an obstacle-aware route and physically walk it.
+
+        Locomotion is real (engine ``StepForward`` bursts, blocked by building
+        collision), so the agent traverses the plaza rather than teleporting. The
+        route is planned in Python (no engine navmesh is exposed) around building
+        keep-out discs, then walked waypoint by waypoint, halting at the venue's
+        meeting region. In-motion ego frames are captured along the way when
+        recording so the saved video shows the walk.
+
+        Because the disc footprints only approximate the real (asymmetric) building
+        collision, the walk is collision-reactive: if the pawn stalls against
+        unmodeled geometry, that spot is registered as a discovered obstacle and
+        the route is replanned around it. This adapts the abstract map to the true
+        collision the agent actually feels, so it routes around buildings instead
+        of grinding into them.
+        """
+
+        state = self.get_agent_state(agent_id)
+        actor = state.actor_name
+        uc = self.communicator.unrealcv
+        if self._obstacles is None:
+            self._obstacles = building_obstacles(
+                self.scenario,
+                clearance=self.walk_clearance,
+                landmark_radius=self.walk_landmark_radius,
+            )
+
+        target = self._meeting_target(agent_id, venue)
+        # Make sure the pawn walks at the configured speed (teleport mode may have
+        # zeroed it on a prior step).
+        self.communicator.humanoid_set_speed(state.humanoid.id, self.speed)
+
+        discovered: list[Obstacle] = []
+        moved_total = 0.0
+        planned_len = 0.0
+        last_plan: list[tuple[float, float]] = []
+        arrived = False
+        for _ in range(self.walk_max_replans + 1):
+            location = uc.get_location(actor)
+            start = (float(location[0]), float(location[1]))
+            if venue.region.contains(start):
+                arrived = True
+                break
+            waypoints = plan_path(start, target, [*self._obstacles, *discovered])
+            last_plan = [start, *waypoints]
+            planned_len = path_length(start, waypoints)
+            seg_moved, reached, blocked_point = self._walk_route(agent_id, waypoints, venue)
+            moved_total += seg_moved
+            final_xy = self._actor_xy(actor)
+            if venue.region.contains(final_xy):
+                arrived = True
+                break
+            if blocked_point is None:
+                break
+            discovered.append(Obstacle(blocked_point[0], blocked_point[1], self.walk_discovery_radius))
+
+        final_xy = self._actor_xy(actor)
+        self._last_path[agent_id] = last_plan or [final_xy]
+        arrived = arrived or venue.region.contains(final_xy)
+        # Face the facade for the post-arrival ego frame.
+        self._face_point(actor, state.humanoid, (venue.position[0], venue.position[1]))
+        self._tick()
+        state.humanoid.position = Vector(final_xy[0], final_xy[1])
+        if arrived:
+            result, reason = "NAVIGATE_OK", None
+        elif discovered:
+            result = "NAVIGATE_BLOCKED"
+            reason = "buildings blocked the route; try STEP_FORWARD/TURN_AROUND or NAVIGATE again"
+        else:
+            result = "NAVIGATE_PARTIAL"
+            reason = "walked toward the venue but did not reach the meeting region; NAVIGATE again to continue"
+        return {
+            "result": result,
+            "venue_id": venue.venue_id,
+            "arrived": arrived,
+            "mode": "walk",
+            "path_waypoints": len(last_plan) - 1 if last_plan else 0,
+            "replans": len(discovered),
+            "planned_distance_cm": round(planned_len, 1),
+            "moved_cm": round(moved_total, 1),
+            "reason": reason,
+            "location": (round(final_xy[0], 1), round(final_xy[1], 1)),
+        }
+
+    def _actor_xy(self, actor_name: str) -> tuple[float, float]:
+        """Return the actor's current 2D position."""
+
+        location = self.communicator.unrealcv.get_location(actor_name)
+        return float(location[0]), float(location[1])
+
+    def _walk_route(self, agent_id: str, waypoints: list[tuple[float, float]], venue: Venue) -> tuple[float, bool, tuple[float, float] | None]:
+        """Walk a full waypoint list; on a stall, return the discovered block point.
+
+        Returns ``(distance_moved, completed, blocked_point)``. ``blocked_point``
+        is a spot just ahead of where the pawn stalled (toward the waypoint it was
+        chasing), i.e. roughly where the unmodeled collision is, so the caller can
+        register it as an obstacle and replan.
+        """
+
+        state = self.get_agent_state(agent_id)
+        actor = state.actor_name
+        moved_total = 0.0
+        for index, waypoint in enumerate(waypoints):
+            is_last = index == len(waypoints) - 1
+            seg_moved, reached = self._walk_segment(agent_id, waypoint, last_venue=venue if is_last else None)
+            moved_total += seg_moved
+            if not reached:
+                position = self._actor_xy(actor)
+                distance = math.hypot(waypoint[0] - position[0], waypoint[1] - position[1])
+                if distance > 1.0:
+                    ux, uy = (waypoint[0] - position[0]) / distance, (waypoint[1] - position[1]) / distance
+                    blocked_point = (position[0] + ux * self.walk_discovery_ahead, position[1] + uy * self.walk_discovery_ahead)
+                else:
+                    blocked_point = position
+                return moved_total, False, blocked_point
+        return moved_total, True, None
+
+    def _walk_segment(self, agent_id: str, waypoint: tuple[float, float], *, last_venue: Venue | None) -> tuple[float, bool]:
+        """Walk toward one waypoint in engine StepForward bursts.
+
+        Returns ``(distance_moved, reached)``. ``reached`` is False if the pawn
+        stalls against collision for ``walk_max_stalls`` consecutive bursts or the
+        per-segment burst budget is exhausted. The final segment also succeeds as
+        soon as the agent enters the venue's meeting region.
+        """
+
+        state = self.get_agent_state(agent_id)
+        actor = state.actor_name
+        uc = self.communicator.unrealcv
+        arrive_radius = self.walk_arrive_radius if last_venue is not None else self.walk_waypoint_radius
+        seg_moved = 0.0
+        stalls = 0
+        for _ in range(self.walk_max_bursts):
+            location = uc.get_location(actor)
+            position = (float(location[0]), float(location[1]))
+            if last_venue is not None and last_venue.region.contains(position):
+                return seg_moved, True
+            distance = math.hypot(waypoint[0] - position[0], waypoint[1] - position[1])
+            if distance <= arrive_radius:
+                return seg_moved, True
+            self._face_point(actor, state.humanoid, waypoint)
+            self._tick()
+            duration = max(self.min_step_duration, min(self.max_step_duration, distance / max(1.0, self.speed)))
+            with uc.lock:
+                uc.client.request(f"vbp {actor} StepForward {duration} 0")
+            self._walk_wait(duration + self.move_settle_sec)
+            self.communicator.humanoid_stop(state.humanoid.id)
+            self._tick()
+            after = uc.get_location(actor)
+            moved = math.hypot(float(after[0]) - position[0], float(after[1]) - position[1])
+            seg_moved += moved
+            intended = min(distance, self.speed * duration)
+            if intended > 1.0 and moved < self.walk_block_ratio * intended:
+                stalls += 1
+                if stalls >= self.walk_max_stalls:
+                    return seg_moved, False
+            else:
+                stalls = 0
+        return seg_moved, False
+
+    def _walk_wait(self, duration: float) -> None:
+        """Wait out a walk burst, sampling in-motion ego frames when recording."""
+
+        if self.record_motion:
+            self._sample_motion(duration)
+        else:
+            time.sleep(max(0.0, duration))
 
     def _step_duration(self, action: VenueAgentTurn) -> float:
         """Clamp the requested step duration into the configured range."""
@@ -735,19 +1040,38 @@ class VenueMeetupEnv:
 
         state = self.get_agent_state(agent_id)
         kin = self.get_kinematic_state(agent_id)
-        distance = kin["position"].distance(Vector(venue.position[0], venue.position[1]))
+        agent_xy = (kin["position"].x, kin["position"].y)
+        # Physical-presence gate: you must be standing in the venue's meeting
+        # region to inspect it - the *same* region used for convergence. Building
+        # meshes are large and `venue.position` is the mesh pivot (often deep
+        # behind the facade), so the old "distance-to-pivot <= inspect_range"
+        # gate was unsatisfiable for big buildings even while standing at them,
+        # and the mask-pixel threshold was flaky. Reusing region.contains makes a
+        # NAVIGATE landing inspect-valid by construction (see notes.md section 2).
+        at_venue = venue.region.contains(agent_xy)
+        distance_to_center = kin["position"].distance(Vector(venue.region.center[0], venue.region.center[1]))
+        # Auto-face the facade and capture an object-mask frame. Visibility is now
+        # a logged diagnostic, not a hard gate: the redesign defers image-grounded
+        # traits ("P vs PV" in notes.md), and presence + auto-face already put the
+        # building in view. mask_pixels stays in the log so a future visual mode
+        # can re-promote it to a gate.
         self._face_point(state.actor_name, state.humanoid, (venue.position[0], venue.position[1]))
         self._tick()
         mask_frame = self.communicator.get_camera_observation(state.humanoid.camera_id, "object_mask", mode=self.camera_mode)
         mask_pixels = self._count_mask_pixels(mask_frame, venue.mask_color_rgb)
-        valid = distance <= self.inspect_range and mask_pixels >= self.inspect_min_mask_pixels
+        valid = at_venue
         result = {
             "result": "INSPECT_OK" if valid else "INSPECT_FAILED",
             "venue_id": venue.venue_id,
             "target_description": action.target_description,
-            "distance_internal": round(distance, 2),
+            "distance_to_center_internal": round(distance_to_center, 2),
+            "region_radius_internal": round(float(venue.region.radius), 2),
             "mask_pixels_internal": int(mask_pixels),
-            "agent_visible_result": "focused camera frame returned" if valid else "target not close/visible enough",
+            "agent_visible_result": (
+                "focused camera frame returned"
+                if valid
+                else "you are not at this venue yet - NAVIGATE to it first, then INSPECT"
+            ),
         }
         if valid:
             self.inspected_venues.add(venue.venue_id)
@@ -789,7 +1113,7 @@ class VenueMeetupEnv:
                 if query in venue.venue_id.lower() or query in venue.visual_summary.lower() or query in venue.venue_type:
                     return venue
         kin = self.get_kinematic_state(agent_id)
-        return min(self.scenario.venues, key=lambda venue: kin["position"].distance(Vector(venue.position[0], venue.position[1])))
+        return min(self.scenario.venues, key=lambda venue: kin["position"].distance(Vector(venue.region.center[0], venue.region.center[1])))
 
     def _face_point(self, actor_name: str, humanoid: Humanoid, point: tuple[float, float]) -> None:
         """Set actor yaw toward a target point."""

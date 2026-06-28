@@ -17,7 +17,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - dry-run environments may not install OpenCV.
     cv2 = None
 
-from benchmark.venue_meetup._core.policy import ScriptedVenueSmokePolicy, VenueMeetupPolicy
+from benchmark.venue_meetup._core.policy import ScriptedVenueNavPolicy, ScriptedVenueSmokePolicy, VenueMeetupPolicy
 from benchmark.venue_meetup.ablations import ablation_kwargs, minimal_ablation_names
 from benchmark.venue_meetup.coarse_map import with_rendered_coarse_map
 from benchmark.venue_meetup.generator import evaluation_matrix, generate_scenario
@@ -112,6 +112,8 @@ def make_policy(args: argparse.Namespace):
 
     if args.policy == "scripted":
         return ScriptedVenueSmokePolicy()
+    if args.policy == "nav_smoke":
+        return ScriptedVenueNavPolicy()
     return VenueMeetupPolicy(
         model_name=args.model,
         provider=args.provider,
@@ -189,6 +191,7 @@ def run_case(args: argparse.Namespace, scenario, case_dir: Path, *, ablation: st
         record_motion=args.save_video,
         motion_fps=motion_fps,
         info_partition=args.info_partition,
+        navigate_mode="walk" if args.walk else "teleport",
         **stride_kwargs,
         **ablation_kwargs(ablation),
     )
@@ -282,7 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-agents", default="2")
     parser.add_argument("--hidden-profile", action="store_true", help="Overlay a hidden-profile information structure (asymmetric per-agent needs + partition zones; see notes.md).")
     parser.add_argument("--info-partition", choices=["none", "spatial"], default="none", help="Inspection partition: 'spatial' restricts each agent to inspecting venues in its own zone.")
-    parser.add_argument("--policy", choices=["scripted", "minimax"], default="scripted")
+    parser.add_argument("--policy", choices=["scripted", "nav_smoke", "minimax"], default="scripted")
     parser.add_argument("--provider", default="minimax")
     parser.add_argument("--model", default="MiniMax-M3")
     parser.add_argument("--base-url")
@@ -293,6 +296,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vision-max-width", type=int, default=512)
     parser.add_argument("--ablation", choices=minimal_ablation_names(), default="main")
     parser.add_argument("--max-steps", type=int)
+    parser.add_argument("--walk", action="store_true", help="Walk-mode NAVIGATE: physically walk an obstacle-aware route to each venue instead of teleporting (embodied locomotion).")
     parser.add_argument("--speed", type=float, default=1000.0, help="Engine MaxWalkSpeed (cm/s) for collision-aware locomotion.")
     parser.add_argument("--resolution", type=parse_resolution, default=parse_resolution("640x360"))
     parser.add_argument("--viewmode", choices=["lit", "depth", "object_mask"], default="lit")

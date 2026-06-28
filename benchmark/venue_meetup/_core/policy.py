@@ -160,3 +160,43 @@ class ScriptedVenueSmokePolicy:
             records.append({"agent_id": agent_id, "baseline": "scripted_smoke", "parsed_turn": turn.compact()})
         self._step += 1
         return turns, records
+
+
+class ScriptedVenueNavPolicy:
+    """Deterministic walk-mode demo policy: every agent NAVIGATEs to one venue.
+
+    Used to exercise and demonstrate walk-mode locomotion (real route planning +
+    physical walking around buildings) end-to-end without any model calls: both
+    agents NAVIGATE to a shared venue each step, physically travel there, and
+    converge. After arrival the repeated NAVIGATE is a no-op (already in region),
+    then they INSPECT once to close the loop.
+    """
+
+    def __init__(self, *, target_hint: str = "red_awning"):
+        self._step = 0
+        self.target_hint = target_hint
+
+    def _target_for(self, observation: dict[str, Any]) -> str | None:
+        candidates = [venue.get("venue_id") for venue in observation.get("candidate_venues", []) if venue.get("venue_id")]
+        if not candidates:
+            return None
+        preferred = [venue_id for venue_id in candidates if self.target_hint in venue_id]
+        return (preferred or candidates)[0]
+
+    def act_all(self, observations: dict[str, dict[str, Any]], **_: Any) -> tuple[dict[str, VenueAgentTurn], list[dict[str, Any]]]:
+        """NAVIGATE (walk) to the shared venue, then INSPECT it on arrival."""
+
+        turns: dict[str, VenueAgentTurn] = {}
+        records: list[dict[str, Any]] = []
+        for agent_id, observation in observations.items():
+            target = self._target_for(observation)
+            last = observation.get("last_action") or {}
+            arrived = bool(last.get("arrived")) and last.get("venue_id") == target
+            if arrived:
+                turn = VenueAgentTurn(choice=VenueAction.INSPECT.value, target_venue_id=target, message=f"{agent_id} at {target}.")
+            else:
+                turn = VenueAgentTurn(choice=VenueAction.NAVIGATE.value, target_venue_id=target, message=f"{agent_id} walking to {target}.")
+            turns[agent_id] = turn
+            records.append({"agent_id": agent_id, "baseline": "scripted_nav", "parsed_turn": turn.compact()})
+        self._step += 1
+        return turns, records

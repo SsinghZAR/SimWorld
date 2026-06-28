@@ -18,7 +18,7 @@ What you receive each turn:
 
 Action choices (set "choice"):
 - 5=NAVIGATE target_venue_id: travel to a venue's meeting point in one action. Use this to move and to converge; it walks you there, so you do NOT need to micro-steer.
-- 3=INSPECT target_venue_id: learn a venue's structured facts. You must be in its area (can_inspect=true). Inspect before trusting any trait.
+- 3=INSPECT target_venue_id: learn a venue's structured facts. You must FIRST NAVIGATE to that venue (be physically standing in it) AND it must be in your own area (can_inspect=true). The usual pattern is NAVIGATE to a venue, then INSPECT it the next turn. Inspect before trusting any trait.
 - 4=COMMUNICATE message: send concise, factual findings to teammates.
 - 1=STEP_FORWARD / 2=TURN_AROUND: optional fine movement; rarely needed if you NAVIGATE. For TURN_AROUND set angle (deg) and clockwise.
 - 0=WAIT.
@@ -44,7 +44,7 @@ def build_agent_prompt(observation: dict[str, Any]) -> str:
     prompt_payload = strip_frame(observation)
     return (
         "Task: pool inspections with your teammates and converge on the single venue that is feasible for EVERYONE.\n"
-        "Use NAVIGATE (choice=5) with target_venue_id to travel to a venue; it walks you there. INSPECT (choice=3) a venue in your own area to learn its structured facts.\n"
+        "Use NAVIGATE (choice=5) with target_venue_id to travel to a venue; it walks you there. Then INSPECT (choice=3) that same venue (you must be standing in it, and it must be in your own area) to learn its structured facts.\n"
         "Only inspect venues with can_inspect=true; for the rest, rely on teammate reports and share what your teammates need (not only what you need).\n"
         "Do not infer traits from metadata - INSPECT to learn them, then COMMUNICATE the facts that matter to others.\n"
         "Your observation JSON follows.\n"

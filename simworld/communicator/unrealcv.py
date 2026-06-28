@@ -109,7 +109,12 @@ class UnrealCV(object):
             name: Object name.
         """
         [x, y, z] = loc
-        cmd = f'vset /object/{name}/location {x} {y} {z}'
+        # Fixed-point formatting: a near-zero float (e.g. 1.8e-14 from trig dust)
+        # would otherwise stringify in scientific notation, which the UnrealCV
+        # vset parser cannot read - it silently drops the whole command and the
+        # object never moves. ".4f" keeps sub-millimetre precision and always
+        # emits a parseable decimal.
+        cmd = f'vset /object/{name}/location {float(x):.4f} {float(y):.4f} {float(z):.4f}'
         with self.lock:
             self.client.request(cmd)
 
@@ -167,7 +172,11 @@ class UnrealCV(object):
             actor_name: Actor name.
             hasPhysics: Whether to enable physics.
         """
-        cmd = f'vset /object/{actor_name}/physics {hasPhysics}'
+        # UnrealCV's vset boolean parser only honours lowercase true/false;
+        # Python's str(bool) yields "True"/"False", which is silently ignored
+        # (the property keeps its prior value). Normalise so the flag takes.
+        flag = 'true' if hasPhysics else 'false'
+        cmd = f'vset /object/{actor_name}/physics {flag}'
         with self.lock:
             self.client.request(cmd)
 
@@ -178,7 +187,11 @@ class UnrealCV(object):
             actor_name: Actor name.
             hasCollision: Whether to enable collision.
         """
-        cmd = f'vset /object/{actor_name}/collision {hasCollision}'
+        # See set_physics: UnrealCV expects lowercase true/false, so a raw
+        # str(bool) ("True"/"False") is ignored and the collision flag never
+        # changes. Emit the lowercase token the engine actually parses.
+        flag = 'true' if hasCollision else 'false'
+        cmd = f'vset /object/{actor_name}/collision {flag}'
         with self.lock:
             self.client.request(cmd)
 
