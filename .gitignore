@@ -426,8 +426,12 @@ develop-eggs/
 lib/
 lib64/
 venv/
+.env
 .env/
 .venv/
+
+# Generated run outputs (videos, trajectories, eval logs) - not committed
+runs/
 
 
 # Sphinx

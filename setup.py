@@ -31,8 +31,10 @@ setup(
         'unrealcv',
         'opencv-python',
         'pillow',
+        'python-dotenv',
         'sentence-transformers',
         'faiss-cpu',
+        'ipython',
         'openai'
     ],
     extras_require={

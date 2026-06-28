@@ -8,6 +8,16 @@ Examples:
     .venv/bin/python experimentations/test_local_llm_actions.py \
       --base-url http://127.0.0.1:11434/v1 \
       --models phi3:mini,llama3:8b
+
+    .venv/bin/python experimentations/test_local_llm_actions.py \
+      --base-url http://127.0.0.1:11434/v1 \
+      --skip-text \
+      --vision-models qwen3-vl:8b
+
+    .venv/bin/python experimentations/test_local_llm_actions.py \
+      --provider minimax \
+      --models MiniMax-M3 \
+      --vision-models MiniMax-M3
 """
 
 from __future__ import annotations
@@ -23,6 +33,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from simworld.llm.a2a_llm import A2ALLM  # noqa: E402
 from simworld.llm.base_llm import BaseLLM  # noqa: E402
 from simworld.local_planner.action_space import LowLevelActionSpace  # noqa: E402
 
@@ -44,6 +55,19 @@ DEFAULT_SCENARIOS = [
     ("back_clear", "Observation: obstacle ahead but clear path backward. Choose next action."),
 ]
 
+DEFAULT_VISION_PROMPT = """Observation: the image shows a simple test scene with a green goal marker ahead.
+The route is clear. Choose the next SimWorld low-level action."""
+
+
+def strip_think_blocks(text: str | None) -> str | None:
+    """Remove thinking blocks emitted by reasoning models before JSON parsing."""
+
+    if text is None:
+        return None
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"^\s*<think>.*?(?=\{)", "", text, flags=re.DOTALL | re.IGNORECASE)
+    return text.strip()
+
 
 def parse_csv(value: str) -> list[str]:
     """Parse a comma-separated string list."""
@@ -54,6 +78,7 @@ def parse_csv(value: str) -> list[str]:
 def extract_json_object(text: str | None) -> tuple[dict[str, Any] | None, str | None]:
     """Extract a JSON object from a model response."""
 
+    text = strip_think_blocks(text)
     if not text:
         return None, "empty response"
 
@@ -71,6 +96,14 @@ def extract_json_object(text: str | None) -> tuple[dict[str, Any] | None, str | 
             return None, f"invalid extracted JSON: {second_error}"
 
 
+def action_to_dict(action: LowLevelActionSpace) -> dict[str, Any]:
+    """Return a pydantic action as a JSON-serializable dictionary."""
+
+    if hasattr(action, "model_dump"):
+        return action.model_dump(mode="json")
+    return action.dict()
+
+
 def validate_action(obj: dict[str, Any] | None) -> tuple[bool, dict[str, Any] | None]:
     """Validate an action using SimWorld's low-level action model."""
 
@@ -79,19 +112,70 @@ def validate_action(obj: dict[str, Any] | None) -> tuple[bool, dict[str, Any] | 
 
     parsed = LowLevelActionSpace.from_json(obj)
     valid = parsed.choice.value in {0, 1, 2}
-    return valid, parsed.model_dump(mode="json")
+    return valid, action_to_dict(parsed)
+
+
+def parse_action_response(response: Any) -> tuple[bool, dict[str, Any] | None, str | None]:
+    """Parse a model response into a validated action payload."""
+
+    if isinstance(response, dict):
+        obj, json_error = response, None
+    else:
+        obj, json_error = extract_json_object(response)
+    valid, parsed_action = validate_action(obj)
+    return valid, parsed_action, json_error
+
+
+def resize_image(image: Any, max_width: int) -> Any:
+    """Resize an RGB image while preserving aspect ratio."""
+
+    if max_width <= 0 or image.shape[1] <= max_width:
+        return image
+
+    import cv2
+
+    scale = max_width / image.shape[1]
+    size = (max_width, max(1, int(image.shape[0] * scale)))
+    return cv2.resize(image, size, interpolation=cv2.INTER_AREA)
+
+
+def build_vision_test_image(max_width: int) -> Any:
+    """Create a tiny synthetic RGB scene for VLM endpoint smoke tests."""
+
+    import cv2
+    import numpy as np
+
+    image = np.full((240, 320, 3), 42, dtype=np.uint8)
+    cv2.rectangle(image, (120, 80), (200, 220), (80, 80, 80), -1)
+    cv2.circle(image, (160, 68), 18, (0, 200, 0), -1)
+    cv2.arrowedLine(image, (160, 210), (160, 95), (220, 220, 220), 4)
+    cv2.putText(image, "GOAL", (124, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 0), 2)
+    return resize_image(image, max_width)
+
+
+def load_vision_image(path: Path, max_width: int) -> Any:
+    """Load a user-provided image as RGB for VLM endpoint smoke tests."""
+
+    import cv2
+
+    image = cv2.imread(str(path))
+    if image is None:
+        raise ValueError(f"Could not read vision image: {path}")
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return resize_image(image, max_width)
 
 
 def run_model(
     model_name: str,
     base_url: str,
+    provider: str,
     scenarios: list[tuple[str, str]],
     json_mode: bool,
     max_tokens: int,
 ) -> dict[str, Any]:
     """Run a model over constrained structured-action scenarios."""
 
-    llm = BaseLLM(model_name=model_name, url=base_url, provider="local")
+    llm = BaseLLM(model_name=model_name, url=base_url, provider=provider)
     results = []
 
     for case_name, user_prompt in scenarios:
@@ -124,6 +208,7 @@ def run_model(
     return {
         "model": model_name,
         "base_url": base_url,
+        "provider": provider,
         "json_mode": json_mode,
         "valid_actions": sum(1 for result in results if result["valid"]),
         "total": len(results),
@@ -131,26 +216,87 @@ def run_model(
     }
 
 
+def run_vision_model(
+    model_name: str,
+    base_url: str,
+    provider: str,
+    image: Any,
+    max_tokens: int,
+) -> dict[str, Any]:
+    """Run a VLM over one constrained structured-action scenario."""
+
+    llm = A2ALLM(model_name=model_name, url=base_url, provider=provider)
+    response, elapsed = llm.generate_instructions(
+        DEFAULT_SYSTEM_PROMPT,
+        DEFAULT_VISION_PROMPT,
+        images=[image],
+        max_tokens=max_tokens,
+        temperature=0,
+        top_p=1,
+        response_format=LowLevelActionSpace,
+    )
+    valid, parsed_action, json_error = parse_action_response(response)
+    return {
+        "model": model_name,
+        "base_url": base_url,
+        "provider": provider,
+        "valid": valid,
+        "elapsed_sec": round(elapsed, 3),
+        "json_error": json_error,
+        "parsed_action": parsed_action,
+        "raw": response,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default="http://127.0.0.1:11434/v1")
-    parser.add_argument("--models", default="phi3:mini", help="Comma-separated model names.")
-    parser.add_argument("--max-tokens", type=int, default=120)
+    parser.add_argument("--provider", choices=["local", "minimax"], default="local")
+    parser.add_argument("--base-url", help="OpenAI-compatible base URL. Defaults to local Ollama or MiniMax.")
+    parser.add_argument("--models", help="Comma-separated model names.")
+    parser.add_argument("--vision-models", help="Comma-separated vision model names to test.")
+    parser.add_argument("--vision-image", type=Path, help="Optional image for vision model preflight.")
+    parser.add_argument("--vision-max-width", type=int, default=640, help="Resize preflight image to this width.")
+    parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--no-json-mode", action="store_true", help="Do not request JSON mode.")
+    parser.add_argument("--skip-text", action="store_true", help="Only run vision model preflight.")
     parser.add_argument("--output", type=Path, help="Optional JSON output path.")
     args = parser.parse_args()
 
+    if args.base_url is None:
+        args.base_url = "https://api.minimax.io/v1" if args.provider == "minimax" else "http://127.0.0.1:11434/v1"
+    if args.models is None:
+        args.models = "MiniMax-M3" if args.provider == "minimax" else "phi3:mini"
+
+    vision_image = None
+    if args.vision_models:
+        vision_image = (
+            load_vision_image(args.vision_image, args.vision_max_width)
+            if args.vision_image
+            else build_vision_test_image(args.vision_max_width)
+        )
+
     report = {
-        "provider": "local",
-        "models": [
+        "provider": args.provider,
+        "text_models": [] if args.skip_text else [
             run_model(
                 model_name=model_name,
                 base_url=args.base_url,
+                provider=args.provider,
                 scenarios=DEFAULT_SCENARIOS,
                 json_mode=not args.no_json_mode,
                 max_tokens=args.max_tokens,
             )
             for model_name in parse_csv(args.models)
+        ],
+        "vision_models": [
+            run_vision_model(
+                model_name=model_name,
+                base_url=args.base_url,
+                provider=args.provider,
+                image=vision_image,
+                max_tokens=args.max_tokens,
+            )
+            for model_name in parse_csv(args.vision_models or "")
         ],
     }
 

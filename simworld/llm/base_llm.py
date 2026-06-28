@@ -6,10 +6,19 @@ import time
 from typing import Optional
 
 import openai
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dependency may be absent before install
+    load_dotenv = None
 
 from simworld.utils.logger import Logger
 
 from .retry import retry_api_call
+
+if load_dotenv is not None:
+    load_dotenv()
+
+MINIMAX_BASE_URL = 'https://api.minimax.io/v1'
 
 
 class LLMMetaclass(type):
@@ -40,7 +49,8 @@ class BaseLLM(metaclass=LLMMetaclass):
         Args:
             model_name: Name of the model to use.
             url: Base URL for the API. If None, uses OpenAI's default URL.
-            provider: Provider to use. Can be 'openai', 'openrouter', or 'local'.
+            provider: Provider to use. Can be 'openai', 'openrouter',
+                      'local', or 'minimax'.
                       Use 'local' for vLLM and other local OpenAI-compatible servers.
 
         Raises:
@@ -49,8 +59,12 @@ class BaseLLM(metaclass=LLMMetaclass):
         # Get API key from environment if not provided
         openai_api_key = os.getenv('OPENAI_API_KEY')
         openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
+        minimax_api_key = os.getenv('MINIMAX_API_KEY') or os.getenv('MINIMAX')
 
         self.provider = provider
+
+        if url == 'None':
+            url = None
 
         if provider == 'openai':
             if not openai_api_key:
@@ -63,11 +77,14 @@ class BaseLLM(metaclass=LLMMetaclass):
         elif provider == 'local':
             # For local models (vLLM, etc.), API key is not required
             self.api_key = os.getenv('OPENAI_API_KEY', 'not-needed')
+        elif provider == 'minimax':
+            if not minimax_api_key:
+                raise ValueError('No MiniMax API key provided. Please set MINIMAX_API_KEY or MINIMAX environment variable.')
+            self.api_key = minimax_api_key
+            if url is None:
+                url = MINIMAX_BASE_URL
         else:
             raise ValueError(f'Not supported provider: {provider}')
-
-        if url == 'None':
-            url = None
 
         try:
             self.client = openai.OpenAI(
@@ -75,8 +92,8 @@ class BaseLLM(metaclass=LLMMetaclass):
                 base_url=url,
             )
             # Validate the API key for cloud providers
-            # Skip validation for local providers as they may not implement models.list()
-            if provider != 'local':
+            # Skip validation for OpenAI-compatible providers that may not implement models.list().
+            if provider not in ('local', 'minimax'):
                 self.client.models.list()
         except Exception as e:
             raise ValueError(f'Failed to initialize OpenAI client: {str(e)}')
@@ -108,6 +125,7 @@ class BaseLLM(metaclass=LLMMetaclass):
         """
         start_time = time.time()
         try:
+            temperature = self._normalize_temperature(temperature)
             response = self._generate_text_with_retry(
                 system_prompt,
                 user_prompt,
@@ -120,6 +138,15 @@ class BaseLLM(metaclass=LLMMetaclass):
         except Exception:
             return None, time.time() - start_time
 
+    def _normalize_temperature(self, temperature: float | None) -> float | None:
+        """Clamp provider-specific temperature ranges."""
+
+        if temperature is None:
+            return None
+        if self.provider == 'minimax':
+            return max(0, min(2, temperature))
+        return temperature
+
     def _generate_text_with_retry(
         self,
         system_prompt: str,
@@ -129,15 +156,17 @@ class BaseLLM(metaclass=LLMMetaclass):
         top_p: float = None,
         **kwargs,
     ) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
+        request_kwargs = {
+            'model': self.model_name,
+            'messages': [
                 {'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': user_prompt},
             ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
+            'max_tokens': max_tokens,
+            'temperature': self._normalize_temperature(temperature),
+            'top_p': top_p,
             **kwargs,
-        )
+        }
+        request_kwargs = {key: value for key, value in request_kwargs.items() if value is not None}
+        response = self.client.chat.completions.create(**request_kwargs)
         return response.choices[0].message.content

@@ -23,7 +23,7 @@ class A2ALLM(BaseLLM):
 
         self.logger = Logger.get_logger('A2ALLM')
 
-    def generate_instructions(self, system_prompt, user_prompt, images=[], max_tokens=None, temperature=0.7, top_p=1.0, response_format=BaseModel):
+    def generate_instructions(self, system_prompt, user_prompt, images=[], max_tokens=None, temperature=0.7, top_p=1.0, response_format=BaseModel, reasoning=None):
         """Generate instructions for the Local Planner system.
 
         Args:
@@ -34,13 +34,36 @@ class A2ALLM(BaseLLM):
             temperature (float): The temperature for the Local Planner system.
             top_p (float): The top_p for the Local Planner system.
             response_format (BaseModel): The response format for the Local Planner system.
+            reasoning (str | None): MiniMax-M3 thinking mode ('disabled', 'adaptive',
+                or 'enabled'). ``None`` leaves the provider default (thinking on for
+                M3 chat). Ignored by providers that do not support it.
         """
         if self.provider == 'openai':
             return self._generate_instructions_openai(system_prompt, user_prompt, images, max_tokens, temperature, top_p, response_format)
         elif self.provider == 'openrouter':
             return self._generate_instructions_openrouter(system_prompt, user_prompt, images, max_tokens, temperature, top_p, response_format)
         elif self.provider == 'local':
-            return self._generate_instructions_local(system_prompt, user_prompt, images, max_tokens, temperature, top_p, response_format)
+            return self._generate_instructions_openai_compatible(
+                system_prompt,
+                user_prompt,
+                images,
+                max_tokens,
+                temperature,
+                top_p,
+                response_format,
+            )
+        elif self.provider == 'minimax':
+            return self._generate_instructions_openai_compatible(
+                system_prompt,
+                user_prompt,
+                images,
+                max_tokens,
+                temperature,
+                top_p,
+                response_format,
+                strip_think=True,
+                reasoning=reasoning,
+            )
         else:
             raise ValueError(f'Invalid provider: {self.provider}')
 
@@ -110,11 +133,25 @@ class A2ALLM(BaseLLM):
 
         return action_json, time.time() - start_time
 
-    def _generate_instructions_local(self, system_prompt, user_prompt, images=[], max_tokens=None, temperature=0.7, top_p=1.0, response_format=BaseModel):
-        """Generate instructions with a local OpenAI-compatible endpoint.
+    def _generate_instructions_openai_compatible(
+        self,
+        system_prompt,
+        user_prompt,
+        images=[],
+        max_tokens=None,
+        temperature=0.7,
+        top_p=1.0,
+        response_format=BaseModel,
+        strip_think=False,
+        reasoning=None,
+    ):
+        """Generate instructions with an OpenAI-compatible endpoint.
 
         Local servers such as vLLM, Ollama, and LM Studio generally expose the
-        stable chat completions API, but not OpenAI's beta parse helper.
+        stable chat completions API, but not OpenAI's beta parse helper. MiniMax
+        exposes the same endpoint shape and may include <think> blocks in content.
+        ``reasoning`` maps to MiniMax-M3's ``thinking`` control (sent via
+        ``extra_body``); 'disabled' skips chain-of-thought to cut output tokens.
         """
 
         start_time = time.time()
@@ -128,19 +165,29 @@ class A2ALLM(BaseLLM):
             img_data = self._process_image_to_base64(image)
             user_content.append({
                 'type': 'image_url',
-                'image_url': {'url': f'data:image/jpeg;base64,{img_data}'}
+                'image_url': {
+                    'url': f'data:image/jpeg;base64,{img_data}',
+                    'detail': 'default',
+                }
             })
+
+        extra_body = {}
+        if reasoning in ('disabled', 'adaptive', 'enabled'):
+            extra_body['thinking'] = {'type': reasoning}
 
         try:
             request_kwargs = {
                 'model': self.model_name,
                 'messages': [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_content}],
-                'temperature': temperature,
+                'temperature': self._normalize_temperature(temperature),
                 'top_p': top_p,
                 'response_format': {'type': 'json_object'},
             }
             if max_tokens is not None:
                 request_kwargs['max_tokens'] = max_tokens
+            if extra_body:
+                request_kwargs['extra_body'] = extra_body
+            request_kwargs = {key: value for key, value in request_kwargs.items() if value is not None}
 
             try:
                 response = self.client.chat.completions.create(**request_kwargs)
@@ -151,12 +198,27 @@ class A2ALLM(BaseLLM):
                 response = self.client.chat.completions.create(**request_kwargs)
 
             action_response = response.choices[0].message.content
+            if strip_think:
+                action_response = self._strip_think_blocks(action_response)
             action_json = self._extract_json_and_fix_escapes(action_response)
         except Exception as e:
-            self.logger.error(f'Error in generate_instructions_local: {e}')
+            self.logger.error(f'Error in generate_instructions_openai_compatible: {e}')
             action_json = None
 
         return action_json, time.time() - start_time
+
+    def _generate_instructions_local(self, system_prompt, user_prompt, images=[], max_tokens=None, temperature=0.7, top_p=1.0, response_format=BaseModel):
+        """Backward-compatible alias for local OpenAI-compatible endpoints."""
+
+        return self._generate_instructions_openai_compatible(
+            system_prompt,
+            user_prompt,
+            images,
+            max_tokens,
+            temperature,
+            top_p,
+            response_format,
+        )
 
     def _get_schema_instruction(self, response_format):
         if hasattr(response_format, 'to_json_schema'):
@@ -166,6 +228,15 @@ class A2ALLM(BaseLLM):
                 + '\nDo not include markdown, prose, or schema metadata keys like name, strict, schema, properties, or required.'
             )
         return '\nPlease respond with one valid JSON object and no markdown or prose.'
+
+    def _strip_think_blocks(self, text):
+        """Remove MiniMax/OpenAI-compatible thinking blocks from response text."""
+
+        if text is None:
+            return None
+        text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'^\s*<think>.*?(?=\{)', '', text, flags=re.DOTALL | re.IGNORECASE)
+        return text.strip()
 
     def _process_image_to_base64(self, image: np.ndarray) -> str:
         """Convert numpy array image to base64 string.
@@ -195,6 +266,9 @@ class A2ALLM(BaseLLM):
         return img_str
 
     def _extract_json_and_fix_escapes(self, text):
+        if text is None:
+            self.logger.error('No JSON found in the text: None')
+            return None
         # Extract content from first { to last }
         pattern = r'(\{.*\})'
         match = re.search(pattern, text, re.DOTALL)
