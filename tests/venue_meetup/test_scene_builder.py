@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from benchmark.venue_meetup.building_catalog import asset_path
+from benchmark.venue_meetup.templates.station_quarter import build_fixed_scenario as build_station_scenario
 from benchmark.venue_meetup.scenario import (
     AgentSpec,
     Landmark,
@@ -41,6 +42,10 @@ class FakeUnrealCV:
         self.orientations: dict[str, tuple[float, float, float]] = {}
         self.colors: dict[str, tuple[int, int, int]] = {}
         self.scales: dict[str, tuple[float, float, float]] = {}
+        self.collisions: dict[str, bool] = {}
+        self.movability: dict[str, bool] = {}
+        self.visual_spawns: list[dict[str, Any]] = []
+        self.locations: dict[str, Any] = {}
         self.camera_resolutions: dict[Any, tuple[int, int]] = {}
         self.modes: list[str] = []
         self.ticks = 0
@@ -68,6 +73,22 @@ class FakeUnrealCV:
     def set_scale(self, scale: tuple[float, float, float], actor_name: str) -> None:
         self.log.append(("set_scale", scale, actor_name))
         self.scales[actor_name] = scale
+
+    def spawn_bp_asset(self, model_path: str, actor_name: str) -> None:
+        self.log.append(("spawn_bp_asset", model_path, actor_name))
+        self.visual_spawns.append({"object_name": actor_name, "model_path": model_path})
+
+    def set_location(self, location: Any, actor_name: str) -> None:
+        self.log.append(("set_location", location, actor_name))
+        self.locations[actor_name] = location
+
+    def set_collision(self, actor_name: str, has_collision: bool) -> None:
+        self.log.append(("set_collision", actor_name, has_collision))
+        self.collisions[actor_name] = has_collision
+
+    def set_movable(self, actor_name: str, is_movable: bool) -> None:
+        self.log.append(("set_movable", actor_name, is_movable))
+        self.movability[actor_name] = is_movable
 
     def set_camera_resolution(self, camera_id: Any, resolution: tuple[int, int]) -> None:
         self.log.append(("set_camera_resolution", camera_id, resolution))
@@ -283,6 +304,21 @@ def test_static_scene_actor_names_path_pose_color_scale() -> None:
     assert landmark_spawn["position"] == landmark.position
     assert landmark_spawn["direction"] == (0.0, landmark.yaw_deg, 0.0)
     assert communicator.unrealcv.colors[SceneBuilder.landmark_actor_name(landmark.landmark_id)] == landmark.mask_color_rgb
+
+
+def test_layout_backed_scene_spawns_inert_city_dressing_from_authored_geometry() -> None:
+    communicator = FakeCommunicator()
+    scenario = build_station_scenario(seed=7)
+
+    _builder(communicator, scenario).spawn_static_scene()
+
+    dressing = communicator.unrealcv.visual_spawns
+    names = [item["object_name"] for item in dressing]
+    assert dressing
+    assert len(names) == len(set(names))
+    assert any(name.startswith("GEN_BP_DISTRICT_BUILDING_") for name in names)
+    assert all(communicator.unrealcv.collisions[name] is False for name in names)
+    assert all(communicator.unrealcv.movability[name] is False for name in names)
 
 
 def test_spawn_agents_builds_state_orientation_speed_and_camera(monkeypatch: pytest.MonkeyPatch) -> None:

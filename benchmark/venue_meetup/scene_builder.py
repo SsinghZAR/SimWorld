@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Mapping, Sequence
 
 from benchmark.venue_meetup.building_catalog import asset_path
+from benchmark.venue_meetup.district_scene import DistrictSceneRenderer
 from benchmark.venue_meetup.scenario import Scenario
 from simworld.agent.humanoid import Humanoid
 from simworld.communicator.communicator import Communicator
@@ -93,7 +94,9 @@ class SceneBuilder:
             pass
 
     def spawn_static_scene(self) -> None:
-        """Spawn venues, landmarks, and visible dressing props."""
+        """Spawn authored city dressing, venues, landmarks, and visible props."""
+
+        DistrictSceneRenderer(self.communicator, self.scenario).spawn()
 
         for venue in self.scenario.venues:
             actor_name = self.venue_actor_name(venue.venue_id)
