@@ -5,89 +5,39 @@ from __future__ import annotations
 import json
 import math
 import time
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
 from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn, sanitize_turn
 from benchmark.venue_meetup._core.comms import BroadcastRouter, CommsRouter, MessageBus, messages_from_turns
-from benchmark.venue_meetup.building_catalog import asset_path
-from benchmark.venue_meetup.navigation import Obstacle, building_obstacles, path_length, plan_path
-from benchmark.venue_meetup.scenario import Region, Scenario, Venue
+from benchmark.venue_meetup.actions import count_mask_pixels, compute_inspection, dispatch_single_action, resolve_inspect_target
+from benchmark.venue_meetup.navigation import (
+    Obstacle,
+    building_obstacles,
+    path_length,
+    plan_layout_route,
+    plan_path,
+    select_walk_planner,
+)
+from benchmark.venue_meetup.observations import (
+    build_observations,
+    can_inspect_zone,
+    compass_label,
+    heading_cue,
+    normalize_angle,
+    observation_summary,
+    target_cue,
+    turn_to_face,
+    vector_to_dict,
+)
+from benchmark.venue_meetup.scenario import Scenario, Venue
+from benchmark.venue_meetup.scene_builder import AGENT_BLUEPRINT, AgentState, SceneBuilder, direction_from_yaw
 from benchmark.venue_meetup.scoring import episode_score, final_venue_from_positions, venue_decision_facts
 from simworld.agent.humanoid import Humanoid
 from simworld.communicator.communicator import Communicator
 from simworld.config import Config
 from simworld.utils.vector import Vector
-
-AGENT_BLUEPRINT = "/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C"
-
-
-@dataclass
-class AgentState:
-    """Runtime mapping from benchmark agent id to SimWorld humanoid actor."""
-
-    agent_id: str
-    humanoid: Humanoid
-    actor_name: str
-
-
-def normalize_angle(angle: float) -> float:
-    """Normalize an angle to [-180, 180]."""
-
-    while angle > 180:
-        angle -= 360
-    while angle < -180:
-        angle += 360
-    return angle
-
-
-def direction_from_yaw(yaw: float) -> Vector:
-    """Build a unit Vector from a yaw angle."""
-
-    return Vector(math.cos(math.radians(yaw)), math.sin(math.radians(yaw))).normalize()
-
-
-_COMPASS_POINTS = ("east", "north-east", "north", "north-west", "west", "south-west", "south", "south-east")
-
-
-def compass_label(angle_deg: float) -> str:
-    """Map a world angle (0=east/+x, 90=north/+y, CCW) to an 8-point compass label."""
-
-    index = int((angle_deg % 360 + 22.5) // 45) % 8
-    return _COMPASS_POINTS[index]
-
-
-def turn_to_face(heading_deg: float, bearing_deg: float, *, tolerance: float = 8.0) -> dict[str, Any]:
-    """Describe the TURN_AROUND that aligns ``heading_deg`` onto ``bearing_deg``.
-
-    Uses the env's movement convention: ``clockwise=False`` increases yaw (a
-    counter-clockwise / left turn on the north-up coarse map), ``clockwise=True``
-    decreases it. Following this then STEP_FORWARD is guaranteed to approach the
-    target because forward motion is along ``(cos yaw, sin yaw)``.
-    """
-
-    delta = normalize_angle(bearing_deg - heading_deg)
-    if abs(delta) <= tolerance:
-        return {"instruction": "already facing it (within ~8 deg) - STEP_FORWARD to approach", "needs_turn": False}
-    if delta > 0:
-        return {
-            "instruction": f"turn LEFT ~{round(delta)} deg, then STEP_FORWARD",
-            "needs_turn": True,
-            "action": {"choice": 2, "clockwise": False, "angle": round(delta)},
-        }
-    return {
-        "instruction": f"turn RIGHT ~{round(-delta)} deg, then STEP_FORWARD",
-        "needs_turn": True,
-        "action": {"choice": 2, "clockwise": True, "angle": round(-delta)},
-    }
-
-
-def vector_to_dict(vector: Vector) -> dict[str, float]:
-    """Serialize a Vector."""
-
-    return {"x": float(vector.x), "y": float(vector.y)}
 
 
 class VenueMeetupEnv:
@@ -190,12 +140,15 @@ class VenueMeetupEnv:
         self.walk_discovery_ahead = walk_discovery_ahead
         # Static building keep-out discs (lazily built once; scene is fixed for
         # the env's lifetime) and the most recent planned route per agent (for
-        # debug overlays).
+        # debug overlays). Current layout-graph node per agent is tracked from
+        # spawn and advanced only after successful graph/teleport navigation.
         self._obstacles: list[Obstacle] | None = None
         self._last_path: dict[str, list[tuple[float, float]]] = {}
+        self._agent_walk_nodes: dict[str, str | None] = {
+            agent.agent_id: agent.walk_node_id for agent in scenario.agents
+        }
         self.entrance_block_radius = entrance_block_radius
         self.sun_rotation = sun_rotation
-        self._sun_actor: str | None = None
         self.no_communication = no_communication
         self.no_coarse_map = no_coarse_map
         self.full_shared_information = full_shared_information
@@ -221,6 +174,17 @@ class VenueMeetupEnv:
         # embodied, egocentric knowledge each agent has gathered first-hand and is
         # the basis for the social process metrics (see notes.md section 7).
         self.revealed_facts: dict[str, dict[str, dict[str, Any]]] = {agent_id: {} for agent_id in self.agent_ids}
+        self.scene_builder = SceneBuilder(
+            communicator,
+            scenario,
+            config=self.config,
+            resolution=resolution,
+            speed=speed,
+            agent_blueprint=agent_blueprint,
+            tick_count=tick_count,
+            spawn_settle_sec=spawn_settle_sec,
+            sun_rotation=sun_rotation,
+        )
 
     def reset(self) -> dict[str, dict[str, Any]]:
         """Reset the episode and return initial observations."""
@@ -231,13 +195,10 @@ class VenueMeetupEnv:
         self.inspected_venues = set()
         self.revealed_facts = {agent_id: {} for agent_id in self.agent_ids}
         self.bus.reset(self.agent_ids)
-        # Async (running) mode so the engine character movement actually walks and
-        # is blocked by building collision. Sync/pause only advances on manual
-        # ticks, under which the packaged StepForward does not progress.
-        self.communicator.unrealcv.set_mode("async")
-        self.communicator.clear_env(keep_roads=True)
-        Humanoid._id_counter = 0
-        Humanoid._camera_id_counter = 1
+        self._agent_walk_nodes = {
+            agent.agent_id: agent.walk_node_id for agent in self.scenario.agents
+        }
+        self.scene_builder.prepare_environment()
         self._setup_lighting()
         self._spawn_static_scene()
         self._spawn_agents()
@@ -248,36 +209,12 @@ class VenueMeetupEnv:
     def _settle(self) -> None:
         """Let freshly spawned agents drop to the ground and come to rest."""
 
-        for agent_id in self.agent_ids:
-            try:
-                self.communicator.humanoid_stop(self.get_agent_state(agent_id).humanoid.id)
-            except Exception:  # noqa: BLE001 - settling is best-effort.
-                pass
-        time.sleep(self.spawn_settle_sec)
-        self._tick()
+        self.scene_builder.settle(self.agent_states, self.agent_ids)
 
     def _setup_lighting(self) -> None:
-        """Force a deterministic, well-lit sun on the otherwise dim empty map.
+        """Force a deterministic, well-lit sun on the otherwise dim empty map."""
 
-        The packaged empty map ships with a low/odd sun angle and no usable
-        weather-manager blueprint, so the only reliable lever is rotating the
-        scene's existing directional light. Re-applying it every reset also
-        undoes any orientation left behind by earlier episodes.
-        """
-
-        if self._sun_actor is None:
-            try:
-                objects = list(self.communicator.unrealcv.get_objects())
-            except Exception:  # noqa: BLE001 - lighting is best-effort.
-                objects = []
-            self._sun_actor = next((name for name in objects if name.lower().startswith("directionallight")), "")
-        if not self._sun_actor:
-            return
-        try:
-            self.communicator.unrealcv.set_orientation(self.sun_rotation, self._sun_actor)
-        except Exception:  # noqa: BLE001 - never fail an episode over lighting.
-            pass
-
+        self.scene_builder.setup_lighting()
     def step(
         self,
         turns: dict[str, VenueAgentTurn | dict[str, Any]],
@@ -364,45 +301,15 @@ class VenueMeetupEnv:
     def _spawn_static_scene(self) -> None:
         """Spawn venues, landmarks, and visible dressing props."""
 
-        for venue in self.scenario.venues:
-            actor_name = self.venue_actor_name(venue.venue_id)
-            self.communicator.spawn_object(actor_name, venue.asset_path, venue.position, (0.0, venue.yaw_deg, 0.0))
-            self.communicator.unrealcv.set_color(actor_name, venue.mask_color_rgb)
-            for prop in venue.props:
-                prop_name = self.prop_actor_name(prop.prop_id)
-                self.communicator.spawn_object(prop_name, asset_path(prop.asset_key), prop.position, (0.0, prop.yaw_deg, 0.0))
-                self.communicator.unrealcv.set_scale(prop.scale, prop_name)
-                if prop.color_rgb is not None:
-                    self.communicator.unrealcv.set_color(prop_name, prop.color_rgb)
-
-        for landmark in self.scenario.landmarks:
-            actor_name = self.landmark_actor_name(landmark.landmark_id)
-            self.communicator.spawn_object(actor_name, landmark.asset_path, landmark.position, (0.0, landmark.yaw_deg, 0.0))
-            self.communicator.unrealcv.set_color(actor_name, landmark.mask_color_rgb)
+        self.scene_builder.spawn_static_scene()
 
     def _spawn_agents(self) -> None:
         """Spawn all humanoid agents."""
 
-        self.agent_states = {}
-        for agent in self.scenario.agents:
-            direction = direction_from_yaw(agent.yaw_deg)
-            humanoid = Humanoid(position=Vector(agent.position[0], agent.position[1]), direction=direction, communicator=self.communicator, config=self.config)
-            self.communicator.spawn_agent(
-                humanoid,
-                name=None,
-                position=agent.position,
-                model_path=self.agent_blueprint,
-                type="humanoid",
-            )
-            actor_name = self.communicator.get_humanoid_name(humanoid.id)
-            self.communicator.unrealcv.set_orientation((0.0, agent.yaw_deg, 0.0), actor_name)
-            self.communicator.humanoid_set_speed(humanoid.id, self.speed)
-            self.communicator.unrealcv.set_camera_resolution(humanoid.camera_id, self.resolution)
-            self.agent_states[agent.agent_id] = AgentState(agent_id=agent.agent_id, humanoid=humanoid, actor_name=actor_name)
+        self.agent_states = self.scene_builder.spawn_agents()
 
     def _tick(self) -> None:
-        for _ in range(max(1, self.tick_count)):
-            self.communicator.unrealcv.tick()
+        self.scene_builder.tick()
 
     def get_agent_state(self, agent_id: str) -> AgentState:
         """Return runtime state for an agent id."""
@@ -453,73 +360,19 @@ class VenueMeetupEnv:
             return frame
         return self._frame_lut[frame]
 
-    def _target_cue(self, ident: str, kind: str, type_: str, target_pos: Any, agent_pos: Vector, yaw: float, region: Region | None = None) -> dict[str, Any]:
+    def _target_cue(self, ident: str, kind: str, type_: str, target_pos: Any, agent_pos: Vector, yaw: float, region: Any | None = None) -> dict[str, Any]:
         """Build a world-frame bearing/turn/distance cue toward one target."""
 
-        dx = float(target_pos[0]) - agent_pos.x
-        dy = float(target_pos[1]) - agent_pos.y
-        bearing = math.degrees(math.atan2(dy, dx))
-        turn = turn_to_face(yaw, bearing)
-        arrived = bool(region is not None and region.contains((agent_pos.x, agent_pos.y)))
-        cue = {
-            "id": ident,
-            "kind": kind,
-            "type": type_,
-            "direction": compass_label(bearing),
-            "bearing_deg": round(bearing),
-            "distance_m": round(math.hypot(dx, dy) / 100.0),
-            "guidance": "You are here (at this venue). Stop advancing; INSPECT or WAIT." if arrived else turn["instruction"],
-        }
-        if arrived:
-            cue["arrived"] = True
-        elif turn.get("action"):
-            cue["suggested_action"] = turn["action"]
-        return cue
+        return target_cue(ident, kind, type_, target_pos, agent_pos, yaw, region)
 
     def _heading_cue(self, agent_id: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
         """Compute proprioceptive heading and (map-gated) navigation cues."""
 
         kin = self.get_kinematic_state(agent_id)
-        position, yaw = kin["position"], kin["yaw_deg"]
-        self_pose = {
-            "facing": compass_label(yaw),
-            "heading_deg": round(yaw),
-            "note": (
-                "Your camera is third-person (you see your own back). Use this compass and the coarse map "
-                "(north=up/+y, east=right/+x) for left/right decisions, not the image."
-            ),
-        }
-        if self.no_coarse_map:
-            return self_pose, None
-        targets = [
-            self._target_cue(venue.venue_id, "venue", venue.venue_type, venue.position, position, yaw, region=venue.region)
-            for venue in self.scenario.venues
-        ]
-        targets += [
-            self._target_cue(landmark.landmark_id, "landmark", landmark.landmark_type, landmark.position, position, yaw)
-            for landmark in self.scenario.landmarks
-        ]
-        if self.navigate_mode == "walk":
-            hint = (
-                "Use NAVIGATE (choice=5, target_venue_id) to walk to a venue: it plans a route around the buildings and "
-                "physically walks you toward that venue's meeting region (this takes real travel time and can be blocked "
-                "by a building - if 'arrived' is false, NAVIGATE again to keep going). You must be in a venue's region to "
-                "INSPECT it. STEP_FORWARD/TURN_AROUND are optional fine movement; venues are solid buildings you cannot "
-                "walk through. When a venue shows 'arrived: true' you are physically at it - INSPECT it or WAIT."
-            )
-        else:
-            hint = (
-                "Prefer NAVIGATE (choice=5, target_venue_id) to travel to a venue in one action: it places you in that "
-                "venue's meeting region. You must be in a venue's region to INSPECT it. STEP_FORWARD/TURN_AROUND are "
-                "optional fine movement; venues are solid buildings you cannot walk through. When a venue shows "
-                "'arrived: true' you are physically at it - INSPECT it or WAIT."
-            )
-        navigation = {
-            "frame": "world bearings (north=up/+y, east=right/+x); matches the coarse map",
-            "hint": hint,
-            "targets": targets,
-        }
-        return self_pose, navigation
+        return heading_cue(
+            kin["position"], kin["yaw_deg"], self.scenario,
+            no_coarse_map=self.no_coarse_map, navigate_mode=self.navigate_mode,
+        )
 
     def _build_observations(self, inboxes: dict[str, list[Any]] | None = None) -> dict[str, dict[str, Any]]:
         """Build per-agent observations while hiding evaluator-only state."""
@@ -527,88 +380,48 @@ class VenueMeetupEnv:
         frames = self._capture_frames("lit")
         frames = {agent_id: self._enhance_frame(frame) for agent_id, frame in frames.items()}
         inboxes = inboxes or {agent_id: list(self.bus.inboxes[agent_id]) for agent_id in self.agent_ids}
-        shared_constraint = "; ".join(agent.private_constraint for agent in self.scenario.agents)
-        observations: dict[str, dict[str, Any]] = {}
-        for agent in self.scenario.agents:
-            private_constraint = shared_constraint if self.shared_constraints else agent.private_constraint
-            if self.full_shared_information:
-                venue_summaries = [venue.compact() if hasattr(venue, "compact") else venue.__dict__ for venue in self.scenario.venues]
-                known_venue_facts: dict[str, Any] = {venue.venue_id: self._venue_facts(venue) for venue in self.scenario.venues}
-            else:
-                venue_summaries = []
-                for venue in self.scenario.venues:
-                    summary = {
-                        "venue_id": venue.venue_id,
-                        "venue_type": venue.venue_type,
-                        "slot_id": venue.slot_id,
-                        "visual_summary": venue.visual_summary,
-                    }
-                    if self.info_partition == "spatial":
-                        summary["zone_id"] = venue.zone_id
-                        summary["can_inspect"] = self._can_inspect_zone(agent.agent_id, venue)
-                    venue_summaries.append(summary)
-                known_venue_facts = dict(self.revealed_facts.get(agent.agent_id, {}))
-
-            self_pose, navigation = self._heading_cue(agent.agent_id)
-            observations[agent.agent_id] = {
-                "agent_id": agent.agent_id,
-                "step": self.step_index,
-                "max_steps": self.scenario.max_steps,
-                "role": "visitor",
-                "objective": "Find the best feasible venue for everyone and physically meet there.",
-                "private_constraint": private_constraint,
-                "zone_id": self._agent_zone.get(agent.agent_id),
-                "info_partition": self.info_partition,
-                "coarse_map_text": None if self.no_coarse_map else self.scenario.coarse_map_text,
-                "coarse_map_path": None if self.no_coarse_map else self.scenario.coarse_map_path,
-                "self_pose": self_pose,
-                "candidate_venues": venue_summaries,
-                "known_venue_facts": known_venue_facts,
-                "landmarks": [
-                    {
-                        "landmark_id": landmark.landmark_id,
-                        "type": landmark.landmark_type,
-                        "slot_id": landmark.slot_id,
-                        "visual_summary": landmark.visual_summary,
-                    }
-                    for landmark in self.scenario.landmarks
-                ],
-                "group_chat": [message.compact() for message in inboxes.get(agent.agent_id, [])],
-                "roster": self.agent_ids,
-                "last_action": self.last_actions.get(agent.agent_id),
-                "last_inspect_result": self.last_inspections.get(agent.agent_id),
-                "valid_actions": {
-                    "0": "WAIT",
-                    "1": "STEP_FORWARD",
-                    "2": "TURN_AROUND",
-                    "3": "INSPECT target_venue_id (must be standing in that venue's region - NAVIGATE there first)",
-                    "4": "COMMUNICATE message",
-                    "5": "NAVIGATE target_venue_id (walk to a venue's meeting point)",
-                },
-                "ego_view": frames[agent.agent_id],
-            }
-            if navigation is not None:
-                observations[agent.agent_id]["navigation"] = navigation
-        return observations
+        kinematic_states: dict[str, tuple[Vector, float]] = {}
+        for agent_id in self.agent_ids:
+            kin = self.get_kinematic_state(agent_id)
+            kinematic_states[agent_id] = (kin["position"], kin["yaw_deg"])
+        return build_observations(
+            scenario=self.scenario,
+            agent_ids=self.agent_ids,
+            step_index=self.step_index,
+            frames=frames,
+            kinematic_states=kinematic_states,
+            inboxes=inboxes,
+            last_actions=self.last_actions,
+            last_inspections=self.last_inspections,
+            revealed_facts=self.revealed_facts,
+            agent_zone=self._agent_zone,
+            no_coarse_map=self.no_coarse_map,
+            full_shared_information=self.full_shared_information,
+            shared_constraints=self.shared_constraints,
+            info_partition=self.info_partition,
+            navigate_mode=self.navigate_mode,
+            venue_facts_fn=self._venue_facts,
+        )
 
     def execute_action(self, agent_id: str, action: VenueAgentTurn) -> dict[str, Any]:
         """Execute one benchmark action."""
 
-        state = self.get_agent_state(agent_id)
-        if action.choice == VenueAction.STEP_FORWARD.value:
-            return self._engine_step_blocking(agent_id, action)
-        if action.choice == VenueAction.TURN_AROUND.value:
-            result = self._kinematic_rotate(state.actor_name, state.humanoid, float(action.angle or 45), "right" if action.clockwise else "left")
-        elif action.choice == VenueAction.INSPECT.value:
-            result = self._inspect(agent_id, action)
-        elif action.choice == VenueAction.NAVIGATE.value:
-            result = self._navigate(agent_id, action)
-        elif action.choice == VenueAction.COMMUNICATE.value:
-            result = {"result": "COMMUNICATE", "message": action.message}
-        else:
-            self.communicator.humanoid_stop(state.humanoid.id)
-            result = {"result": "WAIT"}
-        return {"turn": action.compact(), **result}
+        def _rotate(aid: str, angle: float, direction: str) -> dict[str, Any]:
+            st = self.get_agent_state(aid)
+            return self._kinematic_rotate(st.actor_name, st.humanoid, angle, direction)
+
+        def _stop(aid: str) -> None:
+            self.communicator.humanoid_stop(self.get_agent_state(aid).humanoid.id)
+
+        return dispatch_single_action(
+            agent_id,
+            action,
+            step_forward_fn=self._engine_step_blocking,
+            rotate_fn=_rotate,
+            inspect_fn=self._inspect,
+            navigate_fn=self._navigate,
+            stop_fn=_stop,
+        )
 
     def _full_stop(self, state: AgentState) -> None:
         """Halt a pawn's locomotion as fully as the API allows before a teleport.
@@ -719,6 +532,8 @@ class VenueMeetupEnv:
         self._face_point(actor, state.humanoid, (venue.position[0], venue.position[1]))
         self.communicator.humanoid_set_speed(state.humanoid.id, self.speed)
         state.humanoid.position = Vector(float(final[0]), float(final[1]))
+        if arrived:
+            self._set_agent_walk_node_for_venue(agent_id, venue)
         return {
             "result": "NAVIGATE_OK" if arrived else "NAVIGATE_FAILED",
             "venue_id": venue.venue_id,
@@ -735,23 +550,150 @@ class VenueMeetupEnv:
         angle = math.radians(90.0 * index)
         return round(cx + math.cos(angle) * 300.0, 2), round(cy + math.sin(angle) * 300.0, 2)
 
+    def _set_agent_walk_node_for_venue(self, agent_id: str, venue: Venue) -> None:
+        """Advance the agent's tracked layout-graph node to the venue frontage."""
+
+        end_node_id = self._frontage_node_id_for_venue(venue)
+        if end_node_id is not None:
+            self._agent_walk_nodes[agent_id] = end_node_id
+
+    def _frontage_node_id_for_venue(self, venue: Venue) -> str | None:
+        """Return the layout approach node id for ``venue.slot_id``, if authored."""
+
+        layout = self.scenario.layout
+        if layout is None:
+            return None
+        matches = [frontage for frontage in layout.frontages if frontage.venue_slot_id == venue.slot_id]
+        if len(matches) != 1:
+            return None
+        frontage = matches[0]
+        if frontage.approach_node_id is not None:
+            if any(node.node_id == frontage.approach_node_id for node in layout.walk_nodes):
+                return frontage.approach_node_id
+        if any(node.node_id == frontage.frontage_id for node in layout.walk_nodes):
+            return frontage.frontage_id
+        return None
+
     def _walk_navigate(self, agent_id: str, venue: Venue) -> dict[str, Any]:
-        """Walk-mode NAVIGATE: plan an obstacle-aware route and physically walk it.
+        """Walk-mode NAVIGATE: plan a route and physically walk it.
 
-        Locomotion is real (engine ``StepForward`` bursts, blocked by building
-        collision), so the agent traverses the plaza rather than teleporting. The
-        route is planned in Python (no engine navmesh is exposed) around building
-        keep-out discs, then walked waypoint by waypoint, halting at the venue's
-        meeting region. In-motion ego frames are captured along the way when
-        recording so the saved video shows the walk.
-
-        Because the disc footprints only approximate the real (asymmetric) building
-        collision, the walk is collision-reactive: if the pawn stalls against
-        unmodeled geometry, that spot is registered as a discovered obstacle and
-        the route is replanned around it. This adapts the abstract map to the true
-        collision the agent actually feels, so it routes around buildings instead
-        of grinding into them.
+        When the scenario has a layout graph and the agent has a tracked walk
+        node, routes follow sidewalks/crossings/bridges from that graph, then a
+        final in-region meeting point. Otherwise the legacy free-space obstacle
+        A* planner is used. Locomotion is real (engine ``StepForward`` bursts).
         """
+
+        walk_node_id = self._agent_walk_nodes.get(agent_id)
+        planner = select_walk_planner(layout=self.scenario.layout, walk_node_id=walk_node_id)
+        if planner == "layout_graph":
+            assert walk_node_id is not None
+            return self._walk_navigate_layout(agent_id, venue, walk_node_id)
+        return self._walk_navigate_obstacle(agent_id, venue)
+
+    def _walk_navigate_layout(self, agent_id: str, venue: Venue, walk_node_id: str) -> dict[str, Any]:
+        """Walk along an authored layout-graph route to the venue frontage."""
+
+        state = self.get_agent_state(agent_id)
+        actor = state.actor_name
+        layout = self.scenario.layout
+        assert layout is not None
+        target = self._meeting_target(agent_id, venue)
+        self.communicator.humanoid_set_speed(state.humanoid.id, self.speed)
+
+        try:
+            route = plan_layout_route(layout, walk_node_id, venue_slot_id=venue.slot_id)
+        except ValueError as exc:
+            final_xy = self._actor_xy(actor)
+            return {
+                "result": "NAVIGATE_FAILED",
+                "venue_id": venue.venue_id,
+                "arrived": False,
+                "mode": "walk",
+                "route_planner": "layout_graph",
+                "layout_node_path": None,
+                "graph_distance_cm": None,
+                "used_bridge": False,
+                "path_waypoints": 0,
+                "replans": 0,
+                "planned_distance_cm": 0.0,
+                "moved_cm": 0.0,
+                "reason": str(exc),
+                "location": (round(final_xy[0], 1), round(final_xy[1], 1)),
+            }
+
+        if route is None:
+            final_xy = self._actor_xy(actor)
+            return {
+                "result": "NAVIGATE_FAILED",
+                "venue_id": venue.venue_id,
+                "arrived": False,
+                "mode": "walk",
+                "route_planner": "layout_graph",
+                "layout_node_path": None,
+                "graph_distance_cm": None,
+                "used_bridge": False,
+                "path_waypoints": 0,
+                "replans": 0,
+                "planned_distance_cm": 0.0,
+                "moved_cm": 0.0,
+                "reason": "venue frontage unreachable on the layout walk graph",
+                "location": (round(final_xy[0], 1), round(final_xy[1], 1)),
+            }
+
+        location = self.communicator.unrealcv.get_location(actor)
+        start = (float(location[0]), float(location[1]))
+        if venue.region.contains(start):
+            arrived = True
+            moved_total = 0.0
+            last_plan = [start]
+            blocked = False
+        else:
+            waypoints = [*route.waypoints, *route.access_path, target]
+            last_plan = [start, *waypoints]
+            moved_total, _reached, blocked_point = self._walk_route(agent_id, waypoints, venue)
+            final_xy = self._actor_xy(actor)
+            arrived = venue.region.contains(final_xy)
+            blocked = blocked_point is not None and not arrived
+
+        final_xy = self._actor_xy(actor)
+        self._last_path[agent_id] = last_plan or [final_xy]
+        arrived = arrived or venue.region.contains(final_xy)
+        self._face_point(actor, state.humanoid, (venue.position[0], venue.position[1]))
+        self._tick()
+        state.humanoid.position = Vector(final_xy[0], final_xy[1])
+        if arrived:
+            self._agent_walk_nodes[agent_id] = route.end_node_id
+            result, reason = "NAVIGATE_OK", None
+        elif blocked:
+            result = "NAVIGATE_BLOCKED"
+            reason = "buildings blocked the route; try STEP_FORWARD/TURN_AROUND or NAVIGATE again"
+        else:
+            result = "NAVIGATE_PARTIAL"
+            reason = "walked toward the venue but did not reach the meeting region; NAVIGATE again to continue"
+        access_end = route.access_path[-1] if route.access_path else (
+            route.waypoints[-1] if route.waypoints else start
+        )
+        planned_len = route.total_distance_cm + path_length(access_end, [target])
+        return {
+            "result": result,
+            "venue_id": venue.venue_id,
+            "arrived": arrived,
+            "mode": "walk",
+            "route_planner": "layout_graph",
+            "layout_node_path": list(route.node_ids),
+            "graph_distance_cm": round(route.graph_distance_cm, 1),
+            "access_distance_cm": round(route.access_distance_cm, 1),
+            "used_bridge": route.used_bridge,
+            "path_waypoints": len(last_plan) - 1 if last_plan else 0,
+            "replans": 0,
+            "planned_distance_cm": round(planned_len, 1),
+            "moved_cm": round(moved_total, 1),
+            "reason": reason,
+            "location": (round(final_xy[0], 1), round(final_xy[1], 1)),
+        }
+
+    def _walk_navigate_obstacle(self, agent_id: str, venue: Venue) -> dict[str, Any]:
+        """Legacy free-space obstacle A* walk (plaza templates without a layout graph)."""
 
         state = self.get_agent_state(agent_id)
         actor = state.actor_name
@@ -812,6 +754,10 @@ class VenueMeetupEnv:
             "venue_id": venue.venue_id,
             "arrived": arrived,
             "mode": "walk",
+            "route_planner": "obstacle_astar",
+            "layout_node_path": None,
+            "graph_distance_cm": None,
+            "used_bridge": False,
             "path_waypoints": len(last_plan) - 1 if last_plan else 0,
             "replans": len(discovered),
             "planned_distance_cm": round(planned_len, 1),
@@ -865,7 +811,15 @@ class VenueMeetupEnv:
         state = self.get_agent_state(agent_id)
         actor = state.actor_name
         uc = self.communicator.unrealcv
-        arrive_radius = self.walk_arrive_radius if last_venue is not None else self.walk_waypoint_radius
+        if last_venue is not None:
+            arrive_radius = self.walk_arrive_radius
+        else:
+            # A controller cannot reliably stop inside a radius smaller than
+            # half of its shortest physical stride.  Without this bound,
+            # high-speed preflight oscillates across an intermediate polyline
+            # point and is misreported as a building collision.
+            min_stride_cm = self.speed * self.min_step_duration
+            arrive_radius = max(self.walk_waypoint_radius, min_stride_cm * 0.5)
         seg_moved = 0.0
         stalls = 0
         for _ in range(self.walk_max_bursts):
@@ -1024,76 +978,39 @@ class VenueMeetupEnv:
 
         venue = self._resolve_inspect_target(agent_id, action)
         if venue is None:
-            result = {"result": "INSPECT_FAILED", "reason": "unknown target"}
-            self.last_inspections[agent_id] = result
-            return result
-
-        if not self._can_inspect_zone(agent_id, venue):
-            result = {
-                "result": "INSPECT_FAILED",
-                "venue_id": venue.venue_id,
-                "reason": "outside your area",
-                "agent_visible_result": "this venue is in your teammate's area; ask them to inspect it and report back",
-            }
+            result: dict[str, Any] = {"result": "INSPECT_FAILED", "reason": "unknown target"}
             self.last_inspections[agent_id] = result
             return result
 
         state = self.get_agent_state(agent_id)
         kin = self.get_kinematic_state(agent_id)
         agent_xy = (kin["position"].x, kin["position"].y)
-        # Physical-presence gate: you must be standing in the venue's meeting
-        # region to inspect it - the *same* region used for convergence. Building
-        # meshes are large and `venue.position` is the mesh pivot (often deep
-        # behind the facade), so the old "distance-to-pivot <= inspect_range"
-        # gate was unsatisfiable for big buildings even while standing at them,
-        # and the mask-pixel threshold was flaky. Reusing region.contains makes a
-        # NAVIGATE landing inspect-valid by construction (see notes.md section 2).
-        at_venue = venue.region.contains(agent_xy)
-        distance_to_center = kin["position"].distance(Vector(venue.region.center[0], venue.region.center[1]))
-        # Auto-face the facade and capture an object-mask frame. Visibility is now
-        # a logged diagnostic, not a hard gate: the redesign defers image-grounded
-        # traits ("P vs PV" in notes.md), and presence + auto-face already put the
-        # building in view. mask_pixels stays in the log so a future visual mode
-        # can re-promote it to a gate.
+        # Auto-face the facade and capture an object-mask frame for diagnostics.
         self._face_point(state.actor_name, state.humanoid, (venue.position[0], venue.position[1]))
         self._tick()
         mask_frame = self.communicator.get_camera_observation(state.humanoid.camera_id, "object_mask", mode=self.camera_mode)
         mask_pixels = self._count_mask_pixels(mask_frame, venue.mask_color_rgb)
-        valid = at_venue
-        result = {
-            "result": "INSPECT_OK" if valid else "INSPECT_FAILED",
-            "venue_id": venue.venue_id,
-            "target_description": action.target_description,
-            "distance_to_center_internal": round(distance_to_center, 2),
-            "region_radius_internal": round(float(venue.region.radius), 2),
-            "mask_pixels_internal": int(mask_pixels),
-            "agent_visible_result": (
-                "focused camera frame returned"
-                if valid
-                else "you are not at this venue yet - NAVIGATE to it first, then INSPECT"
-            ),
-        }
+
+        result, valid = compute_inspection(
+            venue,
+            agent_id,
+            action,
+            agent_xy=agent_xy,
+            mask_pixels=mask_pixels,
+            info_partition=self.info_partition,
+            agent_zone=self._agent_zone,
+            venue_facts_fn=self._venue_facts,
+        )
         if valid:
             self.inspected_venues.add(venue.venue_id)
-            # Structured reveal: hand the agent the decision-relevant traits as
-            # text (the social/pure-perception decision in notes.md), and record
-            # them as this agent's first-hand knowledge for the process metrics.
-            facts = self._venue_facts(venue)
-            result["facts"] = facts
-            self.revealed_facts.setdefault(agent_id, {})[venue.venue_id] = facts
+            self.revealed_facts.setdefault(agent_id, {})[venue.venue_id] = result["facts"]
         self.last_inspections[agent_id] = result
         return result
 
     def _can_inspect_zone(self, agent_id: str, venue: Venue) -> bool:
         """Return whether the partition mode lets this agent inspect this venue."""
 
-        if self.info_partition != "spatial":
-            return True
-        agent_zone = self._agent_zone.get(agent_id)
-        # Unzoned venues (or unzoned agents) stay public even under partitioning.
-        if venue.zone_id is None or agent_zone is None:
-            return True
-        return venue.zone_id == agent_zone
+        return can_inspect_zone(agent_id, venue, info_partition=self.info_partition, agent_zone=self._agent_zone)
 
     def _venue_facts(self, venue: Venue) -> dict[str, Any]:
         """Decision-relevant ground-truth traits, surfaced on a successful inspect."""
@@ -1103,17 +1020,13 @@ class VenueMeetupEnv:
     def _resolve_inspect_target(self, agent_id: str, action: VenueAgentTurn) -> Venue | None:
         """Resolve inspect target by id or description."""
 
-        if action.target_venue_id:
-            for venue in self.scenario.venues:
-                if venue.venue_id == action.target_venue_id:
-                    return venue
-        if action.target_description:
-            query = action.target_description.lower()
-            for venue in self.scenario.venues:
-                if query in venue.venue_id.lower() or query in venue.visual_summary.lower() or query in venue.venue_type:
-                    return venue
         kin = self.get_kinematic_state(agent_id)
-        return min(self.scenario.venues, key=lambda venue: kin["position"].distance(Vector(venue.region.center[0], venue.region.center[1])))
+        return resolve_inspect_target(
+            self.scenario.venues,
+            (kin["position"].x, kin["position"].y),
+            target_venue_id=action.target_venue_id,
+            target_description=action.target_description,
+        )
 
     def _face_point(self, actor_name: str, humanoid: Humanoid, point: tuple[float, float]) -> None:
         """Set actor yaw toward a target point."""
@@ -1129,14 +1042,7 @@ class VenueMeetupEnv:
     def _count_mask_pixels(self, frame: np.ndarray, color_rgb: tuple[int, int, int]) -> int:
         """Count approximate venue-color pixels in an object-mask frame."""
 
-        if frame is None or not hasattr(frame, "shape") or len(frame.shape) < 3:
-            return 0
-        rgb = np.array(color_rgb, dtype=np.int16)
-        bgr = np.array((color_rgb[2], color_rgb[1], color_rgb[0]), dtype=np.int16)
-        pixels = frame[:, :, :3].astype(np.int16)
-        rgb_hits = np.all(np.abs(pixels - rgb) <= 8, axis=2)
-        bgr_hits = np.all(np.abs(pixels - bgr) <= 8, axis=2)
-        return int(np.count_nonzero(rgb_hits | bgr_hits))
+        return count_mask_pixels(frame, color_rgb)
 
     def _blocked_by_entrance(self, start: tuple[float, float], end: tuple[float, float]) -> bool:
         """Logically block movement through blocked venue entrances."""
@@ -1186,7 +1092,7 @@ class VenueMeetupEnv:
     def observation_summary(self, observation: dict[str, Any]) -> dict[str, Any]:
         """Drop image arrays from observations for compact logs."""
 
-        return {key: value for key, value in observation.items() if key != "ego_view"}
+        return observation_summary(observation)
 
     def disconnect(self) -> None:
         """Disconnect the underlying UnrealCV client."""
@@ -1202,16 +1108,16 @@ class VenueMeetupEnv:
         accumulate and collide across episodes and scenarios.
         """
 
-        return f"GEN_BP_VENUE_{venue_id}"
+        return SceneBuilder.venue_actor_name(venue_id)
 
     @staticmethod
     def landmark_actor_name(landmark_id: str) -> str:
         """Return deterministic UE actor name for a landmark."""
 
-        return f"GEN_BP_LANDMARK_{landmark_id}"
+        return SceneBuilder.landmark_actor_name(landmark_id)
 
     @staticmethod
     def prop_actor_name(prop_id: str) -> str:
         """Return deterministic UE actor name for a prop."""
 
-        return f"GEN_BP_PROP_{prop_id}"
+        return SceneBuilder.prop_actor_name(prop_id)

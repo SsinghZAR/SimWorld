@@ -1,4 +1,4 @@
-"""Obstacle-aware path planning for walk-mode NAVIGATE.
+"""Obstacle-aware and layout-graph path planning for walk-mode NAVIGATE.
 
 In walk mode an agent must physically traverse the plaza to a venue instead of
 teleporting (see notes.md: teleporting collapses the embodied task into pure
@@ -6,6 +6,11 @@ graph traversal). SimWorld plans navigation in Python and then drives the
 humanoid's locomotion - there is no engine-side navmesh ``MoveTo`` exposed over
 UnrealCV - so we plan a collision-aware polyline here and let the env walk it
 with real ``StepForward`` locomotion.
+
+When a scenario carries a :class:`~benchmark.venue_meetup.layout.DistrictLayout`
+and the agent has a known walk-graph node, routes prefer that authored sidewalk /
+crossing / bridge graph. Building keep-out discs remain the legacy free-space
+fallback for plaza templates without usable layout graph data.
 
 Building footprints are modeled as inflated keep-out discs derived purely from
 scenario geometry (a building's pivot, and for a venue its plaza-side meeting
@@ -19,8 +24,169 @@ from __future__ import annotations
 import heapq
 import math
 from dataclasses import dataclass
+from typing import Literal
+
+from benchmark.venue_meetup.layout import DistrictLayout, Frontage, WalkRouteKind
 
 Point = tuple[float, float]
+WalkPlannerKind = Literal["layout_graph", "obstacle_astar"]
+
+
+@dataclass(frozen=True)
+class LayoutRoute:
+    """Deterministic walk-graph route from a start node to a venue frontage.
+
+    ``node_ids`` is the graph path from the spawn/current node to the
+    frontage's *approach* node (a public sidewalk/crossing/intersection node).
+    ``waypoints`` are flattened edge polylines along that path (start
+    exclusive, approach-node inclusive).  ``access_path`` goes from the
+    approach node to the meeting-region centre.
+    """
+
+    node_ids: tuple[str, ...]
+    edge_ids: tuple[tuple[str, str], ...]
+    waypoints: tuple[Point, ...]
+    graph_distance_cm: float
+    access_path: tuple[Point, ...]
+    access_distance_cm: float
+    total_distance_cm: float
+    route_kinds: tuple[WalkRouteKind, ...]
+    frontage_id: str
+    end_node_id: str
+    used_bridge: bool
+
+
+def select_walk_planner(*, layout: DistrictLayout | None, walk_node_id: str | None) -> WalkPlannerKind:
+    """Choose graph-backed planning when layout + current walk node are usable."""
+
+    if layout is not None and walk_node_id is not None and layout.walk_nodes:
+        return "layout_graph"
+    return "obstacle_astar"
+
+
+def _resolve_frontage(
+    layout: DistrictLayout,
+    *,
+    venue_slot_id: str | None,
+    frontage_id: str | None,
+) -> Frontage:
+    """Resolve a frontage from either ``venue_slot_id`` or ``frontage_id``."""
+
+    if (venue_slot_id is None) == (frontage_id is None):
+        raise ValueError("Provide exactly one of venue_slot_id or frontage_id")
+
+    if frontage_id is not None:
+        return layout.frontage_by_id(frontage_id)
+
+    assert venue_slot_id is not None
+    matches = [frontage for frontage in layout.frontages if frontage.venue_slot_id == venue_slot_id]
+    if not matches:
+        raise ValueError(f"Unknown venue_slot_id: {venue_slot_id}")
+    if len(matches) > 1:
+        raise ValueError(f"Duplicate venue_slot_id: {venue_slot_id}")
+    return matches[0]
+
+
+def _find_route_edge(layout: DistrictLayout, start_node_id: str, end_node_id: str) -> "WalkEdge":
+    """Return the best enabled undirected edge between two adjacent path nodes."""
+
+    from benchmark.venue_meetup.layout import WalkEdge as _WE  # noqa: F811
+
+    matches: list[_WE] = []
+    for edge in layout.walk_edges:
+        if not edge.enabled:
+            continue
+        if {edge.start_node_id, edge.end_node_id} == {start_node_id, end_node_id}:
+            matches.append(edge)
+    if not matches:
+        raise ValueError(f"Missing walk edge on path: {start_node_id} -> {end_node_id}")
+    return sorted(matches, key=lambda e: e.route_kind)[0]
+
+
+def _edge_route_kind(layout: DistrictLayout, start_node_id: str, end_node_id: str) -> WalkRouteKind:
+    """Return the route kind for the enabled undirected edge between two nodes."""
+
+    return _find_route_edge(layout, start_node_id, end_node_id).route_kind
+
+
+def plan_layout_route(
+    layout: DistrictLayout,
+    start_node_id: str,
+    *,
+    venue_slot_id: str | None = None,
+    frontage_id: str | None = None,
+) -> LayoutRoute | None:
+    """Plan a deterministic layout-graph route to a venue slot or frontage.
+
+    The route ends at the frontage's ``approach_node_id`` (a public walk
+    node).  The frontage ``access_path`` is recorded separately and never
+    participates in graph search.  Returns ``None`` when the approach node is
+    unreachable via enabled edges.
+
+    Legacy compatibility: when ``approach_node_id`` is *None*, falls back to
+    using the frontage id as a walk-node id (the old "frontage-as-node"
+    scheme) so stored layouts keep loading.
+    """
+
+    frontage = _resolve_frontage(layout, venue_slot_id=venue_slot_id, frontage_id=frontage_id)
+
+    approach_id = frontage.approach_node_id
+    if approach_id is not None:
+        try:
+            layout.node_by_id(approach_id)
+        except ValueError as exc:
+            raise ValueError(
+                f"Frontage {frontage.frontage_id!r} approach_node_id="
+                f"{approach_id!r} is not a walk node"
+            ) from exc
+    else:
+        try:
+            layout.node_by_id(frontage.frontage_id)
+            approach_id = frontage.frontage_id
+        except ValueError as exc:
+            raise ValueError(
+                f"Frontage {frontage.frontage_id!r} has no approach_node_id "
+                "and no matching walk node"
+            ) from exc
+
+    path = layout.shortest_path(start_node_id, approach_id)
+    if path is None:
+        return None
+
+    nodes = {node.node_id: node for node in layout.walk_nodes}
+    flat_waypoints: list[Point] = []
+    edge_ids: list[tuple[str, str]] = []
+    route_kinds: list[WalkRouteKind] = []
+
+    for left, right in zip(path, path[1:]):
+        edge = _find_route_edge(layout, left, right)
+        edge_ids.append((left, right))
+        route_kinds.append(edge.route_kind)
+        wps = edge.waypoints if edge.start_node_id == left else tuple(reversed(edge.waypoints))
+        flat_waypoints.extend(wps)
+        flat_waypoints.append(nodes[right].position)
+
+    graph_distance = layout.path_length_cm(start_node_id, approach_id)
+    if graph_distance is None:
+        return None
+
+    access = tuple(frontage.access_path)
+    approach_pos = nodes[approach_id].position
+    access_dist = path_length(approach_pos, list(access))
+
+    return LayoutRoute(
+        node_ids=tuple(path),
+        edge_ids=tuple(edge_ids),
+        waypoints=tuple(flat_waypoints),
+        graph_distance_cm=float(graph_distance),
+        access_path=access,
+        access_distance_cm=access_dist,
+        total_distance_cm=float(graph_distance) + access_dist,
+        route_kinds=tuple(route_kinds),
+        frontage_id=frontage.frontage_id,
+        end_node_id=approach_id,
+        used_bridge=any(kind == "bridge" for kind in route_kinds),
+    )
 
 
 @dataclass(frozen=True)

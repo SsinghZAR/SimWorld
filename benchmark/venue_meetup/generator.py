@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Callable
 
 from benchmark.venue_meetup.scenario import AgentSpec, Entrance, Requirement, Scenario, Venue, VenueProperties
@@ -37,6 +37,68 @@ SPAWN_RING: tuple[tuple[float, float, float, float], ...] = (
     (600.0, -600.0, 150.0, 135.0),
     (0.0, -850.0, 150.0, 90.0),
 )
+
+
+@dataclass(frozen=True)
+class HiddenProfileSpec:
+    """Two-agent hidden-profile information design for a template size.
+
+    Current limitation: ``num_agents`` must be 2. Venue counts of 4, 8, and 12
+    are supported (``central_square_v0``, ``station_quarter_medium_v1``,
+    ``riverside_market_large_v1``) as long as each agent zone has at least
+    ``min_venues_per_zone`` venues.
+
+    Role budget after zone assignment and optimum-side choice:
+
+    - exactly one group-feasible optimum in the optimum agent's zone
+    - exactly one optimum-zone decoy (shares the optimum agent's own hard need,
+      lacks the partner need)
+    - at least ``min_dependent_traps`` attractive traps in the dependent zone
+      (partner need yes, optimum-agent need no)
+    - every remaining venue is a non-feasible distractor
+    """
+
+    num_agents: int = 2
+    min_venues_per_zone: int = 2
+    min_dependent_traps: int = 2
+    hard_keys: tuple[str, str] = HIDDEN_PROFILE_HARD_KEYS
+
+    def validate_shape(self, *, num_agents: int, num_venues: int, zone_counts: dict[str, int]) -> None:
+        """Reject unsupported agent counts or undersized zone partitions."""
+
+        if num_agents != self.num_agents:
+            raise ValueError(
+                f"hidden_profile mode currently supports exactly {self.num_agents} agents, got {num_agents}"
+            )
+        if self.num_agents != 2:
+            raise ValueError("HiddenProfileSpec currently hard-limits num_agents to 2")
+        if len(zone_counts) != 2:
+            raise ValueError(f"hidden_profile expects exactly two zones, got {zone_counts}")
+        if any(count < self.min_venues_per_zone for count in zone_counts.values()):
+            raise ValueError(
+                f"hidden_profile requires at least {self.min_venues_per_zone} venues per zone, got {zone_counts}"
+            )
+        if num_venues < 2 * self.min_venues_per_zone:
+            raise ValueError(
+                f"hidden_profile needs at least {2 * self.min_venues_per_zone} venues, got {num_venues}"
+            )
+        # optimum + decoy in one zone; >= min traps in the other.
+        if num_venues < 2 + self.min_dependent_traps:
+            raise ValueError(
+                "hidden_profile needs room for one optimum, one decoy, and "
+                f"at least {self.min_dependent_traps} dependent-zone traps; got {num_venues} venues"
+            )
+
+
+def hidden_profile_spec_for(num_venues: int) -> HiddenProfileSpec:
+    """Return the two-agent spec used for a template's venue count.
+
+    The role construction is size-agnostic: larger templates simply receive more
+    non-feasible distractors after the fixed optimum / decoy / trap budget.
+    """
+
+    del num_venues  # count is validated later against the resolved zone partition
+    return HiddenProfileSpec()
 
 
 def _template_builder(template_id: str | None) -> Callable[[int], Scenario]:
@@ -131,31 +193,61 @@ def _agent_specs(num_agents: int, rng: random.Random) -> list[AgentSpec]:
     return agents
 
 
-def _hidden_profile_zones(venues: list[Venue], agents: list[AgentSpec]) -> dict[str, str]:
-    """Assign each venue to the nearest agent spawn's zone (expects a 2-2 split)."""
+def _nearest_spawn_zones(venues: list[Venue], agents: list[AgentSpec]) -> tuple[dict[str, str], dict[str, str]]:
+    """Legacy central-square assignment: each venue joins the nearest agent's zone."""
 
-    zone_of = {agent.agent_id: f"zone_{agent.agent_id}" for agent in agents}
-    assignment: dict[str, str] = {}
+    agent_zones = {agent.agent_id: f"zone_{agent.agent_id}" for agent in agents}
+    venue_zones: dict[str, str] = {}
     for venue in venues:
         nearest = min(
             agents,
             key=lambda agent: (venue.position[0] - agent.position[0]) ** 2 + (venue.position[1] - agent.position[1]) ** 2,
         )
-        assignment[venue.venue_id] = zone_of[nearest.agent_id]
-    counts: dict[str, int] = {}
-    for zone in assignment.values():
-        counts[zone] = counts.get(zone, 0) + 1
-    if sorted(counts.values()) != [2, 2]:
-        raise ValueError(f"hidden_profile expects a balanced 2-2 venue split by spawn proximity, got {counts}")
-    return assignment
+        venue_zones[venue.venue_id] = agent_zones[nearest.agent_id]
+    return venue_zones, agent_zones
 
 
-def _hidden_profile_properties(o_need: str, d_need: str, o_val: bool, d_val: bool, quiet: float, crowding: float) -> VenueProperties:
+def _resolve_hidden_profile_zones(
+    venues: list[Venue], agents: list[AgentSpec]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Resolve venue and agent zone ids for a hidden-profile overlay.
+
+    Prefer each template's authored ``zone_id`` when every agent and every venue
+    already has one (station / riverside). Otherwise use the legacy nearest-spawn
+    fallback required by ``central_square_v0``.
+    """
+
+    agents_authored = all(agent.zone_id for agent in agents)
+    venues_authored = all(venue.zone_id for venue in venues)
+    if agents_authored and venues_authored:
+        venue_zones = {venue.venue_id: str(venue.zone_id) for venue in venues}
+        agent_zones = {agent.agent_id: str(agent.zone_id) for agent in agents}
+        agent_zone_set = set(agent_zones.values())
+        if len(agent_zone_set) != 2:
+            raise ValueError(f"hidden_profile expects two distinct agent zones, got {agent_zones}")
+        orphan = {zone for zone in venue_zones.values() if zone not in agent_zone_set}
+        if orphan:
+            raise ValueError(f"hidden_profile venues reference unknown zones {sorted(orphan)}")
+        return venue_zones, agent_zones
+    return _nearest_spawn_zones(venues, agents)
+
+
+def _hidden_profile_properties(
+    o_need: str,
+    d_need: str,
+    o_val: bool,
+    d_val: bool,
+    quiet: float,
+    crowding: float,
+    *,
+    open: bool = True,
+    reachable: bool = True,
+) -> VenueProperties:
     """Build venue properties with the two discriminating needs set explicitly."""
 
     fields: dict[str, object] = dict(
-        open=True,
-        reachable=True,
+        open=open,
+        reachable=reachable,
         capacity=6,
         accessible=False,
         shelter=True,
@@ -169,14 +261,84 @@ def _hidden_profile_properties(o_need: str, d_need: str, o_val: bool, d_val: boo
     return VenueProperties(**fields)  # type: ignore[arg-type]
 
 
+def _distractor_properties(o_need: str, d_need: str, index: int, rng: random.Random) -> VenueProperties:
+    """Non-group-feasible filler traits for venues beyond optimum/decoy/traps."""
+
+    # Rotate through decoy classes so extra venues force inspection rather than
+    # looking uniformly impossible. None may satisfy both discriminating needs
+    # while remaining open and reachable.
+    kind = index % 6
+    if kind == 0:
+        return _hidden_profile_properties(o_need, d_need, False, False, rng.uniform(0.7, 0.9), rng.uniform(0.1, 0.35))
+    if kind == 1:
+        return _hidden_profile_properties(o_need, d_need, False, False, rng.uniform(0.2, 0.45), rng.uniform(0.55, 0.8))
+    if kind == 2:
+        return _hidden_profile_properties(o_need, d_need, True, False, rng.uniform(0.35, 0.85), rng.uniform(0.2, 0.7))
+    if kind == 3:
+        return _hidden_profile_properties(o_need, d_need, False, True, rng.uniform(0.2, 0.45), rng.uniform(0.55, 0.8))
+    if kind == 4:
+        return _hidden_profile_properties(
+            o_need,
+            d_need,
+            True,
+            True,
+            rng.uniform(0.7, 0.9),
+            rng.uniform(0.1, 0.3),
+            open=False,
+        )
+    return _hidden_profile_properties(o_need, d_need, True, False, rng.uniform(0.2, 0.45), rng.uniform(0.55, 0.8))
+
+
 def _retrait_entrances(venue: Venue, props: VenueProperties) -> list[Entrance]:
     """Re-derive entrance status from accessibility so visuals match hidden traits."""
 
     entrances = []
     for entrance in venue.entrances:
-        status = "accessible" if props.accessible else "stairs_only"
+        if not props.open:
+            status = "blocked"
+        else:
+            status = "accessible" if props.accessible else "stairs_only"
         entrances.append(Entrance(**{**entrance.__dict__, "status": status}))
     return entrances
+
+
+def _build_trait_plan(
+    *,
+    o_zone_venues: list[Venue],
+    d_zone_venues: list[Venue],
+    o_need: str,
+    d_need: str,
+    spec: HiddenProfileSpec,
+    rng: random.Random,
+) -> dict[str, VenueProperties]:
+    """Assign optimum / decoy / trap / distractor properties to every venue."""
+
+    rng.shuffle(o_zone_venues)
+    rng.shuffle(d_zone_venues)
+    optimum_v, decoy_v = o_zone_venues[0], o_zone_venues[1]
+    trap_venues = d_zone_venues[: spec.min_dependent_traps]
+    distractor_venues = o_zone_venues[2:] + d_zone_venues[spec.min_dependent_traps :]
+
+    trait_plan: dict[str, VenueProperties] = {
+        optimum_v.venue_id: _hidden_profile_properties(
+            o_need, d_need, True, True, rng.uniform(0.7, 0.9), rng.uniform(0.1, 0.3)
+        ),
+        decoy_v.venue_id: _hidden_profile_properties(
+            o_need, d_need, True, False, rng.uniform(0.7, 0.9), rng.uniform(0.1, 0.3)
+        ),
+    }
+    for trap_index, trap_v in enumerate(trap_venues):
+        if trap_index == 0:
+            trait_plan[trap_v.venue_id] = _hidden_profile_properties(
+                o_need, d_need, False, True, rng.uniform(0.7, 0.9), rng.uniform(0.1, 0.35)
+            )
+        else:
+            trait_plan[trap_v.venue_id] = _hidden_profile_properties(
+                o_need, d_need, False, True, rng.uniform(0.2, 0.45), rng.uniform(0.55, 0.8)
+            )
+    for distractor_index, distractor_v in enumerate(distractor_venues):
+        trait_plan[distractor_v.venue_id] = _distractor_properties(o_need, d_need, distractor_index, rng)
+    return trait_plan
 
 
 def _build_hidden_profile(scenario: Scenario, rng: random.Random, num_agents: int) -> Scenario:
@@ -186,64 +348,77 @@ def _build_hidden_profile(scenario: Scenario, rng: random.Random, num_agents: in
     a unique group-feasible optimum sits in one agent's zone (so the partner
     depends on a report for it), the optimum-zone agent also has a decoy it cannot
     distinguish from the optimum using only its own need, and the partner's whole
-    zone is infeasible for it. See notes.md sections 3-5. The instance is checked
-    against these invariants before it is returned.
+    zone is infeasible for the group. See notes.md sections 3-5. The instance is
+    checked against these invariants before it is returned.
     """
 
-    if num_agents != 2:
-        raise ValueError("hidden_profile mode currently supports exactly 2 agents")
-    venues = list(scenario.venues)
-    if len(venues) != 4:
-        raise ValueError("hidden_profile mode currently expects exactly 4 venues")
-    agents = list(scenario.agents)[:2]
+    spec = hidden_profile_spec_for(len(scenario.venues))
+    # Fail first on the documented two-agent limitation before template shape checks.
+    if num_agents != spec.num_agents:
+        raise ValueError(
+            f"hidden_profile mode currently supports exactly {spec.num_agents} agents, got {num_agents}"
+        )
 
-    zone_assignment = _hidden_profile_zones(venues, agents)
-    zone_of_agent = {agent.agent_id: f"zone_{agent.agent_id}" for agent in agents}
+    venues = list(scenario.venues)
+    agents = list(scenario.agents)[:num_agents]
+    if len(agents) < num_agents:
+        raise ValueError(f"template provides {len(scenario.agents)} agents but num_agents={num_agents}")
+
+    venue_zones, agent_zones = _resolve_hidden_profile_zones(venues, agents)
+    zone_counts: dict[str, int] = {}
+    for zone in venue_zones.values():
+        zone_counts[zone] = zone_counts.get(zone, 0) + 1
+
+    spec.validate_shape(num_agents=num_agents, num_venues=len(venues), zone_counts=zone_counts)
 
     # Pick which agent's zone holds the optimum; the other agent is "dependent".
     optimum_agent = rng.choice(agents)
     dependent_agent = next(agent for agent in agents if agent.agent_id != optimum_agent.agent_id)
     # Assign the two hard needs (which agent needs which discriminating trait).
-    needs = list(HIDDEN_PROFILE_HARD_KEYS)
+    needs = list(spec.hard_keys)
     rng.shuffle(needs)
     o_need, d_need = needs[0], needs[1]
 
-    o_zone = zone_of_agent[optimum_agent.agent_id]
-    d_zone = zone_of_agent[dependent_agent.agent_id]
-    o_zone_venues = [v for v in venues if zone_assignment[v.venue_id] == o_zone]
-    d_zone_venues = [v for v in venues if zone_assignment[v.venue_id] == d_zone]
-    rng.shuffle(o_zone_venues)
-    rng.shuffle(d_zone_venues)
-    optimum_v, decoy_v = o_zone_venues[0], o_zone_venues[1]
-    trap_quiet_v, trap_noisy_v = d_zone_venues[0], d_zone_venues[1]
+    o_zone = agent_zones[optimum_agent.agent_id]
+    d_zone = agent_zones[dependent_agent.agent_id]
+    if o_zone == d_zone:
+        raise ValueError("hidden_profile agents must occupy distinct zones")
+    o_zone_venues = [v for v in venues if venue_zones[v.venue_id] == o_zone]
+    d_zone_venues = [v for v in venues if venue_zones[v.venue_id] == d_zone]
 
-    # Trait assignment (o_need/d_need are accessible/food_drink booleans):
-    #  - optimum:    O need Y, D need Y, quiet  -> only venue feasible for BOTH
-    #  - decoy:      O need Y, D need N, quiet  -> ties optimum on O's own need
-    #  - trap_quiet: O need N, D need Y, quiet  -> dependent agent's private best
-    #  - trap_noisy: O need N, D need Y, noisy  -> worse trap
-    trait_plan = {
-        optimum_v.venue_id: _hidden_profile_properties(o_need, d_need, True, True, rng.uniform(0.7, 0.9), rng.uniform(0.1, 0.3)),
-        decoy_v.venue_id: _hidden_profile_properties(o_need, d_need, True, False, rng.uniform(0.7, 0.9), rng.uniform(0.1, 0.3)),
-        trap_quiet_v.venue_id: _hidden_profile_properties(o_need, d_need, False, True, rng.uniform(0.7, 0.9), rng.uniform(0.1, 0.35)),
-        trap_noisy_v.venue_id: _hidden_profile_properties(o_need, d_need, False, True, rng.uniform(0.2, 0.45), rng.uniform(0.55, 0.8)),
-    }
+    trait_plan = _build_trait_plan(
+        o_zone_venues=o_zone_venues,
+        d_zone_venues=d_zone_venues,
+        o_need=o_need,
+        d_need=d_need,
+        spec=spec,
+        rng=rng,
+    )
+    if set(trait_plan) != {venue.venue_id for venue in venues}:
+        raise AssertionError("hidden_profile trait plan must cover every venue")
+
     rebuilt_venues = []
     for venue in venues:
         props = trait_plan[venue.venue_id]
         rebuilt_venues.append(
-            replace(venue, properties=props, entrances=_retrait_entrances(venue, props), zone_id=zone_assignment[venue.venue_id])
+            replace(
+                venue,
+                properties=props,
+                entrances=_retrait_entrances(venue, props),
+                zone_id=venue_zones[venue.venue_id],
+            )
         )
 
     rebuilt_agents = []
     for agent in agents:
         need = o_need if agent.agent_id == optimum_agent.agent_id else d_need
+        # ``replace`` keeps authored walk_node_id / spawn geometry intact.
         rebuilt_agents.append(
             replace(
                 agent,
                 private_constraint=HIDDEN_PROFILE_CONSTRAINT_TEXT[need],
                 private_requirement_keys=[need],
-                zone_id=zone_of_agent[agent.agent_id],
+                zone_id=agent_zones[agent.agent_id],
             )
         )
 
@@ -264,11 +439,18 @@ def _build_hidden_profile(scenario: Scenario, rng: random.Random, num_agents: in
         requirements=requirements,
         soft_weights=soft_weights,
     )
-    _assert_hidden_profile(built, optimum_agent.agent_id, dependent_agent.agent_id, o_need, d_need)
+    _assert_hidden_profile(built, optimum_agent.agent_id, dependent_agent.agent_id, o_need, d_need, spec)
     return built
 
 
-def _assert_hidden_profile(scenario: Scenario, optimum_agent_id: str, dependent_agent_id: str, o_need: str, d_need: str) -> None:
+def _assert_hidden_profile(
+    scenario: Scenario,
+    optimum_agent_id: str,
+    dependent_agent_id: str,
+    o_need: str,
+    d_need: str,
+    spec: HiddenProfileSpec,
+) -> None:
     """Fail loudly if a generated instance is not a true hidden profile."""
 
     feasible = [v for v in scenario.venues if not score_venue(v, scenario).hard_failures]
@@ -285,12 +467,30 @@ def _assert_hidden_profile(scenario: Scenario, optimum_agent_id: str, dependent_
         raise AssertionError("dependent agent's zone must contain no group-feasible venue")
     # Optimum agent cannot distinguish optimum from a decoy using only its own need.
     own_req = Requirement(key=o_need, weight=1.0)
+    partner_req = Requirement(key=d_need, weight=1.0)
     o_zone_self_ok = [v for v in scenario.venues if v.zone_id == o_zone and satisfies(v, own_req, scenario)]
     if len(o_zone_self_ok) < 2:
         raise AssertionError("optimum-agent's zone needs a decoy that also satisfies its own need")
+    decoys = [
+        v
+        for v in o_zone_self_ok
+        if v.venue_id != optimum.venue_id and not satisfies(v, partner_req, scenario)
+    ]
+    if not decoys:
+        raise AssertionError("optimum-zone decoy must share the own hard need but lack the partner need")
+    # Attractive traps: dependent zone venues that look good under the dependent need alone.
+    traps = [
+        v
+        for v in dep_zone_venues
+        if satisfies(v, partner_req, scenario) and not satisfies(v, own_req, scenario)
+    ]
+    if len(traps) < spec.min_dependent_traps:
+        raise AssertionError(
+            f"dependent zone needs at least {spec.min_dependent_traps} attractive traps, found {len(traps)}"
+        )
     # The decisive cross fact: optimum satisfies the partner's need, which the
     # optimum agent does not personally require (-> other-regarding sharing).
-    if d_need == o_need or not satisfies(optimum, Requirement(key=d_need, weight=1.0), scenario):
+    if d_need == o_need or not satisfies(optimum, partner_req, scenario):
         raise AssertionError("optimum must satisfy the partner's distinct need (other-regarding fact)")
 
 

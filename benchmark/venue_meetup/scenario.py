@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from benchmark.venue_meetup.layout import DistrictLayout
 
 VenueType = Literal[
     "cafe",
@@ -110,6 +113,9 @@ class Venue:
     entrances: list[Entrance]
     props: list[PropSpec] = field(default_factory=list)
     visual_summary: str = ""
+    # Explicit visual/collision scale.  Authored city blocks use this to keep
+    # source assets within their documented street clearances.
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
     # Partition zone for the ``spatial`` info-partition mode. An agent may only
     # successfully INSPECT a venue when ``zone_id is None`` (public) or it matches
     # the agent's ``zone_id``. ``None`` => no partition (legacy behavior).
@@ -129,6 +135,7 @@ class Landmark:
     yaw_deg: float
     mask_color_rgb: tuple[int, int, int]
     visual_summary: str = ""
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
 
 
 @dataclass(frozen=True)
@@ -144,6 +151,11 @@ class AgentSpec:
     # Which partition zone this agent can INSPECT under the ``spatial`` mode.
     # ``None`` => the agent can inspect any zone (legacy behavior).
     zone_id: str | None = None
+    # Optional DistrictLayout walk-graph node used as the agent's route origin.
+    # This is a graph ``WalkNode.node_id`` (e.g. ``spawn_clock_tower``), not the
+    # human-facing ``spawn_slot`` name. ``None`` preserves legacy scenarios that
+    # only record spawn slots/positions.
+    walk_node_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +183,7 @@ class Scenario:
     coarse_map_text: str
     coarse_map_path: str | None = None
     max_steps: int = 24
+    layout: DistrictLayout | None = None
 
     def venue_by_id(self, venue_id: str) -> Venue:
         """Return a venue by id."""
@@ -193,6 +206,9 @@ class Scenario:
         """
 
         payload = asdict(self)
+        # Keep legacy public JSON shape when no layout is attached.
+        if payload.get("layout") is None:
+            payload.pop("layout", None)
         if not include_hidden:
             for venue in payload["venues"]:
                 venue.pop("properties", None)
@@ -212,6 +228,8 @@ class Scenario:
 def scenario_from_dict(payload: dict[str, Any]) -> Scenario:
     """Rehydrate a Scenario from JSON-compatible dictionaries."""
 
+    from benchmark.venue_meetup.layout import DistrictLayout
+
     venues = []
     for venue in payload["venues"]:
         venue = dict(venue)
@@ -224,6 +242,8 @@ def scenario_from_dict(payload: dict[str, Any]) -> Scenario:
     landmarks = [Landmark(**landmark) for landmark in payload.get("landmarks", [])]
     agents = [AgentSpec(**agent) for agent in payload.get("agents", [])]
     requirements = [Requirement(**requirement) for requirement in payload.get("requirements", [])]
+    layout_payload = payload.get("layout")
+    layout = DistrictLayout.from_dict(layout_payload) if layout_payload is not None else None
     return Scenario(
         scenario_id=payload["scenario_id"],
         map_template_id=payload["map_template_id"],
@@ -236,6 +256,7 @@ def scenario_from_dict(payload: dict[str, Any]) -> Scenario:
         coarse_map_text=payload.get("coarse_map_text", ""),
         coarse_map_path=payload.get("coarse_map_path"),
         max_steps=int(payload.get("max_steps", 24)),
+        layout=layout,
     )
 
 

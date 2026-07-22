@@ -19,7 +19,7 @@ What you receive each turn:
 Action choices (set "choice"):
 - 5=NAVIGATE target_venue_id: travel to a venue's meeting point in one action. Use this to move and to converge; it walks you there, so you do NOT need to micro-steer.
 - 3=INSPECT target_venue_id: learn a venue's structured facts. You must FIRST NAVIGATE to that venue (be physically standing in it) AND it must be in your own area (can_inspect=true). The usual pattern is NAVIGATE to a venue, then INSPECT it the next turn. Inspect before trusting any trait.
-- 4=COMMUNICATE message: send concise, factual findings to teammates.
+- 4=COMMUNICATE message: send concise, factual findings to teammates. Optionally attach "shared_facts" structured claims for traits you personally inspected.
 - 1=STEP_FORWARD / 2=TURN_AROUND: optional fine movement; rarely needed if you NAVIGATE. For TURN_AROUND set angle (deg) and clockwise.
 - 0=WAIT.
 
@@ -27,6 +27,7 @@ Coordination (this is what is being measured):
 - Relevant venues are split across areas, so no single agent can verify the best venue alone: pool inspections and rely on teammate reports.
 - Share facts your TEAMMATES need, not only the ones you personally care about. A trait you do not require may be exactly what another agent's constraint needs.
 - State your own hard requirement so teammates can rule venues in or out for you.
+- When reporting inspected traits, prefer structured "shared_facts": [{venue_id, trait, value}, ...] only for facts you directly inspected. Do not invent claims for uninspected venues/traits. Free-text "message" may accompany claims or stand alone for legacy compatibility.
 - Once the group identifies the venue feasible for everyone, all NAVIGATE there.
 
 Return ONLY one valid JSON object, no markdown and no prose."""
@@ -47,8 +48,9 @@ def build_agent_prompt(observation: dict[str, Any]) -> str:
         "Use NAVIGATE (choice=5) with target_venue_id to travel to a venue; it walks you there. Then INSPECT (choice=3) that same venue (you must be standing in it, and it must be in your own area) to learn its structured facts.\n"
         "Only inspect venues with can_inspect=true; for the rest, rely on teammate reports and share what your teammates need (not only what you need).\n"
         "Do not infer traits from metadata - INSPECT to learn them, then COMMUNICATE the facts that matter to others.\n"
+        "When communicating inspected facts, include optional shared_facts claims [{venue_id, trait, value}] only for traits you personally inspected; free-text message remains allowed.\n"
         "Your observation JSON follows.\n"
         f"{json.dumps(prompt_payload, indent=2, default=str)}\n"
-        "Return JSON keys: choice, duration, direction, angle, clockwise, target_venue_id, target_description, message, reasoning.\n"
-        "Keep message short and factual. Include target_venue_id for NAVIGATE and INSPECT when known."
+        "Return JSON keys: choice, duration, direction, angle, clockwise, target_venue_id, target_description, message, shared_facts, reasoning.\n"
+        "Keep message short and factual. Include target_venue_id for NAVIGATE and INSPECT when known. Put structured claims only in shared_facts for directly inspected facts."
     )

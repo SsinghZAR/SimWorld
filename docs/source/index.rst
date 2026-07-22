@@ -42,6 +42,12 @@ With SimWorld, researchers can explore embodied intelligence at scale, enabling 
 
 .. toctree::
    :maxdepth: 2
+   :caption: BENCHMARKS
+
+   benchmarks/venue_meetup
+
+.. toctree::
+   :maxdepth: 2
    :caption: CUSTOMIZATION
 
    customization/make_your_own_pak

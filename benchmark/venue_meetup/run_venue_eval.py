@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
 import socket
+import subprocess
 import sys
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 try:
     import cv2
@@ -27,6 +29,44 @@ from benchmark.venue_meetup.venue_env import VenueMeetupEnv
 from simworld.communicator.communicator import Communicator
 from simworld.communicator.unrealcv import UnrealCV
 from simworld.config import Config
+
+RUN_MANIFEST_SCHEMA_VERSION = 1
+
+# Key fragments treated as secrets when serializing CLI/config into the manifest.
+_SECRET_KEY_FRAGMENTS = (
+    "api_key",
+    "apikey",
+    "access_token",
+    "auth_token",
+    "authorization",
+    "password",
+    "passwd",
+    "secret",
+    "credential",
+    "private_key",
+    "client_secret",
+)
+
+_SECRET_VALUE_MARKERS = (
+    "sk-",
+    "bearer ",
+    "api_key=",
+    "apikey=",
+    "access_token=",
+    "password=",
+    "secret=",
+)
+
+_RUNTIME_PACKAGE_CANDIDATES = (
+    "simworld",
+    "numpy",
+    "pydantic",
+    "pillow",
+    "opencv-python",
+    "opencv-python-headless",
+)
+
+_UNSET = object()
 
 
 def parse_resolution(value: str) -> tuple[int, int]:
@@ -72,6 +112,149 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, default=str) + "\n")
+
+
+def _normalize_arg_key(key: str) -> str:
+    return str(key).lower().replace("-", "_")
+
+
+def is_secret_arg_key(key: str) -> bool:
+    """Return whether a CLI/config key name looks like a secret."""
+
+    normalized = _normalize_arg_key(key)
+    # Keep benign token-budget knobs (e.g. max_tokens) out of the secret filter.
+    if "max_token" in normalized:
+        return False
+    return any(fragment in normalized for fragment in _SECRET_KEY_FRAGMENTS)
+
+
+def looks_like_secret_value(value: Any) -> bool:
+    """Return whether a string value looks like an embedded credential."""
+
+    if not isinstance(value, str):
+        return False
+    lowered = value.strip().lower()
+    if not lowered:
+        return False
+    return any(marker in lowered for marker in _SECRET_VALUE_MARKERS)
+
+
+def _jsonable_arg_value(value: Any) -> Any:
+    if isinstance(value, Path):
+        return value.as_posix()
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, list):
+        return [_jsonable_arg_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _jsonable_arg_value(item) for key, item in value.items()}
+    return value
+
+
+def sanitize_run_args(args: Any) -> dict[str, Any]:
+    """Serialize CLI/config args with secret keys/values removed."""
+
+    if hasattr(args, "__dict__"):
+        raw = vars(args)
+    elif isinstance(args, Mapping):
+        raw = dict(args)
+    else:
+        raise TypeError(f"args must be a Namespace or mapping, got {type(args)!r}")
+
+    sanitized: dict[str, Any] = {}
+    for key, value in raw.items():
+        if is_secret_arg_key(str(key)):
+            continue
+        converted = _jsonable_arg_value(value)
+        if looks_like_secret_value(converted):
+            continue
+        sanitized[str(key)] = converted
+    return sanitized
+
+
+def discover_git_commit() -> str | None:
+    """Return the current HEAD commit hash when git is available locally."""
+
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    commit = (completed.stdout or "").strip()
+    return commit or None
+
+
+def discover_runtime_versions() -> dict[str, str]:
+    """Return safely discoverable Python/package versions (missing pkgs omitted)."""
+
+    versions: dict[str, str] = {"python": sys.version.split()[0]}
+    for package_name in _RUNTIME_PACKAGE_CANDIDATES:
+        try:
+            versions[package_name] = importlib.metadata.version(package_name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return versions
+
+
+def build_run_manifest(
+    args: Any,
+    *,
+    scenarios: Sequence[Any],
+    ablations: Sequence[str],
+    created_at: str | None = None,
+    git_commit: Any = _UNSET,
+    runtime_versions: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Build a reproducible run manifest (pure when overrides are supplied).
+
+    Pass ``git_commit`` / ``runtime_versions`` explicitly in tests to avoid
+    subprocess and packaging side effects. When ``git_commit`` is left unset, the
+    helper discovers HEAD locally (or returns null).
+    """
+
+    resolved_commit = discover_git_commit() if git_commit is _UNSET else git_commit
+
+    template_ids: list[str] = []
+    scenario_ids: list[str] = []
+    seeds: list[int] = []
+    agent_counts: list[int] = []
+    for scenario in scenarios:
+        template_id = getattr(scenario, "map_template_id", None)
+        scenario_id = getattr(scenario, "scenario_id", None)
+        seed = getattr(scenario, "seed", None)
+        agents = getattr(scenario, "agents", None)
+        if template_id is not None and template_id not in template_ids:
+            template_ids.append(str(template_id))
+        if scenario_id is not None and scenario_id not in scenario_ids:
+            scenario_ids.append(str(scenario_id))
+        if seed is not None and int(seed) not in seeds:
+            seeds.append(int(seed))
+        if agents is not None:
+            count = len(agents)
+            if count not in agent_counts:
+                agent_counts.append(count)
+
+    walk = bool(getattr(args, "walk", False) if not isinstance(args, Mapping) else args.get("walk", False))
+    return {
+        "schema_version": RUN_MANIFEST_SCHEMA_VERSION,
+        "created_at": created_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "git_commit": resolved_commit,
+        "args": sanitize_run_args(args),
+        "runtime_versions": dict(runtime_versions) if runtime_versions is not None else discover_runtime_versions(),
+        "template_ids": template_ids,
+        "scenario_ids": scenario_ids,
+        "seeds": seeds,
+        "agent_counts": agent_counts,
+        "ablations": [str(name) for name in ablations],
+        "navigation_mode": "walk" if walk else "teleport",
+    }
 
 
 def save_video(frames: list[Any], path: Path, fps: float) -> None:
@@ -296,7 +479,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vision-max-width", type=int, default=512)
     parser.add_argument("--ablation", choices=minimal_ablation_names(), default="main")
     parser.add_argument("--max-steps", type=int)
-    parser.add_argument("--walk", action="store_true", help="Walk-mode NAVIGATE: physically walk an obstacle-aware route to each venue instead of teleporting (embodied locomotion).")
+    parser.add_argument(
+        "--walk",
+        action="store_true",
+        help=(
+            "Walk-mode NAVIGATE: physically traverse graph-backed layout routes "
+            "(sidewalks/crossings/bridges) when a district layout is available; "
+            "otherwise fall back to the legacy obstacle-aware free-space planner. "
+            "Default without this flag is teleport navigation."
+        ),
+    )
     parser.add_argument("--speed", type=float, default=1000.0, help="Engine MaxWalkSpeed (cm/s) for collision-aware locomotion.")
     parser.add_argument("--resolution", type=parse_resolution, default=parse_resolution("640x360"))
     parser.add_argument("--viewmode", choices=["lit", "depth", "object_mask"], default="lit")
@@ -346,8 +538,13 @@ def main() -> int:
     run_name = args.run_name or datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = args.output_dir / run_name
     ablations = minimal_ablation_names() if args.ablation_matrix else [args.ablation]
+    scenarios = scenarios_from_args(args)
+    manifest = build_run_manifest(args, scenarios=scenarios, ablations=ablations)
+    write_json(run_dir / "run_manifest.json", manifest)
+    print(f"Wrote run manifest to {run_dir / 'run_manifest.json'}", flush=True)
+
     summaries = []
-    for scenario in scenarios_from_args(args):
+    for scenario in scenarios:
         for ablation in ablations:
             case_dir = run_dir / scenario.map_template_id / scenario.scenario_id / ablation
             print(f"Running venue meetup: scenario={scenario.scenario_id} ablation={ablation} output={case_dir}", flush=True)

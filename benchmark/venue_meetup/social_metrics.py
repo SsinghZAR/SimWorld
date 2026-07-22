@@ -17,6 +17,11 @@ NOTE: message content is free text, so fact extraction is heuristic (venue alias
 trait-keyword co-mention). It is intentionally conservative; treat the sharing and
 other-regarding numbers as approximate. The structural metrics (must_pool,
 solvable_alone, optimum) are exact.
+
+When structured ``claims`` / ``shared_facts`` are present on transcript messages,
+``exact_structured_claims`` scores them by comparing claim values to the sender's
+first-hand inspection records (and the scenario decision-fact vocabulary). Free-text
+mentions alone never count as exact shares.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from __future__ import annotations
 from typing import Any
 
 from benchmark.venue_meetup.scenario import Requirement, Scenario, Venue
-from benchmark.venue_meetup.scoring import satisfies, score_venue
+from benchmark.venue_meetup.scoring import satisfies, score_venue, venue_decision_facts
 
 # Trait -> surface keywords used to detect that a message talks about that trait.
 TRAIT_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -110,6 +115,158 @@ def _transcript(trajectory: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if transcript:
             return transcript
     return []
+
+
+def _message_claims(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return structured claims from a compact transcript message."""
+
+    raw = message.get("claims")
+    if raw is None:
+        raw = message.get("shared_facts")
+    if not isinstance(raw, list):
+        return []
+    claims: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        venue_id = item.get("venue_id")
+        trait = item.get("trait")
+        if venue_id is None or trait is None or "value" not in item:
+            continue
+        claims.append({"venue_id": str(venue_id), "trait": str(trait), "value": item["value"]})
+    return claims
+
+
+def _values_equal(left: Any, right: Any) -> bool:
+    """Compare claim values with light JSON-type normalization."""
+
+    if left == right:
+        return True
+    if isinstance(left, bool) or isinstance(right, bool):
+        return bool(left) is bool(right) and left == right
+    try:
+        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+            return float(left) == float(right)
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+def _scenario_decision_facts(scenario: Scenario) -> dict[str, dict[str, Any]]:
+    """Ground-truth decision facts per venue (same vocabulary as INSPECT reveals)."""
+
+    return {venue.venue_id: venue_decision_facts(venue, scenario.soft_weights) for venue in scenario.venues}
+
+
+def _exact_structured_claim_metrics(
+    scenario: Scenario,
+    *,
+    observed: dict[str, dict[str, dict[str, Any]]],
+    transcript: list[dict[str, Any]],
+    relevant: set[str],
+    partner_needs: dict[str, set[str]],
+) -> dict[str, Any]:
+    """Exact claim metrics; never credit free-text co-mentions as exact shares."""
+
+    decision_facts = _scenario_decision_facts(scenario)
+    known_traits = {trait for facts in decision_facts.values() for trait in facts}
+
+    per_agent_counts = {
+        agent.agent_id: {
+            "first_hand_supported_claims": 0,
+            "unsupported_claims": 0,
+            "contradictory_claims": 0,
+            "duplicate_redundant_claims": 0,
+            "partner_relevant_claims": 0,
+            "claims_emitted": 0,
+        }
+        for agent in scenario.agents
+    }
+    shared_supported: dict[str, set[tuple[str, str]]] = {a.agent_id: set() for a in scenario.agents}
+    seen_pairs: set[tuple[str, str]] = set()
+
+    for message in sorted(transcript, key=lambda m: m.get("step", 0)):
+        sender = message.get("sender")
+        if sender not in per_agent_counts:
+            continue
+        sender_observed = observed.get(sender, {})
+        for claim in _message_claims(message):
+            per_agent_counts[sender]["claims_emitted"] += 1
+            venue_id = claim["venue_id"]
+            trait = claim["trait"]
+            value = claim["value"]
+            pair = (venue_id, trait)
+
+            inspected = sender_observed.get(venue_id)
+            if not isinstance(inspected, dict) or trait not in inspected:
+                # Unknown venue/trait, never inspected, or outside decision vocabulary.
+                per_agent_counts[sender]["unsupported_claims"] += 1
+                continue
+
+            inspected_value = inspected[trait]
+            # Cross-check against scenario decision facts when available.
+            ground = decision_facts.get(venue_id, {}).get(trait, inspected_value)
+            if not _values_equal(value, inspected_value) or (
+                trait in known_traits and venue_id in decision_facts and not _values_equal(value, ground)
+            ):
+                per_agent_counts[sender]["contradictory_claims"] += 1
+                continue
+
+            if pair in seen_pairs:
+                per_agent_counts[sender]["duplicate_redundant_claims"] += 1
+                continue
+
+            seen_pairs.add(pair)
+            shared_supported[sender].add(pair)
+            per_agent_counts[sender]["first_hand_supported_claims"] += 1
+            if trait in partner_needs.get(sender, set()):
+                per_agent_counts[sender]["partner_relevant_claims"] += 1
+
+    per_agent: dict[str, Any] = {}
+    total_observed_relevant = 0
+    total_shared_observed = 0
+    aggregate = {
+        "first_hand_supported_claims": 0,
+        "unsupported_claims": 0,
+        "contradictory_claims": 0,
+        "duplicate_redundant_claims": 0,
+        "partner_relevant_claims": 0,
+        "claims_emitted": 0,
+    }
+    for agent in scenario.agents:
+        aid = agent.agent_id
+        counts = per_agent_counts[aid]
+        for key in aggregate:
+            aggregate[key] += counts[key]
+        observed_relevant = {
+            (vid, trait)
+            for vid, facts in observed.get(aid, {}).items()
+            for trait in relevant
+            if trait in facts
+        }
+        shared_in_observed = shared_supported[aid] & observed_relevant
+        completeness = (len(shared_in_observed) / len(observed_relevant)) if observed_relevant else None
+        total_observed_relevant += len(observed_relevant)
+        total_shared_observed += len(shared_in_observed)
+        per_agent[aid] = {
+            **counts,
+            "observed_relevant_facts": len(observed_relevant),
+            "exact_shared_relevant_facts": len(shared_in_observed),
+            "exact_sharing_completeness": _round(completeness),
+        }
+
+    aggregate["exact_sharing_completeness"] = _round(
+        (total_shared_observed / total_observed_relevant) if total_observed_relevant else None
+    )
+    return {
+        "per_agent": per_agent,
+        "aggregate": aggregate,
+        "notes": (
+            "Exact structured-claim metrics compare claim values to the sender's first-hand "
+            "inspection records and scenario decision facts. Free-text co-mentions are never "
+            "counted as exact shares."
+        ),
+    }
 
 
 def compute_social_metrics(scenario: Scenario, trajectory: list[dict[str, Any]]) -> dict[str, Any]:
@@ -202,6 +359,13 @@ def compute_social_metrics(scenario: Scenario, trajectory: list[dict[str, Any]])
         "agents_at_optimum": sorted(reached),
         "per_agent": per_agent,
         "notes": "message fact-extraction is heuristic; sharing/other-regarding are approximate.",
+        "exact_structured_claims": _exact_structured_claim_metrics(
+            scenario,
+            observed=observed,
+            transcript=transcript,
+            relevant=relevant,
+            partner_needs=partner_needs,
+        ),
     }
 
 

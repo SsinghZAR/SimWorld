@@ -1,0 +1,190 @@
+"""Scene lifecycle helpers for Venue Meetup (clear, light, spawn, settle)."""
+
+from __future__ import annotations
+
+import math
+import time
+from dataclasses import dataclass
+from typing import Mapping, Sequence
+
+from benchmark.venue_meetup.building_catalog import asset_path
+from benchmark.venue_meetup.scenario import Scenario
+from simworld.agent.humanoid import Humanoid
+from simworld.communicator.communicator import Communicator
+from simworld.config import Config
+from simworld.utils.vector import Vector
+
+AGENT_BLUEPRINT = "/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C"
+
+
+@dataclass
+class AgentState:
+    """Runtime mapping from benchmark agent id to SimWorld humanoid actor."""
+
+    agent_id: str
+    humanoid: Humanoid
+    actor_name: str
+
+
+def direction_from_yaw(yaw: float) -> Vector:
+    """Build a unit Vector from a yaw angle."""
+
+    return Vector(math.cos(math.radians(yaw)), math.sin(math.radians(yaw))).normalize()
+
+
+class SceneBuilder:
+    """Owns UE scene clear/light/spawn/settle for a Venue Meetup episode."""
+
+    def __init__(
+        self,
+        communicator: Communicator,
+        scenario: Scenario,
+        *,
+        config: Config | None = None,
+        resolution: tuple[int, int] = (640, 360),
+        speed: float = 1000.0,
+        agent_blueprint: str = AGENT_BLUEPRINT,
+        tick_count: int = 1,
+        spawn_settle_sec: float = 0.7,
+        sun_rotation: tuple[float, float, float] = (-50.0, 180.0, 180.0),
+    ) -> None:
+        self.communicator = communicator
+        self.scenario = scenario
+        self.config = config or Config()
+        self.resolution = resolution
+        self.speed = speed
+        self.agent_blueprint = agent_blueprint
+        self.tick_count = tick_count
+        self.spawn_settle_sec = spawn_settle_sec
+        self.sun_rotation = sun_rotation
+        self._sun_actor: str | None = None
+
+    def prepare_environment(self) -> None:
+        """Enter async mode, wipe prior GEN_BP actors, and reset humanoid ids."""
+
+        # Async (running) mode so the engine character movement actually walks and
+        # is blocked by building collision. Sync/pause only advances on manual
+        # ticks, under which the packaged StepForward does not progress.
+        self.communicator.unrealcv.set_mode("async")
+        self.communicator.clear_env(keep_roads=True)
+        Humanoid._id_counter = 0
+        Humanoid._camera_id_counter = 1
+
+    def setup_lighting(self) -> None:
+        """Force a deterministic, well-lit sun on the otherwise dim empty map.
+
+        The packaged empty map ships with a low/odd sun angle and no usable
+        weather-manager blueprint, so the only reliable lever is rotating the
+        scene's existing directional light. Re-applying it every reset also
+        undoes any orientation left behind by earlier episodes.
+        """
+
+        if self._sun_actor is None:
+            try:
+                objects = list(self.communicator.unrealcv.get_objects())
+            except Exception:  # noqa: BLE001 - lighting is best-effort.
+                objects = []
+            self._sun_actor = next((name for name in objects if name.lower().startswith("directionallight")), "")
+        if not self._sun_actor:
+            return
+        try:
+            self.communicator.unrealcv.set_orientation(self.sun_rotation, self._sun_actor)
+        except Exception:  # noqa: BLE001 - never fail an episode over lighting.
+            pass
+
+    def spawn_static_scene(self) -> None:
+        """Spawn venues, landmarks, and visible dressing props."""
+
+        for venue in self.scenario.venues:
+            actor_name = self.venue_actor_name(venue.venue_id)
+            self.communicator.spawn_object(
+                actor_name,
+                venue.asset_path,
+                venue.position,
+                (0.0, venue.yaw_deg, 0.0),
+                scale=venue.scale,
+            )
+            self.communicator.unrealcv.set_color(actor_name, venue.mask_color_rgb)
+            for prop in venue.props:
+                prop_name = self.prop_actor_name(prop.prop_id)
+                self.communicator.spawn_object(prop_name, asset_path(prop.asset_key), prop.position, (0.0, prop.yaw_deg, 0.0))
+                self.communicator.unrealcv.set_scale(prop.scale, prop_name)
+                if prop.color_rgb is not None:
+                    self.communicator.unrealcv.set_color(prop_name, prop.color_rgb)
+
+        for landmark in self.scenario.landmarks:
+            actor_name = self.landmark_actor_name(landmark.landmark_id)
+            self.communicator.spawn_object(
+                actor_name,
+                landmark.asset_path,
+                landmark.position,
+                (0.0, landmark.yaw_deg, 0.0),
+                scale=landmark.scale,
+            )
+            self.communicator.unrealcv.set_color(actor_name, landmark.mask_color_rgb)
+
+    def spawn_agents(self) -> dict[str, AgentState]:
+        """Spawn all humanoid agents and return their runtime states."""
+
+        agent_states: dict[str, AgentState] = {}
+        for agent in self.scenario.agents:
+            direction = direction_from_yaw(agent.yaw_deg)
+            humanoid = Humanoid(
+                position=Vector(agent.position[0], agent.position[1]),
+                direction=direction,
+                communicator=self.communicator,
+                config=self.config,
+            )
+            self.communicator.spawn_agent(
+                humanoid,
+                name=None,
+                position=agent.position,
+                model_path=self.agent_blueprint,
+                type="humanoid",
+            )
+            actor_name = self.communicator.get_humanoid_name(humanoid.id)
+            self.communicator.unrealcv.set_orientation((0.0, agent.yaw_deg, 0.0), actor_name)
+            self.communicator.humanoid_set_speed(humanoid.id, self.speed)
+            self.communicator.unrealcv.set_camera_resolution(humanoid.camera_id, self.resolution)
+            agent_states[agent.agent_id] = AgentState(agent_id=agent.agent_id, humanoid=humanoid, actor_name=actor_name)
+        return agent_states
+
+    def settle(self, agent_states: Mapping[str, AgentState], agent_ids: Sequence[str]) -> None:
+        """Let freshly spawned agents drop to the ground and come to rest."""
+
+        for agent_id in agent_ids:
+            try:
+                self.communicator.humanoid_stop(agent_states[agent_id].humanoid.id)
+            except Exception:  # noqa: BLE001 - settling is best-effort.
+                pass
+        time.sleep(self.spawn_settle_sec)
+        self.tick()
+
+    def tick(self) -> None:
+        """Advance the engine by the configured tick count."""
+
+        for _ in range(max(1, self.tick_count)):
+            self.communicator.unrealcv.tick()
+
+    @staticmethod
+    def venue_actor_name(venue_id: str) -> str:
+        """Return deterministic UE actor name for a venue.
+
+        The ``GEN_BP_`` prefix lets ``clear_env(keep_roads=True)`` wipe every
+        scene actor on the next reset; otherwise venues/landmarks/props would
+        accumulate and collide across episodes and scenarios.
+        """
+
+        return f"GEN_BP_VENUE_{venue_id}"
+
+    @staticmethod
+    def landmark_actor_name(landmark_id: str) -> str:
+        """Return deterministic UE actor name for a landmark."""
+
+        return f"GEN_BP_LANDMARK_{landmark_id}"
+
+    @staticmethod
+    def prop_actor_name(prop_id: str) -> str:
+        """Return deterministic UE actor name for a prop."""
+
+        return f"GEN_BP_PROP_{prop_id}"

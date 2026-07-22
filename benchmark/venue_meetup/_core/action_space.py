@@ -6,7 +6,7 @@ import json
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 DEFAULT_STEP_DURATION = 0.25
 MAX_STEP_DURATION = 0.75
@@ -25,6 +25,49 @@ class VenueAction(Enum):
     NAVIGATE = 5
 
 
+class SharedFactClaim(BaseModel):
+    """One machine-readable fact claim attached to a turn or message."""
+
+    venue_id: str
+    trait: str
+    value: Any
+
+    def compact(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        if hasattr(self, "model_dump"):
+            return self.model_dump(mode="json")
+        return self.dict()
+
+
+def parse_shared_facts(raw: Any) -> list[SharedFactClaim]:
+    """Parse shared_facts without raising on malformed or unsupported entries.
+
+    Unknown traits/venues are retained for offline analysis rather than rejected.
+    Completely malformed items are skipped.
+    """
+
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        return []
+
+    claims: list[SharedFactClaim] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        venue_id = item.get("venue_id")
+        trait = item.get("trait")
+        if venue_id is None or trait is None or "value" not in item:
+            continue
+        venue_text = str(venue_id).strip()
+        trait_text = str(trait).strip()
+        if not venue_text or not trait_text:
+            continue
+        claims.append(SharedFactClaim(venue_id=venue_text, trait=trait_text, value=item["value"]))
+    return claims
+
+
 class VenueAgentTurn(BaseModel):
     """One venue-meetup turn emitted by a model or scripted policy."""
 
@@ -36,6 +79,7 @@ class VenueAgentTurn(BaseModel):
     target_venue_id: str | None = None
     target_description: str | None = None
     message: str | None = None
+    shared_facts: list[SharedFactClaim] = Field(default_factory=list)
     reasoning: str | None = None
 
     @classmethod
@@ -75,6 +119,7 @@ class VenueAgentTurn(BaseModel):
             target_venue_id=target_venue_id,
             target_description=target_description,
             message=message.strip() if isinstance(message, str) and message.strip() else None,
+            shared_facts=parse_shared_facts(payload.get("shared_facts")),
             reasoning=payload.get("reasoning"),
         )
 
@@ -118,7 +163,26 @@ class VenueAgentTurn(BaseModel):
                     },
                     "message": {
                         "type": ["string", "null"],
-                        "description": "Short broadcast message to teammates. For choice=4, this must contain the communication.",
+                        "description": "Optional short broadcast message to teammates. For choice=4, provide message and/or shared_facts.",
+                    },
+                    "shared_facts": {
+                        "type": ["array", "null"],
+                        "description": (
+                            "Optional structured fact claims for teammates. Include only traits you personally "
+                            "INSPECTed. Each item is {venue_id, trait, value}. Unsupported/unknown traits are "
+                            "logged for analysis; free-text message remains optional and separate."
+                        ),
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "venue_id": {"type": "string"},
+                                "trait": {"type": "string"},
+                                "value": {
+                                    "description": "JSON value for the trait (boolean, number, or string).",
+                                },
+                            },
+                            "required": ["venue_id", "trait", "value"],
+                        },
                     },
                     "reasoning": {
                         "type": ["string", "null"],
@@ -140,6 +204,8 @@ class VenueAgentTurn(BaseModel):
 def sanitize_turn(turn: VenueAgentTurn, *, relative_angle: float = 0.0) -> VenueAgentTurn:
     """Clamp model output to the benchmark action envelope."""
 
+    shared_facts = list(turn.shared_facts or [])
+
     if turn.choice == VenueAction.STEP_FORWARD.value:
         duration = turn.duration if turn.duration and turn.duration > 0 else DEFAULT_STEP_DURATION
         duration = max(0.05, min(float(duration), MAX_STEP_DURATION))
@@ -149,6 +215,7 @@ def sanitize_turn(turn: VenueAgentTurn, *, relative_angle: float = 0.0) -> Venue
             duration=duration,
             direction=direction,
             message=turn.message,
+            shared_facts=shared_facts,
             reasoning=turn.reasoning,
         )
 
@@ -161,6 +228,7 @@ def sanitize_turn(turn: VenueAgentTurn, *, relative_angle: float = 0.0) -> Venue
             angle=angle,
             clockwise=clockwise,
             message=turn.message,
+            shared_facts=shared_facts,
             reasoning=turn.reasoning,
         )
 
@@ -170,11 +238,17 @@ def sanitize_turn(turn: VenueAgentTurn, *, relative_angle: float = 0.0) -> Venue
             target_venue_id=turn.target_venue_id,
             target_description=turn.target_description,
             message=turn.message,
+            shared_facts=shared_facts,
             reasoning=turn.reasoning,
         )
 
     if turn.choice == VenueAction.COMMUNICATE.value:
-        return VenueAgentTurn(choice=VenueAction.COMMUNICATE.value, message=turn.message, reasoning=turn.reasoning)
+        return VenueAgentTurn(
+            choice=VenueAction.COMMUNICATE.value,
+            message=turn.message,
+            shared_facts=shared_facts,
+            reasoning=turn.reasoning,
+        )
 
     if turn.choice == VenueAction.NAVIGATE.value:
         return VenueAgentTurn(
@@ -182,7 +256,13 @@ def sanitize_turn(turn: VenueAgentTurn, *, relative_angle: float = 0.0) -> Venue
             target_venue_id=turn.target_venue_id,
             target_description=turn.target_description,
             message=turn.message,
+            shared_facts=shared_facts,
             reasoning=turn.reasoning,
         )
 
-    return VenueAgentTurn(choice=VenueAction.WAIT.value, message=turn.message, reasoning=turn.reasoning)
+    return VenueAgentTurn(
+        choice=VenueAction.WAIT.value,
+        message=turn.message,
+        shared_facts=shared_facts,
+        reasoning=turn.reasoning,
+    )

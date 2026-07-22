@@ -571,7 +571,7 @@ class Communicator:
 
         return result
 
-    def spawn_object(self, object_name, model_path, position, direction):
+    def spawn_object(self, object_name, model_path, position, direction, scale=(1.0, 1.0, 1.0)):
         """Spawn object.
 
         Args:
@@ -579,6 +579,7 @@ class Communicator:
             model_path: Model path.
             position: Position. Tuple (x, y, z).
             direction: Direction. Tuple (pitch, yaw, roll).
+            scale: Actor scale applied before collision is enabled.
         """
         self.unrealcv.spawn_bp_asset(model_path, object_name)
         # Convert 2D position to 3D (x,y -> x,y,z)
@@ -595,7 +596,7 @@ class Communicator:
         )
         self.unrealcv.set_location(location_3d, object_name)
         self.unrealcv.set_orientation(orientation_3d, object_name)
-        self.unrealcv.set_scale((1, 1, 1), object_name)
+        self.unrealcv.set_scale(scale, object_name)
         self.unrealcv.set_collision(object_name, True)
         self.unrealcv.set_movable(object_name, True)
 

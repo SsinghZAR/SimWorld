@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from benchmark.venue_meetup._core.action_space import SharedFactClaim, parse_shared_facts
+
 ALL_RECIPIENTS = "all"
 
 
@@ -16,9 +18,10 @@ class Message(BaseModel):
 
     sender: str
     recipients: list[str] | None = None
-    content: str
+    content: str = ""
     step: int
     delivered_to: list[str] = Field(default_factory=list)
+    claims: list[SharedFactClaim] = Field(default_factory=list)
 
     def is_broadcast(self) -> bool:
         """Return whether this message should be broadcast."""
@@ -34,6 +37,7 @@ class Message(BaseModel):
             "sender": self.sender,
             "recipients": self.recipients or [ALL_RECIPIENTS],
             "content": self.content,
+            "claims": [claim.compact() for claim in self.claims],
             "step": self.step,
             "delivered_to": self.delivered_to,
         }
@@ -92,14 +96,21 @@ class CommsRouter:
         return recipients, errors
 
     def _clean_message(self, message: Message) -> Message | None:
-        """Normalize message text and drop empty messages."""
+        """Normalize message text/claims and drop empty communications."""
 
         content = (message.content or "").strip()
-        if not content:
+        claims = list(message.claims or [])
+        if not content and not claims:
             return None
         if len(content) > self.max_content_chars:
             content = content[: self.max_content_chars].rstrip()
-        return Message(sender=message.sender, recipients=message.recipients, content=content, step=message.step)
+        return Message(
+            sender=message.sender,
+            recipients=message.recipients,
+            content=content,
+            step=message.step,
+            claims=claims,
+        )
 
     def deliver(
         self,
@@ -228,10 +239,24 @@ def messages_from_turns(turns: dict[str, Any], *, step: int, default_recipients:
     messages: list[Message] = []
     for sender, turn in turns.items():
         content = getattr(turn, "message", None)
-        if not content:
+        content_text = content.strip() if isinstance(content, str) else ""
+        raw_claims = getattr(turn, "shared_facts", None)
+        if isinstance(raw_claims, list) and raw_claims and isinstance(raw_claims[0], SharedFactClaim):
+            claims = list(raw_claims)
+        else:
+            claims = parse_shared_facts(raw_claims)
+        if not content_text and not claims:
             continue
         recipients = getattr(turn, "recipients", None) or default_recipients
-        messages.append(Message(sender=sender, recipients=recipients, content=content, step=step))
+        messages.append(
+            Message(
+                sender=sender,
+                recipients=recipients,
+                content=content_text,
+                step=step,
+                claims=claims,
+            )
+        )
     return messages
 
 
