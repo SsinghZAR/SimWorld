@@ -12,7 +12,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised when only dry-run to
     cv2 = None
 
 from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn
-from benchmark.venue_meetup.prompt import VENUE_MEETUP_SYSTEM_PROMPT, build_agent_prompt
+from benchmark.venue_meetup.prompt import PromptMode, build_agent_prompt, build_system_prompt, normalize_prompt_mode
 from simworld.llm.a2a_llm import A2ALLM
 
 
@@ -53,6 +53,7 @@ class VenueMeetupPolicy:
         temperature: float = 0,
         top_p: float = 1.0,
         reasoning: str | None = None,
+        prompt_mode: PromptMode | str = "minimal",
     ):
         self.llm = A2ALLM(model_name=model_name, url=base_url, provider=provider)
         self.model_name = model_name
@@ -63,14 +64,16 @@ class VenueMeetupPolicy:
         self.temperature = temperature
         self.top_p = top_p
         self.reasoning = reasoning
+        self.prompt_mode = normalize_prompt_mode(prompt_mode)
+        self.system_prompt = build_system_prompt(self.prompt_mode)
 
     def act(self, observation: dict[str, Any]) -> tuple[VenueAgentTurn, dict[str, Any]]:
         """Generate one agent turn plus a log record."""
 
-        prompt = build_agent_prompt(observation)
+        prompt = build_agent_prompt(observation, prompt_mode=self.prompt_mode)
         started = time.perf_counter()
         response, model_elapsed = self.llm.generate_instructions(
-            VENUE_MEETUP_SYSTEM_PROMPT,
+            self.system_prompt,
             prompt,
             images=[frame_for_model(observation["ego_view"], self.vision_max_width)],
             max_tokens=self.max_tokens,
@@ -89,6 +92,7 @@ class VenueMeetupPolicy:
             "raw_response": response,
             "parsed_turn": turn.compact(),
             "reasoning": self.reasoning,
+            "prompt_mode": self.prompt_mode,
             "model_elapsed_sec": round(float(model_elapsed), 3),
             "decision_elapsed_sec": round(decision_elapsed, 3),
         }
@@ -113,7 +117,14 @@ class VenueMeetupPolicy:
                     turn, record = future.result()
                 except Exception as exc:
                     turn = VenueAgentTurn(reasoning=f"policy error: {exc}")
-                    record = {"agent_id": agent_id, "provider": self.provider, "model": self.model_name, "error": str(exc), "parsed_turn": turn.compact()}
+                    record = {
+                        "agent_id": agent_id,
+                        "provider": self.provider,
+                        "model": self.model_name,
+                        "prompt_mode": self.prompt_mode,
+                        "error": str(exc),
+                        "parsed_turn": turn.compact(),
+                    }
                 turns[agent_id] = turn
                 records.append(record)
         return turns, sorted(records, key=lambda item: item.get("agent_id", ""))

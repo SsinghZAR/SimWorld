@@ -135,7 +135,7 @@ class VenueAgentTurn(BaseModel):
                 "properties": {
                     "choice": {
                         "type": "integer",
-                        "description": "0=WAIT, 1=STEP_FORWARD, 2=TURN_AROUND, 3=INSPECT visible/near venue, 4=COMMUNICATE only, 5=NAVIGATE to target_venue_id.",
+                        "description": "0=WAIT, 1=STEP_FORWARD, 2=TURN_AROUND, 3=INSPECT a permitted, nearby, currently visible venue, 4=COMMUNICATE (the only choice that sends), 5=NAVIGATE to target_venue_id.",
                     },
                     "duration": {
                         "type": ["number", "null"],
@@ -155,22 +155,23 @@ class VenueAgentTurn(BaseModel):
                     },
                     "target_venue_id": {
                         "type": ["string", "null"],
-                        "description": "Venue id for INSPECT or NAVIGATE when known from coarse map or previous observations.",
+                        "description": "Venue id for INSPECT or NAVIGATE when known. INSPECT requires proximity and current-view visibility, then returns readable evidence.",
                     },
                     "target_description": {
                         "type": ["string", "null"],
-                        "description": "Short visible target description for INSPECT when unsure of id.",
+                        "description": "Short currently visible target description for INSPECT when unsure of id; the agent must be close enough for readable evidence.",
                     },
                     "message": {
                         "type": ["string", "null"],
-                        "description": "Optional short broadcast message to teammates. For choice=4, provide message and/or shared_facts.",
+                        "description": "Optional short text. Only choice=4 (COMMUNICATE) sends it; text on other choices is retained in the turn log but not delivered.",
                     },
                     "shared_facts": {
                         "type": ["array", "null"],
                         "description": (
-                            "Optional structured fact claims for teammates. Include only traits you personally "
-                            "INSPECTed. Each item is {venue_id, trait, value}. Unsupported/unknown traits are "
-                            "logged for analysis; free-text message remains optional and separate."
+                            "Optional evaluator-only annotation for directly inspected traits. Claims are retained "
+                            "for analysis but are never recipient-visible and are not a parallel communication "
+                            "channel. Each item is {venue_id, trait, value}; free-text delivery still requires "
+                            "choice=4 (COMMUNICATE)."
                         ),
                         "items": {
                             "type": "object",

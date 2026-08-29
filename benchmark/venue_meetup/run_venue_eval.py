@@ -20,7 +20,13 @@ except ModuleNotFoundError:  # pragma: no cover - dry-run environments may not i
     cv2 = None
 
 from benchmark.venue_meetup._core.policy import ScriptedVenueNavPolicy, ScriptedVenueSmokePolicy, VenueMeetupPolicy
-from benchmark.venue_meetup.ablations import ablation_kwargs, minimal_ablation_names
+from benchmark.venue_meetup.ablations import (
+    ConditionSpec,
+    all_condition_names,
+    minimal_ablation_names,
+    poc_condition_names,
+    resolve_condition,
+)
 from benchmark.venue_meetup.coarse_map import with_rendered_coarse_map
 from benchmark.venue_meetup.generator import evaluation_matrix, generate_scenario
 from benchmark.venue_meetup.social_metrics import compute_social_metrics
@@ -30,7 +36,7 @@ from simworld.communicator.communicator import Communicator
 from simworld.communicator.unrealcv import UnrealCV
 from simworld.config import Config
 
-RUN_MANIFEST_SCHEMA_VERSION = 1
+RUN_MANIFEST_SCHEMA_VERSION = 2
 
 # Key fragments treated as secrets when serializing CLI/config into the manifest.
 _SECRET_KEY_FRAGMENTS = (
@@ -45,16 +51,46 @@ _SECRET_KEY_FRAGMENTS = (
     "credential",
     "private_key",
     "client_secret",
+    "token",
 )
 
 _SECRET_VALUE_MARKERS = (
     "sk-",
     "bearer ",
+    "basic ",
     "api_key=",
+    "api_key:",
+    "api-key=",
+    "api-key:",
+    "api-token=",
+    "api-token:",
+    "api token=",
+    "api token:",
     "apikey=",
+    "apikey:",
     "access_token=",
+    "access_token:",
+    "access-token=",
+    "access-token:",
+    "auth_token=",
+    "auth_token:",
+    "auth-token=",
+    "auth-token:",
+    "authorization=",
+    "authorization:",
     "password=",
+    "password:",
+    "passwd=",
+    "passwd:",
     "secret=",
+    "secret:",
+    "client_secret=",
+    "client_secret:",
+    "private_key=",
+    "private_key:",
+    "token=",
+    "token:",
+    "x-api-key",
 )
 
 _RUNTIME_PACKAGE_CANDIDATES = (
@@ -151,8 +187,40 @@ def _jsonable_arg_value(value: Any) -> Any:
     return value
 
 
+_DROP_SECRET = object()
+
+
+def _sanitize_arg_value(value: Any) -> Any:
+    """Recursively serialize an argument while dropping credential material."""
+
+    if isinstance(value, Path):
+        converted: Any = value.as_posix()
+    elif isinstance(value, Mapping):
+        converted = {}
+        for key, nested_value in value.items():
+            key_text = str(key)
+            if is_secret_arg_key(key_text):
+                continue
+            nested = _sanitize_arg_value(nested_value)
+            if nested is _DROP_SECRET:
+                continue
+            converted[key_text] = nested
+    elif isinstance(value, (list, tuple)):
+        converted = []
+        for nested_value in value:
+            nested = _sanitize_arg_value(nested_value)
+            if nested is not _DROP_SECRET:
+                converted.append(nested)
+    else:
+        converted = _jsonable_arg_value(value)
+
+    if looks_like_secret_value(converted):
+        return _DROP_SECRET
+    return converted
+
+
 def sanitize_run_args(args: Any) -> dict[str, Any]:
-    """Serialize CLI/config args with secret keys/values removed."""
+    """Serialize CLI/config args with nested secret keys/values removed."""
 
     if hasattr(args, "__dict__"):
         raw = vars(args)
@@ -161,14 +229,9 @@ def sanitize_run_args(args: Any) -> dict[str, Any]:
     else:
         raise TypeError(f"args must be a Namespace or mapping, got {type(args)!r}")
 
-    sanitized: dict[str, Any] = {}
-    for key, value in raw.items():
-        if is_secret_arg_key(str(key)):
-            continue
-        converted = _jsonable_arg_value(value)
-        if looks_like_secret_value(converted):
-            continue
-        sanitized[str(key)] = converted
+    sanitized = _sanitize_arg_value(raw)
+    if sanitized is _DROP_SECRET or not isinstance(sanitized, dict):
+        return {}
     return sanitized
 
 
@@ -208,6 +271,7 @@ def build_run_manifest(
     *,
     scenarios: Sequence[Any],
     ablations: Sequence[str],
+    conditions: Sequence[str | ConditionSpec] | None = None,
     created_at: str | None = None,
     git_commit: Any = _UNSET,
     runtime_versions: Mapping[str, str] | None = None,
@@ -241,7 +305,26 @@ def build_run_manifest(
             if count not in agent_counts:
                 agent_counts.append(count)
 
-    walk = bool(getattr(args, "walk", False) if not isinstance(args, Mapping) else args.get("walk", False))
+    if isinstance(args, Mapping):
+        arg_prompt_mode = args.get("prompt_mode")
+        arg_info_partition = args.get("info_partition")
+        walk = bool(args.get("walk", False))
+    else:
+        arg_prompt_mode = getattr(args, "prompt_mode", None)
+        arg_info_partition = getattr(args, "info_partition", None)
+        walk = bool(getattr(args, "walk", False))
+
+    resolved_conditions: list[ConditionSpec] = []
+    condition_inputs: Sequence[str | ConditionSpec] = conditions if conditions is not None else ablations
+    for condition in condition_inputs:
+        resolved = resolve_condition(
+            condition,
+            prompt_mode=arg_prompt_mode,
+            info_partition=arg_info_partition,
+        )
+        if resolved not in resolved_conditions:
+            resolved_conditions.append(resolved)
+
     return {
         "schema_version": RUN_MANIFEST_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -253,6 +336,8 @@ def build_run_manifest(
         "seeds": seeds,
         "agent_counts": agent_counts,
         "ablations": [str(name) for name in ablations],
+        "conditions": [condition.compact() for condition in resolved_conditions],
+        "prompt_modes": [condition.prompt_mode for condition in resolved_conditions],
         "navigation_mode": "walk" if walk else "teleport",
     }
 
@@ -290,7 +375,7 @@ def capture_frames(observations: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return {agent_id: observation["ego_view"] for agent_id, observation in observations.items()}
 
 
-def make_policy(args: argparse.Namespace):
+def make_policy(args: argparse.Namespace, *, prompt_mode: str | None = None):
     """Construct the requested policy."""
 
     if args.policy == "scripted":
@@ -306,6 +391,7 @@ def make_policy(args: argparse.Namespace):
         temperature=args.temperature,
         top_p=args.top_p,
         reasoning=args.reasoning,
+        prompt_mode=prompt_mode or getattr(args, "prompt_mode", None) or "minimal",
     )
 
 
@@ -319,11 +405,25 @@ def token_count(records: list[dict[str, Any]]) -> int:
     return total
 
 
-def run_case(args: argparse.Namespace, scenario, case_dir: Path, *, ablation: str) -> dict[str, Any]:
+def run_case(
+    args: argparse.Namespace,
+    scenario,
+    case_dir: Path,
+    *,
+    ablation: str,
+    condition: ConditionSpec | None = None,
+) -> dict[str, Any]:
     """Run one live venue-meetup episode and write artifacts."""
 
+    # Resolve once at the case boundary so the environment, policy, metadata,
+    # and dry-run path all share exactly the same immutable configuration.
+    condition = condition or resolve_condition(
+        ablation,
+        prompt_mode=getattr(args, "prompt_mode", None),
+        info_partition=getattr(args, "info_partition", None),
+    )
     scenario = with_rendered_coarse_map(scenario, case_dir)
-    scenario = replace(scenario, max_steps=args.max_steps or scenario.max_steps)
+    scenario = replace(scenario, max_steps=getattr(args, "max_steps", None) or scenario.max_steps)
     write_json(case_dir / "scenario_hidden.json", scenario.compact(include_hidden=True))
     write_json(case_dir / "scenario_public.json", scenario.compact(include_hidden=False))
 
@@ -333,8 +433,15 @@ def run_case(args: argparse.Namespace, scenario, case_dir: Path, *, ablation: st
             "created_at": datetime.now().isoformat(timespec="seconds"),
             "dry_run": True,
             "scenario_id": scenario.scenario_id,
+            "map_template_id": scenario.map_template_id,
+            "num_agents": len(scenario.agents),
+            "policy": args.policy,
             "ablation": ablation,
+            "condition_id": condition.condition_id,
+            "condition": condition.compact(),
+            "prompt_mode": condition.prompt_mode,
             "scores": episode_score(scenario, fake_positions),
+            "args": sanitize_run_args(args),
             "artifacts": {"scenario_hidden": str(case_dir / "scenario_hidden.json"), "coarse_map": scenario.coarse_map_path},
         }
         write_json(case_dir / "metadata.json", metadata)
@@ -373,12 +480,11 @@ def run_case(args: argparse.Namespace, scenario, case_dir: Path, *, ablation: st
         speed=move_speed,
         record_motion=args.save_video,
         motion_fps=motion_fps,
-        info_partition=args.info_partition,
         navigate_mode="walk" if args.walk else "teleport",
         **stride_kwargs,
-        **ablation_kwargs(ablation),
+        **condition.env_kwargs(),
     )
-    policy = make_policy(args)
+    policy = make_policy(args, prompt_mode=condition.prompt_mode)
     trajectory: list[dict[str, Any]] = []
     model_records: list[dict[str, Any]] = []
     videos: dict[str, list[Any]] = {}
@@ -432,11 +538,14 @@ def run_case(args: argparse.Namespace, scenario, case_dir: Path, *, ablation: st
             "provider": args.provider,
             "model": args.model,
             "ablation": ablation,
+            "condition_id": condition.condition_id,
+            "condition": condition.compact(),
+            "prompt_mode": condition.prompt_mode,
             "success": final_info.get("success", False),
             "steps_run": len(trajectory),
             "scores": scores,
             "social_metrics": social,
-            "args": {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()},
+            "args": sanitize_run_args(args),
             "artifacts": {
                 "trajectory": str(case_dir / "trajectory.json"),
                 "model_responses": str(case_dir / "model_responses.jsonl"),
@@ -462,12 +571,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", type=Path)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--small-eval", action="store_true", help="Run the 3-template x seeds x N matrix.")
-    parser.add_argument("--ablation-matrix", action="store_true", help="Run main + four V0 ablations.")
+    parser.add_argument("--ablation-matrix", action="store_true", help="Run the four canonical POC conditions in order.")
     parser.add_argument("--template-id", default="central_square_v0")
     parser.add_argument("--seeds", default="7")
     parser.add_argument("--num-agents", default="2")
     parser.add_argument("--hidden-profile", action="store_true", help="Overlay a hidden-profile information structure (asymmetric per-agent needs + partition zones; see notes.md).")
-    parser.add_argument("--info-partition", choices=["none", "spatial"], default="none", help="Inspection partition: 'spatial' restricts each agent to inspecting venues in its own zone.")
+    parser.add_argument("--info-partition", choices=["none", "spatial"], default=None, help="Optional inspection-partition override; otherwise use the selected condition's default.")
+    parser.add_argument("--prompt-mode", choices=["minimal", "cooperative"], default=None, help="Optional prompt-mode override; otherwise use the selected condition's default.")
     parser.add_argument("--policy", choices=["scripted", "nav_smoke", "minimax"], default="scripted")
     parser.add_argument("--provider", default="minimax")
     parser.add_argument("--model", default="MiniMax-M3")
@@ -477,7 +587,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature", type=float, default=0)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--vision-max-width", type=int, default=512)
-    parser.add_argument("--ablation", choices=minimal_ablation_names(), default="main")
+    condition_cli_names = list(dict.fromkeys(all_condition_names() + minimal_ablation_names()))
+    parser.add_argument("--ablation", choices=condition_cli_names, default="main")
     parser.add_argument("--max-steps", type=int)
     parser.add_argument(
         "--walk",
@@ -510,7 +621,21 @@ def scenarios_from_args(args: argparse.Namespace):
     """Build scenarios requested by CLI args."""
 
     if args.small_eval:
-        return evaluation_matrix(seeds=parse_csv_ints(args.seeds), agent_counts=tuple(parse_csv_ints(args.num_agents)))
+        if getattr(args, "hidden_profile", False):
+            raise ValueError("--small-eval cannot be combined with --hidden-profile; choose an explicit template for hidden-profile runs")
+        # Keep the advertised smoke matrix explicit.  ``TEMPLATE_BUILDERS``
+        # also contains legacy aliases that should not silently expand a
+        # small evaluation.
+        templates = [
+            "central_square_v0",
+            "station_quarter_medium_v1",
+            "riverside_market_large_v1",
+        ]
+        return evaluation_matrix(
+            templates=templates,
+            seeds=parse_csv_ints(args.seeds),
+            agent_counts=tuple(parse_csv_ints(args.num_agents)),
+        )
 
     scenarios = []
     for seed in parse_csv_ints(args.seeds):
@@ -537,18 +662,30 @@ def main() -> int:
 
     run_name = args.run_name or datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = args.output_dir / run_name
-    ablations = minimal_ablation_names() if args.ablation_matrix else [args.ablation]
-    scenarios = scenarios_from_args(args)
-    manifest = build_run_manifest(args, scenarios=scenarios, ablations=ablations)
+    ablations = poc_condition_names() if args.ablation_matrix else [args.ablation]
+    try:
+        scenarios = scenarios_from_args(args)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    conditions = [
+        resolve_condition(
+            name,
+            prompt_mode=args.prompt_mode,
+            info_partition=args.info_partition,
+        )
+        for name in ablations
+    ]
+    manifest = build_run_manifest(args, scenarios=scenarios, ablations=ablations, conditions=conditions)
     write_json(run_dir / "run_manifest.json", manifest)
     print(f"Wrote run manifest to {run_dir / 'run_manifest.json'}", flush=True)
 
     summaries = []
     for scenario in scenarios:
-        for ablation in ablations:
+        for ablation, condition in zip(ablations, conditions):
             case_dir = run_dir / scenario.map_template_id / scenario.scenario_id / ablation
             print(f"Running venue meetup: scenario={scenario.scenario_id} ablation={ablation} output={case_dir}", flush=True)
-            metadata = run_case(args, scenario, case_dir, ablation=ablation)
+            metadata = run_case(args, scenario, case_dir, ablation=ablation, condition=condition)
             summaries.append(metadata)
             print(
                 f"  success={metadata.get('success')} steps={metadata.get('steps_run')} "

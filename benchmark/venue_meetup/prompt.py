@@ -1,36 +1,78 @@
-"""Prompt construction for Venue Meetup agents."""
+"""Prompt construction for Venue Meetup agents.
+
+The benchmark has two deliberately small prompt modes. Both modes use the
+same task/action contract; ``cooperative`` only adds an explicit strategy
+scaffold. Keeping the contract in one place makes it harder for the prompt
+and action schema to drift apart while preserving a minimally instructed
+baseline for social evaluation.
+"""
 
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
-VENUE_MEETUP_SYSTEM_PROMPT = """You are one visitor agent in a shared embodied SimWorld "venue meetup" task.
-Your team must agree on the single best venue that is feasible for EVERYONE, then physically meet there.
+PromptMode = Literal["minimal", "cooperative"]
+PROMPT_MODES: tuple[str, str] = ("minimal", "cooperative")
 
-What you receive each turn:
-- A camera image (THIRD-PERSON: you see your own back, so it is unreliable for left/right).
-- A coarse schematic map and your compass heading ("self_pose").
-- "candidate_venues": every venue on the map. Under spatial partition each shows "zone_id" and "can_inspect": you can only INSPECT venues in your OWN area; for venues with can_inspect=false you must rely on a teammate's report.
-- "known_venue_facts": structured ground-truth traits you have personally learned by inspecting (open, accessible, food_drink, quiet, uncrowded, shelter, near_transit, capacity).
-- "private_constraint": YOUR hard requirement. Teammates have their own (possibly different) hard requirements you will not know unless they tell you.
-- "group_chat": messages from teammates.
 
-Action choices (set "choice"):
-- 5=NAVIGATE target_venue_id: travel to a venue's meeting point in one action. Use this to move and to converge; it walks you there, so you do NOT need to micro-steer.
-- 3=INSPECT target_venue_id: learn a venue's structured facts. You must FIRST NAVIGATE to that venue (be physically standing in it) AND it must be in your own area (can_inspect=true). The usual pattern is NAVIGATE to a venue, then INSPECT it the next turn. Inspect before trusting any trait.
-- 4=COMMUNICATE message: send concise, factual findings to teammates. Optionally attach "shared_facts" structured claims for traits you personally inspected.
-- 1=STEP_FORWARD / 2=TURN_AROUND: optional fine movement; rarely needed if you NAVIGATE. For TURN_AROUND set angle (deg) and clockwise.
-- 0=WAIT.
+def normalize_prompt_mode(prompt_mode: PromptMode | str | None) -> PromptMode:
+    """Return a validated prompt mode, defaulting to the minimal contract."""
 
-Coordination (this is what is being measured):
-- Relevant venues are split across areas, so no single agent can verify the best venue alone: pool inspections and rely on teammate reports.
-- Share facts your TEAMMATES need, not only the ones you personally care about. A trait you do not require may be exactly what another agent's constraint needs.
-- State your own hard requirement so teammates can rule venues in or out for you.
-- When reporting inspected traits, prefer structured "shared_facts": [{venue_id, trait, value}, ...] only for facts you directly inspected. Do not invent claims for uninspected venues/traits. Free-text "message" may accompany claims or stand alone for legacy compatibility.
-- Once the group identifies the venue feasible for everyone, all NAVIGATE there.
+    value = "minimal" if prompt_mode is None else str(prompt_mode).strip().lower()
+    if value not in PROMPT_MODES:
+        raise ValueError(f"prompt_mode must be 'minimal' or 'cooperative', got {prompt_mode!r}")
+    return value  # type: ignore[return-value]
 
-Return ONLY one valid JSON object, no markdown and no prose."""
+
+# This is intentionally the only complete task/action contract. The
+# cooperative mode below is an addendum rather than a second prompt.
+_SHARED_TASK_ACTION_CONTRACT = (
+    "You are one visitor agent in a shared embodied SimWorld venue-meetup task.\n"
+    "The group objective is to identify the single venue feasible for everyone and physically meet there.\n\n"
+    "The observation for the current turn can contain:\n"
+    "- an ego camera image (THIRD-PERSON: your own back is visible, so left/right is unreliable);\n"
+    "- coarse-map text/path and self_pose with the current position and heading;\n"
+    "- candidate_venues, including each venue id and whether it can be inspected from your area;\n"
+    "- known_venue_evidence, readable evidence available in this condition (normally first-hand; the upper bound may synthesize all venue evidence);\n"
+    "- private_constraint, requirement information visible in this condition (normally the acting agent's own; full-information may expose all group constraints);\n"
+    "- group_chat, messages delivered by other agents;\n"
+    "- last_action, last_inspect_result, navigation, landmarks, and valid_actions.\n\n"
+    "Actions use the integer in \"choice\":\n"
+    "- 0=WAIT (no movement and no message);\n"
+    "- 1=STEP_FORWARD with duration and direction (0=forward, 1=backward);\n"
+    "- 2=TURN_AROUND with angle in degrees and clockwise;\n"
+    "- 3=INSPECT with target_venue_id or target_description;\n"
+    "- 4=COMMUNICATE with an optional short message;\n"
+    "- 5=NAVIGATE with target_venue_id to travel to its meeting point.\n\n"
+    "INSPECT is valid only when the target is permitted by the information partition, "
+    "the agent is within the required inspection proximity of the venue, and the target is visible in the "
+    "current camera/object-mask view. A successful inspection returns concise, "
+    "readable evidence. Do not treat a venue trait as inspected unless that evidence is present.\n"
+    "Only choice=4 (COMMUNICATE) sends a message; text or fields attached to any other action are not delivered.\n"
+    "The optional shared_facts field is an evaluator-only annotation for directly inspected "
+    "(personally inspected) traits; it is never recipient-visible and is not a parallel communication channel.\n\n"
+    "Return exactly one valid JSON object with keys: choice, duration, direction, angle, clockwise, "
+    "target_venue_id, target_description, message, shared_facts, reasoning. No markdown or prose outside the JSON object."
+)
+
+_COOPERATIVE_ADDENDUM = (
+    "Cooperative strategy addendum: disclose your private need to the group, report evidence useful to "
+    "teammates, pool observations across agents, and coordinate before convergence on the shared venue."
+)
+
+
+def build_system_prompt(prompt_mode: PromptMode | str = "minimal") -> str:
+    """Build the system prompt for the selected mode."""
+
+    mode = normalize_prompt_mode(prompt_mode)
+    if mode == "cooperative":
+        return f"{_SHARED_TASK_ACTION_CONTRACT}\n\n{_COOPERATIVE_ADDENDUM}"
+    return _SHARED_TASK_ACTION_CONTRACT
+
+
+# Backward-compatible name used by existing callers and archived runs.
+VENUE_MEETUP_SYSTEM_PROMPT = build_system_prompt("minimal")
 
 
 def strip_frame(observation: dict[str, Any]) -> dict[str, Any]:
@@ -39,18 +81,34 @@ def strip_frame(observation: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in observation.items() if key != "ego_view"}
 
 
-def build_agent_prompt(observation: dict[str, Any]) -> str:
-    """Build one agent's structured user prompt."""
+def build_agent_prompt(
+    observation: dict[str, Any],
+    prompt_mode: PromptMode | str = "minimal",
+) -> str:
+    """Build one agent's structured user prompt.
 
+    The system message owns the shared task/action contract.  This user
+    message only identifies the condition-specific observation values and
+    serializes the current observation, so a cooperative addendum is not
+    accidentally delivered twice.
+    """
+
+    normalize_prompt_mode(prompt_mode)
     prompt_payload = strip_frame(observation)
+    observation_note = (
+        "Observation values for this turn are below. known_venue_evidence is readable evidence available in "
+        "this condition (first-hand in the main condition; synthesized for the full-information upper bound). "
+        "private_constraint is requirement information visible in this condition (normally the acting agent's "
+        "own; full-information exposes all group constraints). shared_facts remains an optional evaluator "
+        "annotation for personally inspected traits and is not recipient-visible."
+    )
+    if "known_venue_facts" in prompt_payload:
+        observation_note += (
+            " All decision facts and all group constraints are intentionally exposed in this full-information "
+            "observation, including known_venue_facts."
+        )
     return (
-        "Task: pool inspections with your teammates and converge on the single venue that is feasible for EVERYONE.\n"
-        "Use NAVIGATE (choice=5) with target_venue_id to travel to a venue; it walks you there. Then INSPECT (choice=3) that same venue (you must be standing in it, and it must be in your own area) to learn its structured facts.\n"
-        "Only inspect venues with can_inspect=true; for the rest, rely on teammate reports and share what your teammates need (not only what you need).\n"
-        "Do not infer traits from metadata - INSPECT to learn them, then COMMUNICATE the facts that matter to others.\n"
-        "When communicating inspected facts, include optional shared_facts claims [{venue_id, trait, value}] only for traits you personally inspected; free-text message remains allowed.\n"
-        "Your observation JSON follows.\n"
+        f"{observation_note}\n\nYour observation JSON follows.\n"
         f"{json.dumps(prompt_payload, indent=2, default=str)}\n"
-        "Return JSON keys: choice, duration, direction, angle, clockwise, target_venue_id, target_description, message, shared_facts, reasoning.\n"
-        "Keep message short and factual. Include target_venue_id for NAVIGATE and INSPECT when known. Put structured claims only in shared_facts for directly inspected facts."
+        "Use the system contract to choose one action for this turn."
     )
