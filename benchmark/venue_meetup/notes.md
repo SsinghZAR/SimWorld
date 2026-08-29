@@ -73,9 +73,11 @@ zone holds the optimum across instances.
 1. **Information partition** (core new mechanic) — see 6.1 for the toggle and 6a for
    the skill-check variant.
 2. **Reveal traits as structured text on a successful inspect** (RESOLVED: structured,
-   not image-only). For a *social* benchmark, return ground-truth attributes on inspect
-   so the only remaining uncertainty is social, not visual trait-recognition. This also
-   makes the process metrics exact (match message content against known facts).
+   not image-only). For a *social* benchmark, the evaluator keeps the canonical
+   decision-fact dictionary while the acting agent receives deterministic, readable
+   evidence sentences. This keeps visual trait recognition out of the social DV while
+   preventing hidden truth from leaking into ordinary public observations. Structured
+   message claims are checked against the sender's first-hand canonical records.
 3. **Keep constraints private** in `main` (so sharing one's own need is also tested);
    `shared_constraints` ablation reveals them to isolate "share venue facts" from
    "share my needs."
@@ -143,8 +145,11 @@ Data already logged: full `transcript` + per-agent `inboxes` (MessageBus),
   communicated.
 - **Other-regarding ratio:** of facts shared, fraction relevant to the *partner's*
   constraint vs. its own. (operationalizes B)
-- **Uptake / grounding:** did the receiver change target after a message?
-  (counterfactual: replay step with message removed)
+- **Uptake / grounding (current proxy):** did the dependent receiver ultimately
+  arrive at the optimum after a report? This is a non-causal final-arrival
+  diagnostic, not evidence that a message caused a target change.
+  Message-removal/counterfactual replay with fixed policy responses remains
+  pending; do not label the current metric causal uptake.
 - **Necessity check:** confirm cross-agent info was required (true by construction).
 - **Redundancy:** fraction of messages restating already-known facts.
 
@@ -154,20 +159,27 @@ global ground truth (critical once `skill_check` introduces partial observabilit
 
 ## 8. Ablation re-mapping (the IV sweep)
 
-- `main` — partitioned info + private constraints + comms = full social task.
-- `no_communication` — partitioned, comms off = egocentric floor (should fail; this
-  is the hidden-profile proof).
-- `full_shared_information` — all traits to all = upper bound (failure here = reasoning,
-  not comms).
-- `shared_constraints` — needs known = isolates sharing venue facts from sharing needs.
-- (optional new) `cooperative_prompt` vs `selfish_prompt` — is other-regarding sharing
-  elicited by instruction or emergent?
+The original V0 names remain accepted for archived artifacts, but the POC matrix
+now uses four canonical conditions:
+
+- `main` — spatial partition + private constraints + communication + minimal prompt.
+- `no_communication` — the same hidden profile with delivery disabled (egocentric floor).
+- `full_information` — all canonical decision facts and all group constraints exposed
+  as an upper bound; candidate summaries remain safe navigation records.
+- `cooperative_scaffold` — the main environment kwargs with only a cooperative prompt
+  addendum.
+
+Legacy names (`no_coarse_map`, `shared_constraints`, and
+`full_shared_information`) remain separate compatibility conditions. The prior
+`cooperative_prompt`/`selfish_prompt` proposal is superseded by
+`cooperative_scaffold` versus the minimal `main` prompt.
 
 ## 9. Decisions / forks
 
 RESOLVED:
 
-- Inspect returns STRUCTURED ground-truth traits (pure-social).
+- Inspect returns deterministic readable evidence to the agent and canonical
+  ground-truth traits only in evaluator records (pure-social).
 - Movement AUTOMATED via high-level `NAVIGATE(venue_id)`.
 - Partition is a TOGGLE (`info_partition`); V1 default = `spatial`.
 - Build order: notes -> hidden-profile scenario + partition mechanic -> process metrics.
@@ -177,8 +189,11 @@ spatial; probabilistic invariant tuning.
 
 ## 10. What already exists in code (reuse, don't rebuild)
 
-- Embodied inspect gate (proximity + line-of-sight): `venue_env.py` `_inspect`
-  (`distance <= self.inspect_range and mask_pixels >= self.inspect_min_mask_pixels`).
+- Embodied inspect gate (partition, proximity, and current-orientation line of
+  sight): `venue_env.py` `_inspect` checks the venue region/range and
+  `mask_pixels >= self.inspect_min_mask_pixels` before refocusing. Successful
+  results split readable evidence (public) from canonical facts/diagnostics
+  (evaluator).
 - Per-agent obs assembly + `full_shared_information` / `shared_constraints` handling:
   `venue_env.py` `_build_observations`.
 - Comms routing — Broadcast / Directed / Proximity routers + addressable recipients +
@@ -198,15 +213,18 @@ spatial; probabilistic invariant tuning.
      outside an agent's zone return `INSPECT_FAILED: outside your area`
      (`venue_env.py`).
    - Structured trait reveal on a successful inspect (`facts`), tracked per agent in
-     `revealed_facts`; surfaced in obs as `known_venue_facts`
-     (`venue_env.py`, `scoring.venue_decision_facts`).
+     evaluator-only `revealed_facts`; ordinary observations surface only ordered
+     `known_venue_evidence`. The `full_information` upper bound may expose
+     `known_venue_facts` (`venue_env.py`, `scoring.venue_decision_facts`).
    - `NAVIGATE(target_venue_id)` high-level action (`action_space.py`,
      `venue_env._navigate`) — abstracts locomotion (places agent at the venue's
      meeting point). Prompt rewritten for the new model (`prompt.py`).
    - CLI: `--hidden-profile`, `--info-partition` (`run_venue_eval.py`).
 3. **Process metrics** [DONE] — `social_metrics.py`: sharing_completeness,
    other_regarding_ratio, redundancy, must_pool (necessity), optimum_cross_communicated,
-   uptake. Written per case to `social_metrics.json` + folded into `metadata.json`.
+   and the non-causal dependent-arrival uptake proxy. Written per case to
+   `social_metrics.json` + folded into `metadata.json`; causal message uptake is
+   not yet implemented.
    Validated offline: cleanly separates selfish vs other-regarding transcripts.
 
 REMAINING:
@@ -220,16 +238,17 @@ REMAINING:
 ```
 # Hidden-profile + spatial partition, scripted smoke (no API), 2 agents:
 .venv/Scripts/python.exe -m benchmark.venue_meetup.run_venue_eval \
-  --hidden-profile --info-partition spatial --policy scripted --seeds 7
+  --hidden-profile --info-partition spatial --policy scripted --seeds 7 --ablation main
 
 # Offline serialization/score sanity (no UE):
 .venv/Scripts/python.exe -m benchmark.venue_meetup.run_venue_eval \
   --dry-run --hidden-profile --info-partition spatial --seeds 7
 
-# Ablation sweep (egocentric floor vs upper bound) with the VLM:
+# Canonical four-condition matrix (with a VLM; configure credentials in the environment):
 .venv/Scripts/python.exe -m benchmark.venue_meetup.run_venue_eval \
   --hidden-profile --info-partition spatial --policy minimax --ablation-matrix --seeds 7
 ```
 
-The `skill_check` / DnD layer slots in as a new `info_partition` mode later, so the
-toggle built now means V2 is additive, not a refactor.
+The `skill_check` / DnD layer remains planned V2 work. The current accepted
+`info_partition` values are `none` and `spatial`; adding skill checks should be
+additive once the perception design is implemented.

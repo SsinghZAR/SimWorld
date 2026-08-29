@@ -34,12 +34,15 @@ new template must support both:
 ### What is already working
 
 - Scenario data model, asset spawning, coarse-map rendering, group chat,
-  structured inspection facts, scoring, logs, and social-process metrics.
+  structured inspection facts with a readable-evidence/public split, scoring,
+  logs, and social-process metrics.
 - A 2-agent hidden-profile generator that guarantees one group-feasible optimum
-  for a 4-venue, 2-zone case.
+  for the supported 4-, 8-, and 12-venue, 2-zone cases.
 - `info_partition=spatial`, private constraints, and the V0 ablation registry.
 - Abstracted `NAVIGATE`, plus an optional physical walking implementation.
-- A recorded successful live VLM episode for the 2-agent hidden-profile case.
+- Historical live-run notes may exist, but current documentation makes no live
+  VLM success claim; the reproducible scripted smoke and later VLM command are
+  documented in `README.md`.
 
 ### Important limitations to fix
 
@@ -59,19 +62,18 @@ new template must support both:
    adequate for the plaza proof of concept, but it cannot express sidewalks,
    crossings, bridges, alleyways, one-way detours, or a canal/rail barrier.
 
-4. **Hidden profiles are fixed to 2 agents and 4 venues.**
-   The current generator correctly rejects other shapes. This is safe, but
-   prevents medium/large information structures and 3-agent experiments.
+4. **Hidden profiles are fixed to 2 agents (not 4 venues).**
+   The current generator correctly supports the 4-, 8-, and 12-venue templates
+   and rejects other agent counts. This is safe, but prevents 3-agent experiments.
 
 5. **Free-text social metrics are approximate.**
-   Metrics infer facts by matching venue aliases and trait keywords. They are
-   useful diagnostics, but cannot reliably distinguish a true fact report from
-   an unsupported, negated, or ambiguous claim.
+   Legacy metrics infer facts by matching venue aliases and trait keywords. The
+   structured `shared_facts` annotations now have exact evaluator metrics based
+   on first-hand canonical inspection records; they are not recipient-visible.
 
-6. **There is no benchmark-specific public documentation or automated test
-   suite.**
-   Existing validation is primarily dry runs, generator assertions, and manual
-   live UE runs.
+6. **The POC now has benchmark documentation and offline contract tests.**
+   Broader layout/preflight coverage remains a planned follow-up; existing live
+   validation is still primarily scripted/manual UE smoke.
 
 ## Non-Goals
 
@@ -115,7 +117,9 @@ class VenueMeetupConfig:
     resolution: tuple[int, int] = (640, 360)
     viewmode: str = "lit"
     navigate_mode: Literal["teleport", "walk"] = "teleport"
-    info_partition: Literal["none", "spatial"] = "none"
+    # Canonical POC conditions default to spatial; an explicit CLI override may
+    # select none for an upper-bound partition.
+    info_partition: Literal["none", "spatial"] = "spatial"
     no_communication: bool = False
     no_coarse_map: bool = False
     full_shared_information: bool = False
@@ -212,7 +216,7 @@ Preserve the public `VenueMeetupEnv.reset()`, `step()`, and `disconnect()` API.
 This lets existing runner code and stored artifact conventions survive the
 refactor.
 
-### 4. Structured fact-report side channel
+### 4. Structured evaluator annotations
 
 Continue to allow natural-language broadcast messages. Add an optional,
 machine-readable field to the communication action:
@@ -239,9 +243,11 @@ Rules:
 - Report: valid first-hand fact share, unsupported claim count, fact novelty,
   partner-relevant share, and cross-zone optimum evidence.
 
-Update the model prompt to make `shared_facts` encouraged but optional. Do not
-make this a required action-schema field until provider structured-output
-reliability has been checked.
+POC status: the action contract documents `shared_facts` as optional evaluator
+annotations, never recipient communication; they are not a required
+action-schema field. Only `choice=4` (`COMMUNICATE`) creates a deliverable
+message; recipient views exclude claims while the evaluator transcript retains
+them. Keep this boundary when provider structured-output support evolves.
 
 ## Map Specifications
 
@@ -358,8 +364,9 @@ route choice and a genuine navigation stress test.
 
 ## Generalized Hidden-Profile Generator
 
-Do not extend the old 4-venue generator by adding arbitrary random properties.
-Use a deliberate, testable information design.
+The generator now applies the same deliberate, testable information design to
+the supported 4-, 8-, and 12-venue templates; do not add arbitrary random
+properties when extending it.
 
 ### Required invariants for every generated social episode
 
@@ -394,22 +401,24 @@ Implement in this order:
    optimum whose decisive facts are distributed across agents. Do not claim a
    3-agent result until no single pair can solve it either.
 
-Expose these values through a `HiddenProfileSpec` rather than hard-coded
-`num_agents == 2` / `len(venues) == 4` checks.
+Expose these values through a `HiddenProfileSpec` rather than hard-coded venue
+count checks. The current, explicit product limitation remains
+`num_agents == 2`.
 
 ## Step-by-Step Implementation Plan
 
 ### Phase 0 — Preserve the baseline
 
-1. Record the current commit, CLI command, and successful `hp_vlm_64_s7`
-   artifacts in the new benchmark README.
+1. Record the current commit and reproducible dry-run/scripted-smoke commands
+   in the benchmark README. A live VLM success claim is not required until UE
+   preflight and provider configuration are available.
 2. Do not change current `central_square_v0` behaviour during the first
    refactor phases.
 3. Add a baseline dry-run check that asserts the scenario serializes and
    existing V0 scores remain unchanged.
 
-**Exit gate:** the original hidden-profile dry run and scripted smoke command
-still produce the same scenario shape and score.
+**Exit gate:** the hidden-profile dry run and scripted smoke command still
+produce the same scenario shape and score.
 
 ### Phase 1 — Add tests before changing behaviour
 
@@ -417,7 +426,8 @@ Create `tests/venue_meetup/` (or follow the repository's adopted test location)
 with pure-Python tests for:
 
 - `score_venue`, `episode_score`, and convergence attribution.
-- 4-venue hidden-profile invariants across at least 100 deterministic seeds.
+- Hidden-profile invariants for the 4-, 8-, and 12-venue templates across
+  deterministic seeds.
 - spatial partition inspect permissions.
 - message routing/ablations.
 - coarse map rendering with no hidden properties serialized publicly.
@@ -564,12 +574,13 @@ preflight failures are fixed or clearly categorized.
    - 2 agents initially.
 
 3. **Ablation suite**
-   - main;
-   - no communication;
-   - shared constraints;
-   - full shared information;
-   - no coarse map;
-   - same seeds/scenarios across conditions.
+   - canonical `main`;
+   - `no_communication`;
+   - `full_information` (all facts + all constraints upper bound);
+   - `cooperative_scaffold` (prompt-only addendum);
+   - same seeds/scenarios across conditions. Legacy `no_coarse_map`,
+     `shared_constraints`, and `full_shared_information` remain available for
+     compatibility but are not the new matrix.
 
 4. **Embodied stress evaluation**
    - same selected cases in `--walk` mode;
@@ -632,4 +643,3 @@ This cleanup is complete when all of the following are true:
 7. Unit tests, smoke commands, map-authoring documentation, and reproducible
    run manifests exist.
 8. The benchmark reports separate social-reference and embodied-stress results.
-

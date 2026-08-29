@@ -1,132 +1,263 @@
 # Venue Meetup
 
-UE-grounded multi-agent benchmark for **social information sharing**: agents must pool private observations to meet at a unique group-feasible venue.
+Venue Meetup is a two-agent, UE-grounded benchmark for social information
+sharing. Each hidden-profile episode has one group-feasible venue. Agents must
+inspect what they can reach, communicate useful information, and converge on
+that venue. Movement is controlled so the reference result measures social
+reasoning; `--walk` is a separate physical-navigation diagnostic.
 
-Locomotion is a controlled variable, not the primary DV. Success depends on communication and other-regarding message content under a hidden-profile information structure.
+## Research question and measurement
 
-## Research question
+The main question is whether an agent integrates a partner's report and shares
+facts that matter to the partner's private need (other-regarding communication),
+rather than merely selecting a venue that suits itself. The primary outcome is
+convergence at the unique group-feasible venue. `social_metrics.json` reports
+the process: exact structured-claim checks, first-hand sharing completeness,
+partner relevance, redundancy, and hidden-profile necessity. Free-text metrics
+remain legacy heuristics; they are not treated as exact fact reports.
 
-Does an agent integrate partner reports (group information), and does it share facts that matter to the partner's private needs (other-regarding message passing)? Outcome scoring rewards meeting at the group-feasible venue; process metrics diagnose *how* agents shared information.
+The benchmark does not make low-level locomotion the social dependent variable.
+Default `NAVIGATE` uses teleport placement for a fast, controlled social
+reference. `--walk` uses the authored sidewalk/crossing graph (or the legacy
+obstacle planner for central-square scenarios) and reports route diagnostics
+separately from social scores.
 
-## Information partition and hidden properties
+## Four information layers
 
-- **Public to agents:** coarse map, candidate venues (ids/locations/types), own private hard requirement (in `main`), ego camera, inbox, known inspect facts.
-- **Hidden:** venue ground-truth traits until a successful `INSPECT`; partner constraints (unless ablation); optimum id; soft weights used for scoring.
-- **`--info-partition spatial`:** each agent may inspect only venues in its own zone; cross-zone facts must come from communication.
-- **`--info-partition none`:** inspect returns traits without zone gating (easier upper bound).
-- **`skill_check` (V2):** not implemented; do not expect DnD-style attribute rolls.
+| Layer | What an agent can see | What remains evaluator-only |
+| --- | --- | --- |
+| Public navigation | Candidate identity summaries (`venue_id`, type, slot, visual summary), coarse map, landmarks, roster, pose, and action feedback | Venue properties, regions, asset paths, mask colours, and internal diagnostics |
+| First-hand evidence | A successful `INSPECT` adds deterministic, ordered, readable sentences to `known_venue_evidence` and the latest inspect result | The canonical trait dictionary used to generate those sentences |
+| Hidden truth and constraints | In `main`, only the acting agent's own private constraint is shown | Canonical decision facts, the partner's constraint, soft weights, and the optimum; `full_information` intentionally exposes the facts and all group constraints as an upper bound |
+| Communication | Only `COMMUNICATE` (`choice=4`) delivers optional text to other agents | `shared_facts` claims are evaluator annotations, never a recipient-visible side channel |
 
-## Actions and turns
+The default information partition is `spatial`: an agent may inspect only
+venues in its assigned zone. `none` is an optional upper-bound partition
+override. The selected condition supplies the default; `--info-partition` can
+override it explicitly.
 
-Agents act in **synchronous turns**. Each turn is one structured action:
+### Evidence, hidden truth, and the inspection gate
 
-| Action | Role |
-|--------|------|
-| `NAVIGATE` | High-level travel to a venue meeting region |
-| `INSPECT` | Reveal structured traits when in range / allowed by partition |
-| `COMMUNICATE` | Group or directed messages; optional free-text `message` and/or structured `shared_facts` claims `[{venue_id, trait, value}, ...]` for traits the sender personally inspected |
-| `STEP_FORWARD` / `TURN_AROUND` | Optional fine movement |
-| `WAIT` | No-op |
+Evidence is not hidden truth. Evidence is generated from the canonical facts in
+a stable vocabulary (`open`, `reachable`, `accessible`, `food_drink`, `quiet`,
+`uncrowded`, `shelter`, `near_transit`, and `capacity`), but only the evidence
+sentences reach a normal agent. A successful typed inspection requires, in order:
 
-## Navigation modes
+1. a permitted target under the information partition;
+2. proximity: the agent is inside the venue meeting region and within the
+   configured inspect range (5,000 cm by default);
+3. sufficient pixels for the target in the current object-mask camera view
+   (`inspect_min_mask_pixels`, 50 by default in the live environment).
 
-- **Teleport (default):** `NAVIGATE` places the agent at the venue meeting point. Use for social/reference evaluation.
-- **`--walk`:** physical traversal. Prefer **graph-backed layout routes** (sidewalks, crossings, bridges) when the scenario carries a district layout; otherwise fall back to the **legacy obstacle-aware free-space planner** (plaza templates). Report navigation diagnostics separately from social scores.
+The current orientation is checked before any refocus. Refocusing occurs only
+after the mask threshold succeeds. Failed checks return readable failure text
+and no facts. Successful evidence is deterministic and readable; canonical
+facts and mask/proximity diagnostics stay in evaluator records.
 
-## Map templates
+Communication uses the same boundary. Text attached to `WAIT`, `INSPECT`,
+`NAVIGATE`, or movement actions is never delivered. On `COMMUNICATE`, the
+recipient serialization contains sender, recipients, text, step, and delivery
+metadata, but no claims. The evaluator transcript retains the exact
+`shared_facts` claims and checks them against the sender's first-hand canonical
+inspection records.
 
-Three real layouts (use these IDs):
+## Actions and navigation
 
-| Template ID | Scale | Venues / structure | Default turn budget |
-|-------------|-------|--------------------|---------------------|
-| `central_square_v0` | Plaza smoke layout | 4 venues on a ring | 32 |
-| `station_quarter_medium_v1` | ~350–500 m district | 8 venues, 4 blocks | 64 |
-| `riverside_market_large_v1` | ~700–900 m district | 12 venues, 6+ blocks, canal/rail barrier + bridges | 128 |
+Agents act synchronously once per turn:
 
-**Legacy aliases (do not use as independent maps):** `station_street_v0` and `canal_bridge_v0` only relabel **central-square geometry**. They are not distinct UE layouts.
+| Choice | Action |
+| ---: | --- |
+| 0 | `WAIT` |
+| 1 | `STEP_FORWARD` (optional fine movement) |
+| 2 | `TURN_AROUND` |
+| 3 | `INSPECT` a permitted, nearby, currently visible venue |
+| 4 | `COMMUNICATE` optional text and/or evaluator-only claims |
+| 5 | `NAVIGATE` to a venue's meeting point |
 
-## Layout authoring model
+`NAVIGATE` defaults to teleport mode. Add `--walk` to physically traverse the
+layout graph, with route, bridge, stall, replan, and distance diagnostics in the
+action log. A live walk smoke is not a social-evaluation score.
 
-Medium/large templates are deterministic Python-authored `DistrictLayout` specs: streets, blocks, frontages, landmarks, spawns, and a walk graph. Scenes spawn into the existing SimWorld base map via the asset catalog—no custom UE map assets required for these templates.
+## Templates
 
-## Hidden-profile invariants
+| Template | Scale and structure | Default turns |
+| --- | --- | ---: |
+| `central_square_v0` | Four-venue plaza smoke layout | 32 |
+| `station_quarter_medium_v1` | Authored station district, 8 venues across 4 blocks | 64 |
+| `riverside_market_large_v1` | Authored barrier/bridge market district, 12 venues | 128 |
 
-With `--hidden-profile` (current generator):
+The aliases `station_street_v0` and `canal_bridge_v0` are legacy names for
+central-square geometry, not independent city maps. Hidden-profile generation
+currently supports exactly two agents; each episode still has one optimum and
+partner-only decisive facts.
 
-- Exactly one group-feasible optimum.
-- No single agent can identify it from own-zone inspects + own constraint alone.
-- Partner-only decisive facts exist (other-regarding sharing is measurable).
+## Canonical POC conditions
 
-**Current limitation:** hidden-profile generation supports **2 agents** only. Do not claim 3-agent hidden-profile support.
+`--ablation` selects one condition and defaults to `main`. `--ablation-matrix`
+runs the following four conditions in this order. `--prompt-mode` and
+`--info-partition` are optional overrides; otherwise each condition's values in
+the table are used.
 
-## Scoring vs process metrics
+The `minimal` prompt is the shared task/action contract without a strategy
+scaffold. `cooperative` appends one explicit addendum asking the agent to
+disclose needs, report teammate-useful evidence, pool observations, and
+coordinate before convergence; it does not change environment flags.
 
-- **Outcome (`episode_score`):** venue quality x arrival / convergence. Primary success signal for meetups.
-- **Process metrics (`social_metrics.json`):**
-  - **Structured `shared_facts` (exact):** claims attached to messages are evaluated exactly against the sender's first-hand inspection records and scenario decision facts. Reported categories include first-hand supported, unsupported, contradictory, duplicate/redundant, and partner-relevant claims (plus exact sharing completeness when applicable).
-  - **Legacy free-text (heuristic):** venue/trait co-mention extraction for sharing completeness, other-regarding ratio, redundancy, necessity (`must_pool`), and related diagnostics. These remain approximate and are retained for comparison with the structured path.
+| Condition | Prompt mode | Information/environment flags | Measurement role |
+| --- | --- | --- | --- |
+| `main` | `minimal` | `spatial`; communication enabled; private constraints | Social reference: hidden, partitioned evidence and ordinary task instructions |
+| `no_communication` | `minimal` | `spatial`; `no_communication=true` | Egocentric floor: the real env step path suppresses message delivery |
+| `full_information` | `minimal` | `spatial`; `full_shared_information=true`, `shared_constraints=true` | Upper bound: all canonical decision facts and all group constraints are visible |
+| `cooperative_scaffold` | `cooperative` | Same environment kwargs as `main` | Prompt-only intervention: adds an explicit cooperative strategy scaffold |
 
-## Ablations
+### Legacy names
 
-`main`, `no_communication`, `no_coarse_map`, `shared_constraints`, `full_shared_information` (see `ablations.py`). Sweep with `--ablation-matrix`.
+These names remain accepted for archived commands and artifacts, but are not the
+canonical matrix: `main`, `no_communication`, `no_coarse_map`,
+`shared_constraints`, and `full_shared_information`. The legacy full-information
+name is distinct from the canonical `full_information` condition name; use the
+canonical names for new runs.
 
-## Setup
+## Setup and commands
 
-1. Install the SimWorld Python package / project deps in your environment.
-2. Launch the Unreal Engine SimWorld backend with UnrealCV reachable (default `127.0.0.1:9000`) for live runs.
-3. For VLM policies, configure the provider credentials in the environment expected by the MiniMax/OpenAI-compatible client (defaults: `--provider minimax`, `--model MiniMax-M3`). Do not put secrets on the CLI.
+Read the repository [PROJECT_HANDOFF.md](../../PROJECT_HANDOFF.md) for the
+supported Unreal package, map, socket, and smoke-test details. For a live run,
+launch the packaged backend on the empty map (do not substitute `demo_1` or
+`demo_2`: their built-in geometry does not match the authored Venue Meetup
+coordinates or walk graph):
 
-## Commands
-
-From the repository root:
-
-```bash
-# Dry-run (no UE): scenario artifacts + fake scores
-python -m benchmark.venue_meetup.run_venue_eval \
-  --dry-run --hidden-profile --info-partition spatial --seeds 7
-
-# Live scripted smoke (UE required)
-python -m benchmark.venue_meetup.run_venue_eval \
-  --hidden-profile --info-partition spatial --policy scripted --seeds 7
-
-# Live VLM
-python -m benchmark.venue_meetup.run_venue_eval \
-  --hidden-profile --info-partition spatial --policy minimax --seeds 7
-
-# Walk mode (graph-backed when layout present)
-python -m benchmark.venue_meetup.run_venue_eval \
-  --template-id station_quarter_medium_v1 --walk --policy scripted --seeds 7
+```powershell
+$simWorldUe = Start-Process `
+  -FilePath 'D:\side_projects\simworld_ue\Windows\SimWorld.exe' `
+  -ArgumentList '/Game/Maps/empty.umap' `
+  -WorkingDirectory 'D:\side_projects\simworld_ue\Windows' `
+  -PassThru
+Test-NetConnection 127.0.0.1 -Port 9000
 ```
 
-Useful flags: `--template-id`, `--seeds`, `--num-agents`, `--ablation` / `--ablation-matrix`, `--output-dir`, `--run-name`, `--save-video`, `--cinematic`.
+Use the repository virtual environment from PowerShell. A dry run requires no
+Unreal Engine, model, key, or network:
 
-## Artifact layout
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --dry-run --hidden-profile --info-partition spatial `
+  --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 `
+  --ablation main --run-name dry_main
+```
+
+Run the complete canonical matrix offline:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --dry-run --hidden-profile --info-partition spatial `
+  --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 `
+  --ablation-matrix --run-name dry_matrix
+```
+
+The exact single-condition dry-run commands are:
+
+```powershell
+# main
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval --dry-run --hidden-profile --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 --ablation main
+# no communication
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval --dry-run --hidden-profile --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 --ablation no_communication
+# full information
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval --dry-run --hidden-profile --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 --ablation full_information
+# cooperative scaffold
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval --dry-run --hidden-profile --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 --ablation cooperative_scaffold
+```
+
+With the UE package running at `127.0.0.1:9000`, run a scripted social smoke
+(teleport/reference mode):
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --hidden-profile --info-partition spatial --policy scripted `
+  --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 `
+  --ablation main --output-dir runs\venue_meetup\social_reference
+```
+
+Run a one-step physical traversal smoke independently:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 `
+  --policy nav_smoke --walk --max-steps 1 --speed 5000 --resolution 640x360 `
+  --output-dir runs\venue_meetup\live_smoke
+```
+
+For a later VLM run, configure the provider credential in the environment (do
+not put it in a command or commit it) and select the MiniMax-compatible policy:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --hidden-profile --info-partition spatial --policy minimax `
+  --provider minimax --model MiniMax-M3 `
+  --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 `
+  --ablation main --output-dir runs\venue_meetup\minimax_reference
+```
+
+Use `--template-id riverside_market_large_v1` to exercise the larger layout.
+`--small-eval` is a non-hidden-profile 3-template smoke matrix and cannot be
+combined with `--hidden-profile`.
+
+## Artifacts and reproducibility
+
+Every run root contains a manifest and aggregate summary:
 
 ```text
 runs/venue_meetup/<run_name>/
-  run_manifest.json          # written before cases execute
+  run_manifest.json
   summary.json
-  <template_id>/<scenario_id>/<ablation>/
-    scenario_hidden.json
-    scenario_public.json
-    coarse_map / metadata / trajectory / model_responses / social_metrics / videos...
 ```
 
-`run_manifest.json` records schema version, timestamp, git commit (or `null`), sanitized CLI args (no secrets), discoverable runtime/package versions, template/scenario ids, seeds, agent counts, ablations, and navigation mode.
+A dry run writes deterministic scenario artifacts for each case (but no policy
+trajectory or model output):
 
-## Trajectory renderer
+```text
+  <template_id>/<scenario_id>/<condition>/
+    scenario_hidden.json
+    scenario_public.json
+    metadata.json
+    <scenario_id>_coarse_map.png
+```
 
-```bash
-python -m benchmark.venue_meetup.render_trajectory --run-dir <case_dir>
-# map only:
-python -m benchmark.venue_meetup.render_trajectory --run-dir <case_dir> --map-only
+A live policy run adds:
+
+```text
+  <template_id>/<scenario_id>/<condition>/
+    trajectory.json
+    social_metrics.json
+    model_responses.jsonl
+    agent_*.mp4                 # only with --save-video
+```
+
+The run manifest records the resolved `condition`/`condition_id`, `prompt_mode`,
+`info_partition`, and `navigation_mode`, along with template/scenario/seed and
+sanitized CLI arguments. Per-case metadata records the condition and prompt
+information; its sanitized `args.walk` flag identifies walk versus teleport
+mode (there is no separate case-level navigation key). Secrets are removed.
+`scenario_public.json` omits hidden properties; `scenario_hidden.json` is for
+evaluator use. Render a top-down trajectory (or just the authored map) with:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.render_trajectory `
+  --run-dir <absolute-case-directory>
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.render_trajectory `
+  --run-dir <absolute-case-directory> --map-only
 ```
 
 ## Known limitations
 
-- Ego camera is **third-person** (agent sees its own back).
-- UE preflight / live validation has **not** been claimed for the new medium/large maps in this documentation; treat UE smoke as an operator checklist, not a guaranteed gate.
-- Default provider/model assumptions favor MiniMax-compatible APIs.
-- V2 `skill_check` partition mode is absent.
-- Hidden profile is 2-agent only.
-- Structured `shared_facts` metrics are exact claim checks; legacy free-text social metrics remain heuristic.
+- The ego camera is third-person, so the agent sees its own back; use the
+  world-frame compass/coarse map for orientation.
+- Hidden-profile generation is deliberately limited to two agents.
+- Live object-mask calibration and UE preflight for every authored layout are
+  still pending; offline evidence is deterministic, but the live pixel threshold
+  must be checked against the installed package.
+- `skill_check`/DnD perception is not implemented.
+- Teleport/reference social scores and `--walk` navigation diagnostics must be
+  reported separately. The current physical renderer uses authored shells and
+  graph routes; it is not a replacement for a fully authored UE city map.
+- Legacy free-text social metrics are heuristic. Exact sharing metrics require
+  structured claims attached to `COMMUNICATE` and first-hand inspection records.
