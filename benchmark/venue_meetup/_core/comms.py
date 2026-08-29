@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from benchmark.venue_meetup._core.action_space import SharedFactClaim, parse_shared_facts
+from benchmark.venue_meetup._core.action_space import VenueAction, SharedFactClaim, parse_shared_facts
 
 ALL_RECIPIENTS = "all"
 
@@ -30,8 +30,8 @@ class Message(BaseModel):
             return True
         return any(recipient == ALL_RECIPIENTS for recipient in self.recipients)
 
-    def compact(self) -> dict[str, Any]:
-        """Return a compact JSON-serializable representation."""
+    def compact_for_log(self) -> dict[str, Any]:
+        """Return the evaluator/log representation, including structured claims."""
 
         return {
             "sender": self.sender,
@@ -41,6 +41,27 @@ class Message(BaseModel):
             "step": self.step,
             "delivered_to": self.delivered_to,
         }
+
+    def compact_for_recipient(self) -> dict[str, Any]:
+        """Return the recipient-visible representation without evaluator claims."""
+
+        return {
+            "sender": self.sender,
+            "recipients": self.recipients or [ALL_RECIPIENTS],
+            "content": self.content,
+            "step": self.step,
+            "delivered_to": self.delivered_to,
+        }
+
+    def compact(self) -> dict[str, Any]:
+        """Return the backward-compatible evaluator/log representation.
+
+        New call sites should choose :meth:`compact_for_log` or
+        :meth:`compact_for_recipient` explicitly so the visibility boundary is
+        clear.  This alias intentionally retains the historical log schema.
+        """
+
+        return self.compact_for_log()
 
 
 class CommsError(BaseModel):
@@ -227,9 +248,12 @@ class MessageBus:
         """Return the full communication state for logs."""
 
         return {
-            "transcript": [message.compact() for message in self.transcript],
+            "transcript": [message.compact_for_log() for message in self.transcript],
             "errors": [error.compact() for error in self.errors],
-            "inboxes": {agent_id: [message.compact() for message in messages] for agent_id, messages in self.inboxes.items()},
+            "inboxes": {
+                agent_id: [message.compact_for_recipient() for message in messages]
+                for agent_id, messages in self.inboxes.items()
+            },
         }
 
 
@@ -238,6 +262,8 @@ def messages_from_turns(turns: dict[str, Any], *, step: int, default_recipients:
 
     messages: list[Message] = []
     for sender, turn in turns.items():
+        if getattr(turn, "choice", None) != VenueAction.COMMUNICATE.value:
+            continue
         content = getattr(turn, "message", None)
         content_text = content.strip() if isinstance(content, str) else ""
         raw_claims = getattr(turn, "shared_facts", None)

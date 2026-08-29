@@ -166,7 +166,7 @@ def test_parse_schema_sanitize_shared_facts() -> None:
     assert legacy.message == "hello only"
 
 
-def test_claims_only_delivery_appears_in_transcript_and_inbox() -> None:
+def test_claims_only_delivery_is_logged_but_hidden_from_recipient_serialization() -> None:
     turn = VenueAgentTurn(
         choice=VenueAction.COMMUNICATE.value,
         message=None,
@@ -180,16 +180,67 @@ def test_claims_only_delivery_appears_in_transcript_and_inbox() -> None:
     bus = MessageBus(["agent_0", "agent_1"], router=BroadcastRouter())
     inboxes = bus.deliver(messages)
     assert len(bus.transcript) == 1
-    compact = bus.transcript[0].compact()
+    compact = bus.transcript[0].compact_for_log()
+    assert compact == bus.transcript[0].compact()
     assert compact["content"] == ""
     assert compact["claims"] == [{"venue_id": "venue_west", "trait": "accessible", "value": True}]
     assert inboxes["agent_1"][0].claims[0].venue_id == "venue_west"
-    assert bus.snapshot()["inboxes"]["agent_1"][0]["claims"]
+    snapshot = bus.snapshot()
+    assert snapshot["transcript"][0]["claims"] == compact["claims"]
+    assert "claims" not in snapshot["inboxes"]["agent_1"][0]
 
     empty = Message(sender="agent_0", content="   ", step=4, claims=[])
     cleaned, transcript, _ = BroadcastRouter().deliver([empty], ["agent_0", "agent_1"])
     assert transcript == []
     assert cleaned["agent_1"] == []
+
+
+def test_text_communication_delivers_and_recipient_view_keeps_delivery_metadata() -> None:
+    turn = VenueAgentTurn(choice=VenueAction.COMMUNICATE.value, message="Meet at the west cafe.")
+    messages = messages_from_turns({"agent_0": turn}, step=2)
+
+    bus = MessageBus(["agent_0", "agent_1"], router=BroadcastRouter())
+    inboxes = bus.deliver(messages)
+
+    assert [message.content for message in inboxes["agent_1"]] == ["Meet at the west cafe."]
+    recipient_view = bus.snapshot()["inboxes"]["agent_1"][0]
+    assert recipient_view == {
+        "sender": "agent_0",
+        "recipients": ["all"],
+        "content": "Meet at the west cafe.",
+        "step": 2,
+        "delivered_to": ["agent_1"],
+    }
+    assert "claims" not in recipient_view
+
+
+def test_non_communicate_payloads_never_create_messages() -> None:
+    claim = SharedFactClaim(venue_id="venue_west", trait="accessible", value=True)
+    for choice in (
+        VenueAction.WAIT.value,
+        VenueAction.STEP_FORWARD.value,
+        VenueAction.TURN_AROUND.value,
+        VenueAction.INSPECT.value,
+        VenueAction.NAVIGATE.value,
+    ):
+        turn = VenueAgentTurn(choice=choice, message="do not deliver", shared_facts=[claim])
+        assert messages_from_turns({"agent_0": turn}, step=5) == []
+
+
+def test_empty_communicate_is_ignored() -> None:
+    turn = VenueAgentTurn(choice=VenueAction.COMMUNICATE.value, message="   ", shared_facts=[])
+    assert messages_from_turns({"agent_0": turn}, step=6) == []
+
+
+def test_broadcast_routes_to_every_other_agent() -> None:
+    message = Message(sender="agent_0", content="hello everyone", step=7)
+    delivered, transcript, errors = BroadcastRouter().deliver([message], ["agent_0", "agent_1", "agent_2"])
+
+    assert not errors
+    assert len(transcript) == 1
+    assert [item.sender for item in delivered["agent_1"]] == ["agent_0"]
+    assert [item.sender for item in delivered["agent_2"]] == ["agent_0"]
+    assert delivered["agent_0"] == []
 
 
 def test_exact_supported_partner_relevant_claim() -> None:

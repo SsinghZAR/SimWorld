@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from benchmark.venue_meetup._core.action_space import SharedFactClaim
-from benchmark.venue_meetup._core.comms import Message
+from benchmark.venue_meetup._core.action_space import SharedFactClaim, VenueAction
+from benchmark.venue_meetup._core.comms import Message, MessageBus
 from benchmark.venue_meetup.observations import (
     ACTION_LEGEND,
     build_observations,
@@ -430,7 +430,7 @@ class TestBuildObservations:
             assert len(agent_obs["landmarks"]) == 1
             assert agent_obs["landmarks"][0]["landmark_id"] == "clock_tower_1"
 
-    def test_chat_claims_are_compacted_without_hidden_validation(self):
+    def test_chat_serialization_excludes_evaluator_claims(self):
         message = Message(
             sender="agent_0",
             recipients=["agent_1"],
@@ -444,14 +444,64 @@ class TestBuildObservations:
             "sender": "agent_0",
             "recipients": ["agent_1"],
             "content": "Cafe is accessible.",
-            "claims": [{"venue_id": "cafe_a", "trait": "accessible", "value": True}],
             "step": 2,
             "delivered_to": [],
         }]
+        assert "claims" not in compact[0]
 
     def test_observation_summary_excludes_ego_view_only(self):
         summary = observation_summary({"agent_id": "agent_0", "ego_view": np.zeros((2, 2, 3)), "step": 1})
         assert summary == {"agent_id": "agent_0", "step": 1}
+
+
+def test_no_communication_env_step_suppresses_delivery(monkeypatch):
+    """Exercise the environment-level no_communication branch without UE."""
+
+    scenario = _dummy_scenario()
+    agent_ids = scenario.agent_ids()
+    env = object.__new__(VenueMeetupEnv)
+    env.scenario = scenario
+    env.agent_ids = agent_ids
+    env.no_communication = True
+    env.bus = MessageBus(agent_ids)
+    env.step_index = 0
+    env.last_actions = {}
+    env.last_inspections = {}
+    env.inspected_venues = set()
+    env._agent_zone = {agent_id: None for agent_id in agent_ids}
+
+    positions = {agent_id: (0.0, 0.0) for agent_id in agent_ids}
+    captured_inboxes = {}
+    env._positions = lambda: positions
+    env.execute_action = lambda agent_id, action: {"result": "WAIT"}
+    env._tick = lambda: None
+    env._converged = lambda: False
+
+    def capture_observations(*, inboxes=None):
+        captured_inboxes.update({agent_id: list(inboxes.get(agent_id, [])) for agent_id in agent_ids})
+        return {agent_id: {} for agent_id in agent_ids}
+
+    env._build_observations = capture_observations
+    monkeypatch.setattr(
+        "benchmark.venue_meetup.venue_env.episode_score",
+        lambda *args, **kwargs: {"episode_score": 0.0},
+    )
+
+    observations, rewards, done, info = env.step(
+        {
+            "agent_0": {"choice": VenueAction.COMMUNICATE.value, "message": "do not deliver"},
+            "agent_1": {"choice": VenueAction.WAIT.value},
+        }
+    )
+
+    assert set(observations) == set(agent_ids)
+    assert rewards == {agent_id: 0.0 for agent_id in agent_ids}
+    assert done is False
+    assert captured_inboxes == {agent_id: [] for agent_id in agent_ids}
+    assert env.bus.transcript == []
+    assert all(not inbox for inbox in env.bus.inboxes.values())
+    assert info["comms"]["transcript"] == []
+    assert info["comms"]["inboxes"] == {agent_id: [] for agent_id in agent_ids}
 
 
 class TestFrameEnhancementCompatibility:

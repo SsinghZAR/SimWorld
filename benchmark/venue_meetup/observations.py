@@ -258,7 +258,7 @@ def build_observations(
                 }
                 for landmark in scenario.landmarks
             ],
-            "group_chat": [message.compact() for message in inboxes.get(agent.agent_id, [])],
+            "group_chat": [message.compact_for_recipient() for message in inboxes.get(agent.agent_id, [])],
             "roster": agent_ids,
             "last_action": last_actions.get(agent.agent_id),
             "last_inspect_result": last_inspections.get(agent.agent_id),
