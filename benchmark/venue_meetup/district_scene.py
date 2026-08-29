@@ -1,25 +1,24 @@
 """Deterministic visual dressing for authored Venue Meetup districts.
 
-DistrictLayout remains the source of truth for routes and block geometry. This
-module renders the block interiors with packaged building assets while keeping
-the public walk graph free of generated actors.
+The layout remains the source of truth for routes, blocks, frontages, and
+meeting regions.  This module only adds collision-free visual actors inside
+those authored blocks.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from benchmark.venue_meetup.building_catalog import asset_path
-from benchmark.venue_meetup.layout import Block
+from benchmark.venue_meetup.layout import Block, Frontage
 
 if TYPE_CHECKING:
     from benchmark.venue_meetup.scenario import Scenario
     from simworld.communicator.communicator import Communicator
 
 
-# Every choice below is used by an authored venue or landmark template, so it
-# is present in the lightweight packaged UE build (unlike catalogue-only roads).
 _SHELL_BUILDINGS = (
     "BP_Building_05_C",
     "BP_Building_06_C",
@@ -33,22 +32,56 @@ _SHELL_BUILDINGS = (
     "BP_Building_101_C",
     "BP_Building_123_C",
 )
+
+# Do not add catalogue-only road blueprints here: they are unavailable on the
+# packaged empty map and have previously crashed Unreal when spawned.
+_DISTRICT_PROP_ASSETS = (
+    "RoadBlocker_C",
+    "RoadCone_C",
+    "BP_Table_C",
+    "BP_Table2_C",
+    "BP_Can_C",
+    "BP_Soda1_C",
+    "BP_Trash_bin_a_C",
+    "BP_Hydrant_C",
+)
+_PROP_SCALES = {
+    "RoadBlocker_C": (0.55, 0.55, 0.55),
+    "RoadCone_C": (0.45, 0.45, 0.45),
+    "BP_Table_C": (0.50, 0.50, 0.50),
+    "BP_Table2_C": (0.50, 0.50, 0.50),
+    "BP_Can_C": (0.28, 0.28, 0.28),
+    "BP_Soda1_C": (0.28, 0.28, 0.28),
+    "BP_Trash_bin_a_C": (0.48, 0.48, 0.48),
+    "BP_Hydrant_C": (0.52, 0.52, 0.52),
+}
 _BUILDING_CLEARANCE_CM = 3_400.0
 _WALK_NODE_CLEARANCE_CM = 1_500.0
+_ROUTE_CLEARANCE_CM = 1_600.0
+_ANCHOR_CLEARANCE_CM = 1_200.0
+_PROP_SPACING_CM = 1_800.0
 
 
 def _distance_sq(a: tuple[float, float], b: tuple[float, float]) -> float:
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
 
 
-class DistrictSceneRenderer:
-    """Spawn dense, non-interactive building shells inside authored blocks.
+def _point_to_segment_distance_sq(
+    point: tuple[float, float],
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> float:
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length_sq = dx * dx + dy * dy
+    if length_sq <= 0.0:
+        return _distance_sq(point, start)
+    t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_sq
+    t = min(1.0, max(0.0, t))
+    return _distance_sq(point, (start[0] + t * dx, start[1] + t * dy))
 
-    Decorative actors use the ``GEN_BP_DISTRICT_`` prefix, so environment reset
-    removes them. They are intentionally kept inside block interiors: routes,
-    entrances, and obstacle semantics continue to come from the existing layout
-    and venue actors.
-    """
+
+class DistrictSceneRenderer:
+    """Spawn static building shells plus sparse, inert district cues."""
 
     def __init__(self, communicator: Communicator, scenario: Scenario) -> None:
         self.communicator = communicator
@@ -56,79 +89,98 @@ class DistrictSceneRenderer:
         self.layout = scenario.layout
 
     def spawn(self) -> None:
-        """Render additional facades for every block when a layout is present."""
-
         if self.layout is None:
             return
-        self._spawn_block_shells()
+        shells = self._spawn_block_shells()
+        self._spawn_district_props(shells)
 
-    def _spawn_block_shells(self) -> None:
+    def _spawn_block_shells(self) -> tuple[tuple[float, float], ...]:
         assert self.layout is not None
-        walk_node_positions = tuple(node.position for node in self.layout.walk_nodes)
-        venue_positions = [(venue.position[0], venue.position[1]) for venue in self.scenario.venues]
-
+        nodes = tuple(node.position for node in self.layout.walk_nodes)
+        venues = [(venue.position[0], venue.position[1]) for venue in self.scenario.venues]
+        anchors = self._protected_anchors()
+        routes = self._route_polylines()
+        by_block = self._frontages_by_block()
+        spawned: list[tuple[float, float]] = []
         for block_index, block in enumerate(self.layout.blocks):
-            for shell_index, position in enumerate(self._shell_positions(block, venue_positions, walk_node_positions)):
-                asset_key = _SHELL_BUILDINGS[(block_index * 5 + shell_index) % len(_SHELL_BUILDINGS)]
-                scale_value = (0.24, 0.28, 0.32)[(block_index + shell_index) % 3]
+            frontages = by_block.get(block.block_id, ())
+            positions = self._shell_positions(
+                block,
+                venues,
+                nodes,
+                frontages=frontages,
+                protected_anchors=anchors,
+                route_polylines=routes,
+            )
+            for shell_index, point in enumerate(positions):
+                asset = _SHELL_BUILDINGS[(block_index * 5 + shell_index) % len(_SHELL_BUILDINGS)]
+                scale = (0.24, 0.28, 0.32)[(block_index + shell_index) % 3]
                 self._spawn_decor(
                     self.building_actor_name(block.block_id, shell_index),
-                    asset_key,
-                    (position[0], position[1], 0.0),
-                    self._shell_yaw(block, position),
-                    (scale_value, scale_value, scale_value),
+                    asset,
+                    (point[0], point[1], 0.0),
+                    self._shell_yaw(block, point, frontages=frontages),
+                    (scale, scale, scale),
                 )
+                spawned.append(point)
+        return tuple(spawned)
 
     def _shell_positions(
         self,
         block: Block,
         venue_positions: list[tuple[float, float]],
         walk_node_positions: tuple[tuple[float, float], ...],
+        *,
+        frontages: Sequence[Frontage] = (),
+        protected_anchors: Sequence[tuple[tuple[float, float], float]] = (),
+        route_polylines: Sequence[tuple[tuple[float, float], ...]] = (),
     ) -> tuple[tuple[float, float], ...]:
-        """Return a street-facing facade and infill parcel set for one block."""
-
-        xs = [point[0] for point in block.footprint]
-        ys = [point[1] for point in block.footprint]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        width = max_x - min_x
-        height = max_y - min_y
-        facade_inset = min(2_200.0, max(1_300.0, min(width, height) * 0.15))
-        facade_columns = max(2, min(5, math.ceil((width - 2.0 * facade_inset) / 4_800.0)))
-        facade_rows = max(2, min(4, math.ceil((height - 2.0 * facade_inset) / 4_800.0)))
-
+        xs, ys = zip(*block.footprint)
+        min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+        width, height = max_x - min_x, max_y - min_y
+        center = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
+        inset = min(2_200.0, max(1_300.0, min(width, height) * 0.15))
+        columns = max(2, min(5, math.ceil((width - 2.0 * inset) / 4_800.0)))
+        rows = max(2, min(4, math.ceil((height - 2.0 * inset) / 4_800.0)))
         candidates: list[tuple[float, float]] = []
-        # Form continuous block faces first, then add a central infill parcel.
-        for column in range(facade_columns):
-            x = min_x + facade_inset + (width - 2.0 * facade_inset) * (column + 0.5) / facade_columns
-            candidates.extend(((x, min_y + facade_inset), (x, max_y - facade_inset)))
-        for row in range(facade_rows):
-            y = min_y + facade_inset + (height - 2.0 * facade_inset) * (row + 0.5) / facade_rows
-            candidates.extend(((min_x + facade_inset, y), (max_x - facade_inset, y)))
-        candidates.append(((min_x + max_x) / 2.0, (min_y + max_y) / 2.0))
+        for frontage in frontages:
+            point = self._offset(frontage.position[:2], center, max(7_000.0, min(width, height) * 0.45))
+            if min_x <= point[0] <= max_x and min_y <= point[1] <= max_y:
+                candidates.append(point)
+        for column in range(columns):
+            x = min_x + inset + (width - 2.0 * inset) * (column + 0.5) / columns
+            candidates.extend(((x, min_y + inset), (x, max_y - inset)))
+        for row in range(rows):
+            y = min_y + inset + (height - 2.0 * inset) * (row + 0.5) / rows
+            candidates.extend(((min_x + inset, y), (max_x - inset, y)))
+        candidates.append(center)
 
-        positions: list[tuple[float, float]] = []
+        selected: list[tuple[float, float]] = []
         for point in candidates:
-            if point in positions:
+            if any(_distance_sq(point, previous) < 3_800.0**2 for previous in selected):
+                continue
+            if not self._clear(point, protected_anchors, walk_node_positions, route_polylines):
                 continue
             if any(_distance_sq(point, venue) < _BUILDING_CLEARANCE_CM**2 for venue in venue_positions):
                 continue
-            if any(_distance_sq(point, node) < _WALK_NODE_CLEARANCE_CM**2 for node in walk_node_positions):
-                continue
-            positions.append(point)
-            # Eight shells plus venue facades make a dense block without making
-            # live scene reset overly expensive.
-            if len(positions) >= 8:
+            selected.append(point)
+            if len(selected) == 8:
                 break
-        if not positions:
-            positions.append(((min_x + max_x) / 2.0, (min_y + max_y) / 2.0))
-        return tuple(positions)
+        return tuple(selected)
 
     @staticmethod
-    def _shell_yaw(block: Block, position: tuple[float, float]) -> float:
-        xs = [point[0] for point in block.footprint]
-        ys = [point[1] for point in block.footprint]
-        _, yaw_deg = min(
+    def _shell_yaw(
+        block: Block,
+        position: tuple[float, float],
+        *,
+        frontages: Sequence[Frontage] = (),
+    ) -> float:
+        if frontages:
+            nearest = min(frontages, key=lambda frontage: _distance_sq(position, frontage.position[:2]))
+            if _distance_sq(position, nearest.position[:2]) <= 8_000.0**2:
+                return float(nearest.yaw_deg)
+        xs, ys = zip(*block.footprint)
+        _, yaw = min(
             (
                 (abs(position[0] - min(xs)), 180.0),
                 (abs(position[0] - max(xs)), 0.0),
@@ -137,7 +189,148 @@ class DistrictSceneRenderer:
             ),
             key=lambda item: item[0],
         )
-        return yaw_deg
+        return yaw
+
+    def _spawn_district_props(self, shell_positions: Sequence[tuple[float, float]]) -> None:
+        assert self.layout is not None
+        layout_id = self.layout.layout_id.lower()
+        large = "large" in layout_id or len(self.layout.blocks) >= 6
+        medium = "medium" in layout_id or len(self.layout.blocks) >= 4
+        limit = 4 if large else 2 if medium else 1
+        assets = _DISTRICT_PROP_ASSETS if large else (
+            "BP_Table_C", "BP_Hydrant_C", "BP_Trash_bin_a_C", "RoadCone_C"
+        ) if medium else ("BP_Table_C", "BP_Hydrant_C")
+        nodes = tuple(node.position for node in self.layout.walk_nodes)
+        anchors, routes = self._protected_anchors(), self._route_polylines()
+        by_block, occupied, serial = self._frontages_by_block(), list(shell_positions), 0
+        for block in self.layout.blocks:
+            candidates = self._prop_candidates(
+                block,
+                by_block.get(block.block_id, ()),
+                occupied,
+                nodes,
+                anchors,
+                routes,
+                limit,
+            )
+            for local_index, (point, yaw) in enumerate(candidates):
+                asset = assets[serial % len(assets)]
+                self._spawn_decor(
+                    self.district_prop_actor_name(block.block_id, local_index),
+                    asset,
+                    (point[0], point[1], 0.0),
+                    yaw,
+                    _PROP_SCALES[asset],
+                )
+                occupied.append(point)
+                serial += 1
+
+    def _prop_candidates(
+        self,
+        block: Block,
+        frontages: Sequence[Frontage],
+        occupied: Sequence[tuple[float, float]],
+        nodes: Sequence[tuple[float, float]],
+        anchors: Sequence[tuple[tuple[float, float], float]],
+        routes: Sequence[tuple[tuple[float, float], ...]],
+        limit: int,
+    ) -> tuple[tuple[tuple[float, float], float], ...]:
+        xs, ys = zip(*block.footprint)
+        min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+        center = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
+        candidates: list[tuple[tuple[float, float], float]] = []
+        for frontage in frontages:
+            # Prefer cues on the street-facing side of a frontage; fall back
+            # inward where a meeting region or block boundary leaves no room.
+            for distance, lateral in ((-6_500.0, 0.0), (-6_500.0, 2_600.0), (2_600.0, 0.0), (2_600.0, 2_600.0)):
+                point = self._offset(frontage.position[:2], center, distance, lateral)
+                candidates.append((point, float(frontage.yaw_deg)))
+        for fy in (0.30, 0.50, 0.70):
+            for fx in (0.28, 0.50, 0.72):
+                point = (min_x + (max_x - min_x) * fx, min_y + (max_y - min_y) * fy)
+                candidates.append((point, self._shell_yaw(block, point, frontages=frontages)))
+        selected, placed = [], list(occupied)
+        for point, yaw in candidates:
+            if not (min_x <= point[0] <= max_x and min_y <= point[1] <= max_y):
+                continue
+            if not self._clear(point, anchors, nodes, routes, placed, _PROP_SPACING_CM):
+                continue
+            selected.append((point, yaw))
+            placed.append(point)
+            if len(selected) == limit:
+                break
+        return tuple(selected)
+
+    @staticmethod
+    def _offset(
+        point: tuple[float, float],
+        center: tuple[float, float],
+        distance: float,
+        lateral: float = 0.0,
+    ) -> tuple[float, float]:
+        dx, dy = center[0] - point[0], center[1] - point[1]
+        length = math.hypot(dx, dy)
+        if length <= 1e-9:
+            return point
+        ux, uy = dx / length, dy / length
+        return (point[0] + ux * distance - uy * lateral, point[1] + uy * distance + ux * lateral)
+
+    def _frontages_by_block(self) -> dict[str, tuple[Frontage, ...]]:
+        assert self.layout is not None
+        return {
+            block.block_id: tuple(frontage for frontage in self.layout.frontages if frontage.block_id == block.block_id)
+            for block in self.layout.blocks
+        }
+
+    def _route_polylines(self) -> tuple[tuple[tuple[float, float], ...], ...]:
+        assert self.layout is not None
+        polylines = []
+        for edge in self.layout.walk_edges:
+            try:
+                polyline = self.layout.edge_polyline(edge)
+            except (KeyError, ValueError):
+                continue
+            if len(polyline) >= 2:
+                polylines.append(polyline)
+        return tuple(polylines)
+
+    def _protected_anchors(self) -> tuple[tuple[tuple[float, float], float], ...]:
+        anchors = []
+        for venue in self.scenario.venues:
+            anchors.extend((
+                (venue.region.center, float(venue.region.radius) + _ANCHOR_CLEARANCE_CM),
+                ((venue.position[0], venue.position[1]), _BUILDING_CLEARANCE_CM),
+            ))
+            anchors.extend(
+                ((entrance.position[0], entrance.position[1]), _ANCHOR_CLEARANCE_CM)
+                for entrance in venue.entrances
+            )
+        anchors.extend(
+            ((landmark.position[0], landmark.position[1]), _BUILDING_CLEARANCE_CM)
+            for landmark in self.scenario.landmarks
+        )
+        return tuple(anchors)
+
+    @staticmethod
+    def _clear(
+        point: tuple[float, float],
+        anchors: Sequence[tuple[tuple[float, float], float]],
+        nodes: Sequence[tuple[float, float]],
+        routes: Sequence[tuple[tuple[float, float], ...]],
+        occupied: Sequence[tuple[float, float]] = (),
+        spacing: float = 0.0,
+    ) -> bool:
+        if any(_distance_sq(point, anchor) < clearance**2 for anchor, clearance in anchors):
+            return False
+        if any(_distance_sq(point, node) < _WALK_NODE_CLEARANCE_CM**2 for node in nodes):
+            return False
+        if any(
+            _point_to_segment_distance_sq(point, start, end) < _ROUTE_CLEARANCE_CM**2
+            for polyline in routes
+            for start, end in zip(polyline, polyline[1:])
+        ):
+            return False
+        return not spacing or all(_distance_sq(point, other) >= spacing**2 for other in occupied)
 
     def _spawn_decor(
         self,
@@ -147,10 +340,6 @@ class DistrictSceneRenderer:
         yaw_deg: float,
         scale: tuple[float, float, float],
     ) -> None:
-        """Spawn a static visual actor without the normal collision-on default."""
-
-        # Communicator.spawn_object deliberately enables collision for venue and
-        # agent actors. Shells instead use the raw UE path and are kept static.
         unrealcv = self.communicator.unrealcv
         unrealcv.spawn_bp_asset(asset_path(asset_key), actor_name)
         unrealcv.set_location(position, actor_name)
@@ -162,3 +351,7 @@ class DistrictSceneRenderer:
     @staticmethod
     def building_actor_name(block_id: str, shell_index: int) -> str:
         return f"GEN_BP_DISTRICT_BUILDING_{block_id}_{shell_index:02d}"
+
+    @staticmethod
+    def district_prop_actor_name(block_id: str, prop_index: int) -> str:
+        return f"GEN_BP_DISTRICT_PROP_{block_id}_{prop_index:02d}"
