@@ -339,7 +339,7 @@ class TestBuildObservations:
             "agent_id", "step", "max_steps", "role", "objective",
             "private_constraint", "zone_id", "info_partition",
             "coarse_map_text", "coarse_map_path", "self_pose",
-            "candidate_venues", "known_venue_facts", "landmarks",
+            "candidate_venues", "known_venue_evidence", "landmarks",
             "group_chat", "roster", "last_action", "last_inspect_result",
             "valid_actions", "ego_view",
         }
@@ -390,13 +390,16 @@ class TestBuildObservations:
             assert "cafe_a" in agent_obs["known_venue_facts"]
             assert "pub_b" in agent_obs["known_venue_facts"]
 
-    def test_partial_information_uses_revealed_facts(self):
+    def test_partial_information_uses_readable_revealed_evidence(self):
         obs = self._call(
             full_shared_information=False,
             revealed_facts={"agent_0": {"cafe_a": {"open": True}}, "agent_1": {}},
+            revealed_evidence={"agent_0": {"cafe_a": ["The entrance appears open."]}, "agent_1": {}},
         )
-        assert obs["agent_0"]["known_venue_facts"] == {"cafe_a": {"open": True}}
-        assert obs["agent_1"]["known_venue_facts"] == {}
+        assert obs["agent_0"]["known_venue_evidence"] == {"cafe_a": ["The entrance appears open."]}
+        assert obs["agent_1"]["known_venue_evidence"] == {}
+        assert "known_venue_facts" not in obs["agent_0"]
+        assert "known_venue_facts" not in obs["agent_1"]
 
     def test_spatial_partition_adds_zone_info(self):
         scenario = _dummy_scenario(zone_ids=["zone_a", "zone_b"])

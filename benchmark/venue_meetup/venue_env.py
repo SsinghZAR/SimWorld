@@ -5,13 +5,21 @@ from __future__ import annotations
 import json
 import math
 import time
+from copy import deepcopy
 from typing import Any
 
 import numpy as np
 
 from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn, sanitize_turn
 from benchmark.venue_meetup._core.comms import BroadcastRouter, CommsRouter, MessageBus, messages_from_turns
-from benchmark.venue_meetup.actions import count_mask_pixels, compute_inspection, dispatch_single_action, resolve_inspect_target
+from benchmark.venue_meetup.actions import (
+    InspectionOutcome,
+    complete_inspection,
+    count_mask_pixels,
+    dispatch_single_action,
+    precheck_inspection,
+    resolve_inspect_target,
+)
 from benchmark.venue_meetup.navigation import (
     Obstacle,
     building_obstacles,
@@ -27,6 +35,7 @@ from benchmark.venue_meetup.observations import (
     heading_cue,
     normalize_angle,
     observation_summary,
+    public_action_result,
     target_cue,
     turn_to_face,
     vector_to_dict,
@@ -166,14 +175,22 @@ class VenueMeetupEnv:
         self.bus = MessageBus(self.agent_ids, router=router or BroadcastRouter())
         self.step_index = 0
         self.spawned = False
-        self.last_actions: dict[str, dict[str, Any]] = {}
-        self.last_inspections: dict[str, dict[str, Any]] = {}
+        # Keep evaluator and agent-facing action/inspection records separate.
+        # Internal records may include canonical facts and runtime diagnostics;
+        # only public records are passed to observation assembly.
+        self.last_actions_internal: dict[str, dict[str, Any]] = {}
+        self.last_actions_public: dict[str, dict[str, Any]] = {}
+        self.last_inspections_internal: dict[str, dict[str, Any]] = {}
+        self.last_inspections_public: dict[str, dict[str, Any]] = {}
         self.inspected_venues: set[str] = set()
         # Per-agent ground-truth facts revealed by that agent's own successful
         # inspections: agent_id -> {venue_id -> {trait -> value}}. This is the
         # embodied, egocentric knowledge each agent has gathered first-hand and is
         # the basis for the social process metrics (see notes.md section 7).
         self.revealed_facts: dict[str, dict[str, dict[str, Any]]] = {agent_id: {} for agent_id in self.agent_ids}
+        # Agent-readable evidence derived from first-hand facts.  Values are
+        # ordered sentence lists, never canonical trait dictionaries.
+        self.revealed_evidence: dict[str, dict[str, list[str]]] = {agent_id: {} for agent_id in self.agent_ids}
         self.scene_builder = SceneBuilder(
             communicator,
             scenario,
@@ -186,14 +203,41 @@ class VenueMeetupEnv:
             sun_rotation=sun_rotation,
         )
 
+    @property
+    def last_actions(self) -> dict[str, dict[str, Any]]:
+        """Legacy evaluator alias for :attr:`last_actions_internal`.
+
+        Public observation assembly never reads this alias; it uses the
+        explicitly sanitized ``last_actions_public`` store.
+        """
+
+        return getattr(self, "last_actions_internal", {})
+
+    @last_actions.setter
+    def last_actions(self, value: dict[str, dict[str, Any]]) -> None:
+        self.last_actions_internal = deepcopy(value or {})
+
+    @property
+    def last_inspections(self) -> dict[str, dict[str, Any]]:
+        """Legacy evaluator alias for :attr:`last_inspections_internal`."""
+
+        return getattr(self, "last_inspections_internal", {})
+
+    @last_inspections.setter
+    def last_inspections(self, value: dict[str, dict[str, Any]]) -> None:
+        self.last_inspections_internal = deepcopy(value or {})
+
     def reset(self) -> dict[str, dict[str, Any]]:
         """Reset the episode and return initial observations."""
 
         self.step_index = 0
-        self.last_actions = {}
-        self.last_inspections = {}
+        self.last_actions_internal = {}
+        self.last_actions_public = {}
+        self.last_inspections_internal = {}
+        self.last_inspections_public = {}
         self.inspected_venues = set()
         self.revealed_facts = {agent_id: {} for agent_id in self.agent_ids}
+        self.revealed_evidence = {agent_id: {} for agent_id in self.agent_ids}
         self.bus.reset(self.agent_ids)
         self._agent_walk_nodes = {
             agent.agent_id: agent.walk_node_id for agent in self.scenario.agents
@@ -275,6 +319,16 @@ class VenueMeetupEnv:
 
         self._tick()
         self.step_index += 1
+
+        # Publish the current action records before assembling observations so
+        # agents receive immediate feedback.  Keep independent copies at every
+        # boundary: downstream loggers/models must not be able to mutate the
+        # evaluator's canonical facts.
+        self.last_actions_internal = deepcopy(executed_actions)
+        self.last_actions_public = {
+            agent_id: public_action_result(result) or {}
+            for agent_id, result in deepcopy(executed_actions).items()
+        }
         observations = self._build_observations(inboxes=inboxes)
         done = self._converged() or self.step_index >= self.scenario.max_steps
         final_positions = self._positions()
@@ -288,14 +342,18 @@ class VenueMeetupEnv:
         rewards = {agent_id: scores["episode_score"] for agent_id in self.agent_ids}
         info = {
             "step": self.step_index,
-            "actions": executed_actions,
+            "actions": deepcopy(executed_actions),
             "comms": self.bus.snapshot(),
-            "inspections": dict(self.last_inspections),
+            # Evaluator-facing logs intentionally retain canonical facts from
+            # successful first-hand inspections; public observations use the
+            # separate ``last_inspections_public`` store below.
+            "inspections": deepcopy(
+                getattr(self, "last_inspections_internal", getattr(self, "last_inspections", {}))
+            ),
             "positions_internal": final_positions,
             "scores": scores,
             "success": self._converged(),
         }
-        self.last_actions = executed_actions
         return observations, rewards, done, info
 
     def _spawn_static_scene(self) -> None:
@@ -391,10 +449,11 @@ class VenueMeetupEnv:
             frames=frames,
             kinematic_states=kinematic_states,
             inboxes=inboxes,
-            last_actions=self.last_actions,
-            last_inspections=self.last_inspections,
-            revealed_facts=self.revealed_facts,
-            agent_zone=self._agent_zone,
+            last_actions=getattr(self, "last_actions_public", {}),
+            last_inspections_public=getattr(self, "last_inspections_public", {}),
+            revealed_facts=getattr(self, "revealed_facts", {}),
+            revealed_evidence=getattr(self, "revealed_evidence", {}),
+            agent_zone=getattr(self, "_agent_zone", {}),
             no_coarse_map=self.no_coarse_map,
             full_shared_information=self.full_shared_information,
             shared_constraints=self.shared_constraints,
@@ -976,36 +1035,79 @@ class VenueMeetupEnv:
     def _inspect(self, agent_id: str, action: VenueAgentTurn) -> dict[str, Any]:
         """Validate a visually grounded venue inspection."""
 
+        # A few offline harnesses construct the environment with
+        # ``object.__new__`` to avoid UE setup.  Initialize the explicit stores
+        # lazily there as well as in ``__init__`` so the action remains pure to
+        # test.
+        if not hasattr(self, "last_inspections_internal"):
+            self.last_inspections_internal = {}
+        if not hasattr(self, "last_inspections_public"):
+            self.last_inspections_public = {}
+        if not hasattr(self, "revealed_facts"):
+            self.revealed_facts = {}
+        if not hasattr(self, "revealed_evidence"):
+            self.revealed_evidence = {}
+
         venue = self._resolve_inspect_target(agent_id, action)
         if venue is None:
-            result: dict[str, Any] = {"result": "INSPECT_FAILED", "reason": "unknown target"}
-            self.last_inspections[agent_id] = result
-            return result
+            internal: dict[str, Any] = {"result": "INSPECT_FAILED", "reason": "unknown target"}
+            public: dict[str, Any] = {
+                "result": "INSPECT_FAILED",
+                "reason": "unknown target",
+                "agent_visible_result": "that venue could not be found",
+            }
+            self.last_inspections_internal[agent_id] = deepcopy(internal)
+            self.last_inspections_public[agent_id] = deepcopy(public)
+            return deepcopy(internal)
 
         state = self.get_agent_state(agent_id)
         kin = self.get_kinematic_state(agent_id)
         agent_xy = (kin["position"].x, kin["position"].y)
-        # Auto-face the facade and capture an object-mask frame for diagnostics.
-        self._face_point(state.actor_name, state.humanoid, (venue.position[0], venue.position[1]))
-        self._tick()
-        mask_frame = self.communicator.get_camera_observation(state.humanoid.camera_id, "object_mask", mode=self.camera_mode)
-        mask_pixels = self._count_mask_pixels(mask_frame, venue.mask_color_rgb)
-
-        result, valid = compute_inspection(
+        # Permission, region membership, and inspect range are checked before
+        # touching the camera.  In particular, do not auto-face a target before
+        # the current-orientation visibility check.
+        precheck = precheck_inspection(
             venue,
             agent_id,
             action,
             agent_xy=agent_xy,
-            mask_pixels=mask_pixels,
             info_partition=self.info_partition,
             agent_zone=self._agent_zone,
-            venue_facts_fn=self._venue_facts,
+            inspect_range=self.inspect_range,
         )
-        if valid:
+        if not precheck.success:
+            outcome = InspectionOutcome(False, precheck.internal_record, precheck.public_record)
+        else:
+            mask_frame = self.communicator.get_camera_observation(
+                state.humanoid.camera_id,
+                "object_mask",
+                mode=self.camera_mode,
+            )
+            mask_pixels = self._count_mask_pixels(mask_frame, venue.mask_color_rgb)
+            outcome = complete_inspection(
+                venue,
+                action,
+                precheck,
+                mask_pixels=mask_pixels,
+                inspect_min_mask_pixels=self.inspect_min_mask_pixels,
+                venue_facts_fn=self._venue_facts,
+            )
+
+        if outcome.success:
             self.inspected_venues.add(venue.venue_id)
-            self.revealed_facts.setdefault(agent_id, {})[venue.venue_id] = result["facts"]
-        self.last_inspections[agent_id] = result
-        return result
+            self.revealed_facts.setdefault(agent_id, {})[venue.venue_id] = deepcopy(
+                outcome.internal_record["facts"]
+            )
+            self.revealed_evidence.setdefault(agent_id, {})[venue.venue_id] = deepcopy(
+                outcome.public_record.get("evidence", [])
+            )
+            # Refocusing is allowed only after the current orientation passed
+            # the object-mask visibility threshold.
+            self._face_point(state.actor_name, state.humanoid, (venue.position[0], venue.position[1]))
+            self._tick()
+        self.last_inspections_internal[agent_id] = deepcopy(outcome.internal_record)
+        self.last_inspections_public[agent_id] = deepcopy(outcome.public_record)
+        return deepcopy(outcome.internal_record)
 
     def _can_inspect_zone(self, agent_id: str, venue: Venue) -> bool:
         """Return whether the partition mode lets this agent inspect this venue."""

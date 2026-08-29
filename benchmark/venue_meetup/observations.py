@@ -8,8 +8,10 @@ Communicator, making it testable offline.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any, Callable, Protocol
+from copy import deepcopy
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
 
+from benchmark.venue_meetup.inspection_evidence import build_inspection_evidence
 from benchmark.venue_meetup.scenario import Scenario, Venue
 
 if TYPE_CHECKING:
@@ -29,6 +31,65 @@ ACTION_LEGEND: dict[str, str] = {
     "4": "COMMUNICATE message",
     "5": "NAVIGATE target_venue_id (walk to a venue's meeting point)",
 }
+
+
+# Ordered allow-lists keep observation serialization deterministic.  Internal
+# diagnostics/canonical facts are intentionally absent.
+_PUBLIC_TURN_KEYS: tuple[str, ...] = (
+    "choice",
+    "duration",
+    "direction",
+    "angle",
+    "clockwise",
+    "target_venue_id",
+    "target_description",
+    "message",
+    "reasoning",
+)
+_PUBLIC_RESULT_KEYS: tuple[str, ...] = (
+    "turn",
+    "result",
+    "venue_id",
+    "target_description",
+    "message",
+    "agent_visible_result",
+    "evidence",
+    "reason",
+    "arrived",
+)
+
+
+def public_action_result(result: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """Return the safe subset of an evaluator action result.
+
+    This allow-list is applied even when a caller accidentally passes an
+    internal record directly.  Malformed/non-list evidence is skipped rather
+    than copied into an agent observation.
+    """
+
+    if result is None:
+        return None
+    if not isinstance(result, Mapping):
+        return {"result": str(result)}
+    public: dict[str, Any] = {}
+    for key in _PUBLIC_RESULT_KEYS:
+        if key not in result:
+            continue
+        value = result[key]
+        if key == "turn":
+            if isinstance(value, Mapping):
+                public[key] = {
+                    turn_key: deepcopy(value[turn_key])
+                    for turn_key in _PUBLIC_TURN_KEYS
+                    if turn_key in value
+                }
+            continue
+        if key == "evidence":
+            if isinstance(value, list):
+                public[key] = [sentence for sentence in value if isinstance(sentence, str)]
+            continue
+        public[key] = deepcopy(value)
+    return public
 
 
 def normalize_angle(angle: float) -> float:
@@ -176,6 +237,37 @@ def can_inspect_zone(agent_id: str, venue: Venue, *, info_partition: str, agent_
     return venue.zone_id == zone
 
 
+def _candidate_summary(
+    agent_id: str,
+    venue: Venue,
+    *,
+    info_partition: str,
+    agent_zone: Mapping[str, str | None],
+) -> dict[str, Any]:
+    """Return the public identity/navigation summary for a venue.
+
+    Do not serialize ``Venue`` wholesale: its properties, region, asset path,
+    and mask colour are evaluator/runtime metadata.  This explicit allow-list
+    is shared by normal and full-information observations.
+    """
+
+    summary: dict[str, Any] = {
+        "venue_id": venue.venue_id,
+        "venue_type": venue.venue_type,
+        "slot_id": venue.slot_id,
+        "visual_summary": venue.visual_summary,
+    }
+    if info_partition == "spatial":
+        summary["zone_id"] = venue.zone_id
+        summary["can_inspect"] = can_inspect_zone(
+            agent_id,
+            venue,
+            info_partition=info_partition,
+            agent_zone=dict(agent_zone),
+        )
+    return summary
+
+
 def build_observations(
     *,
     scenario: Scenario,
@@ -183,17 +275,19 @@ def build_observations(
     step_index: int,
     frames: dict[str, Any],
     kinematic_states: dict[str, tuple[_Vec2, float]],
-    inboxes: dict[str, list[Any]],
-    last_actions: dict[str, dict[str, Any]],
-    last_inspections: dict[str, dict[str, Any]],
-    revealed_facts: dict[str, dict[str, dict[str, Any]]],
-    agent_zone: dict[str, str | None],
-    no_coarse_map: bool,
-    full_shared_information: bool,
-    shared_constraints: bool,
-    info_partition: str,
-    navigate_mode: str,
-    venue_facts_fn: Callable[[Venue], dict[str, Any]],
+    inboxes: Mapping[str, list[Any]],
+    last_actions: Mapping[str, dict[str, Any]] | None = None,
+    last_inspections: Mapping[str, dict[str, Any]] | None = None,
+    last_inspections_public: Mapping[str, dict[str, Any]] | None = None,
+    revealed_facts: Mapping[str, Mapping[str, dict[str, Any]]] | None = None,
+    revealed_evidence: Mapping[str, Mapping[str, list[str]]] | None = None,
+    agent_zone: Mapping[str, str | None] | None = None,
+    no_coarse_map: bool = False,
+    full_shared_information: bool = False,
+    shared_constraints: bool = False,
+    info_partition: str = "none",
+    navigate_mode: str = "teleport",
+    venue_facts_fn: Callable[[Venue], dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Assemble per-agent observation dicts from pre-collected state.
 
@@ -203,39 +297,62 @@ def build_observations(
         Mapping of agent_id to (position_vector, yaw_degrees).
     venue_facts_fn:
         Callable(venue) -> dict returning decision-relevant facts for a venue.
+
+    ``known_venue_evidence`` contains only ordered readable sentences derived
+    from successful first-hand inspections.  ``known_venue_facts`` is emitted
+    only for the explicit ``full_shared_information`` upper-bound ablation.
     """
+
+    agent_zone = agent_zone or {}
+    revealed_facts = revealed_facts or {}
+    revealed_evidence = revealed_evidence or {}
+    last_actions = last_actions or {}
+    # ``last_inspections`` is the old parameter name.  New callers must pass
+    # the explicitly public store; retaining the fallback keeps offline tools
+    # that assemble observations directly source-compatible.
+    if last_inspections_public is None:
+        last_inspections_public = last_inspections or {}
+    venue_facts_fn = venue_facts_fn or (lambda venue: {})
 
     shared_constraint = "; ".join(agent.private_constraint for agent in scenario.agents)
     observations: dict[str, dict[str, Any]] = {}
     for agent in scenario.agents:
         private_constraint = shared_constraint if shared_constraints else agent.private_constraint
+        venue_summaries = [
+            _candidate_summary(agent.agent_id, venue, info_partition=info_partition, agent_zone=agent_zone)
+            for venue in scenario.venues
+        ]
         if full_shared_information:
-            venue_summaries: list[Any] = [
-                venue.compact() if hasattr(venue, "compact") else venue.__dict__ for venue in scenario.venues
-            ]
-            known_venue_facts: dict[str, Any] = {venue.venue_id: venue_facts_fn(venue) for venue in scenario.venues}
+            # The upper-bound ablation intentionally exposes canonical facts to
+            # every agent, but candidate metadata remains the safe identity
+            # summary above.
+            known_venue_facts: dict[str, Any] = {
+                venue.venue_id: deepcopy(venue_facts_fn(venue)) for venue in scenario.venues
+            }
+            known_venue_evidence: dict[str, list[str]] = {
+                venue_id: list(build_inspection_evidence(facts, venue_id=venue_id).public_evidence)
+                for venue_id, facts in known_venue_facts.items()
+            }
         else:
-            venue_summaries = []
-            for venue in scenario.venues:
-                summary: dict[str, Any] = {
-                    "venue_id": venue.venue_id,
-                    "venue_type": venue.venue_type,
-                    "slot_id": venue.slot_id,
-                    "visual_summary": venue.visual_summary,
+            # Canonical facts remain evaluator-only in the main observation.
+            known_venue_evidence = {
+                venue_id: list(sentences)
+                for venue_id, sentences in revealed_evidence.get(agent.agent_id, {}).items()
+            }
+            # Offline callers from the pre-evidence API may still provide only
+            # ``revealed_facts``.  Derive readable evidence locally without
+            # placing those canonical dictionaries in the returned observation.
+            if not known_venue_evidence and revealed_facts.get(agent.agent_id):
+                known_venue_evidence = {
+                    venue_id: list(build_inspection_evidence(facts, venue_id=venue_id).public_evidence)
+                    for venue_id, facts in revealed_facts[agent.agent_id].items()
                 }
-                if info_partition == "spatial":
-                    summary["zone_id"] = venue.zone_id
-                    summary["can_inspect"] = can_inspect_zone(
-                        agent.agent_id, venue, info_partition=info_partition, agent_zone=agent_zone,
-                    )
-                venue_summaries.append(summary)
-            known_venue_facts = dict(revealed_facts.get(agent.agent_id, {}))
 
         position, yaw = kinematic_states[agent.agent_id]
         self_pose, navigation = heading_cue(
             position, yaw, scenario, no_coarse_map=no_coarse_map, navigate_mode=navigate_mode,
         )
-        observations[agent.agent_id] = {
+        agent_observation: dict[str, Any] = {
             "agent_id": agent.agent_id,
             "step": step_index,
             "max_steps": scenario.max_steps,
@@ -248,7 +365,7 @@ def build_observations(
             "coarse_map_path": None if no_coarse_map else scenario.coarse_map_path,
             "self_pose": self_pose,
             "candidate_venues": venue_summaries,
-            "known_venue_facts": known_venue_facts,
+            "known_venue_evidence": known_venue_evidence,
             "landmarks": [
                 {
                     "landmark_id": landmark.landmark_id,
@@ -260,13 +377,16 @@ def build_observations(
             ],
             "group_chat": [message.compact_for_recipient() for message in inboxes.get(agent.agent_id, [])],
             "roster": agent_ids,
-            "last_action": last_actions.get(agent.agent_id),
-            "last_inspect_result": last_inspections.get(agent.agent_id),
+            "last_action": public_action_result(last_actions.get(agent.agent_id)),
+            "last_inspect_result": public_action_result(last_inspections_public.get(agent.agent_id)),
             "valid_actions": ACTION_LEGEND,
             "ego_view": frames[agent.agent_id],
         }
+        if full_shared_information:
+            agent_observation["known_venue_facts"] = known_venue_facts
         if navigation is not None:
-            observations[agent.agent_id]["navigation"] = navigation
+            agent_observation["navigation"] = navigation
+        observations[agent.agent_id] = agent_observation
     return observations
 
 
