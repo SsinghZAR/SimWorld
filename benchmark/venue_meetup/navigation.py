@@ -32,6 +32,17 @@ Point = tuple[float, float]
 WalkPlannerKind = Literal["layout_graph", "obstacle_astar"]
 
 
+def meeting_target(agent_index: int, center: Point, *, offset: float = 300.0) -> Point:
+    """Return the deterministic per-agent fan point around a meeting center.
+
+    The two NAVIGATE modes use the same rounded coordinates so teleport and walk
+    behavior agree exactly, including Python's tiny ``cos(pi / 2)`` residue.
+    """
+
+    angle = math.radians(90.0 * agent_index)
+    return round(center[0] + math.cos(angle) * offset, 2), round(center[1] + math.sin(angle) * offset, 2)
+
+
 @dataclass(frozen=True)
 class LayoutRoute:
     """Deterministic walk-graph route from a start node to a venue frontage.

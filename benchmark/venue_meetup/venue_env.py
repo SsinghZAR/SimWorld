@@ -23,6 +23,7 @@ from benchmark.venue_meetup.actions import (
 from benchmark.venue_meetup.navigation import (
     Obstacle,
     building_obstacles,
+    meeting_target,
     path_length,
     plan_layout_route,
     plan_path,
@@ -527,15 +528,12 @@ class VenueMeetupEnv:
         cx, cy = venue.region.center
         # Fan agents slightly around the meeting point so they do not stack.
         index = self.agent_ids.index(agent_id)
-        offset = 300.0
-        angle = math.radians(90.0 * index)
         # Round the fan offset: math.cos(radians(90)) is 6.1e-17, not 0, so for a
         # venue centred on x=0 the target would be ~1.8e-14 - a value Python
         # renders in scientific notation ("1.8e-14"), which UnrealCV's set_location
         # parser cannot read, silently dropping the teleport. Rounding collapses
         # the float dust to a clean coordinate.
-        target_x = round(cx + math.cos(angle) * offset, 2)
-        target_y = round(cy + math.sin(angle) * offset, 2)
+        target_x, target_y = meeting_target(index, (cx, cy))
 
         # Place the pawn by dropping it in from above with BOTH its AI controller
         # and its collision temporarily disabled, then restore them and let it
@@ -604,10 +602,7 @@ class VenueMeetupEnv:
     def _meeting_target(self, agent_id: str, venue: Venue) -> tuple[float, float]:
         """Fan agents slightly around the meeting point so they do not stack."""
 
-        cx, cy = venue.region.center
-        index = self.agent_ids.index(agent_id)
-        angle = math.radians(90.0 * index)
-        return round(cx + math.cos(angle) * 300.0, 2), round(cy + math.sin(angle) * 300.0, 2)
+        return meeting_target(self.agent_ids.index(agent_id), venue.region.center)
 
     def _set_agent_walk_node_for_venue(self, agent_id: str, venue: Venue) -> None:
         """Advance the agent's tracked layout-graph node to the venue frontage."""
