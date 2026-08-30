@@ -47,6 +47,7 @@ class FakeUnrealCV:
         self.visual_spawns: list[dict[str, Any]] = []
         self.locations: dict[str, Any] = {}
         self.camera_resolutions: dict[Any, tuple[int, int]] = {}
+        self.camera_resolution_history: list[tuple[Any, tuple[int, int]]] = []
         self.modes: list[str] = []
         self.ticks = 0
 
@@ -92,6 +93,7 @@ class FakeUnrealCV:
 
     def set_camera_resolution(self, camera_id: Any, resolution: tuple[int, int]) -> None:
         self.log.append(("set_camera_resolution", camera_id, resolution))
+        self.camera_resolution_history.append((camera_id, resolution))
         self.camera_resolutions[camera_id] = resolution
 
     def tick(self) -> None:
@@ -345,6 +347,22 @@ def test_spawn_agents_builds_state_orientation_speed_and_camera(monkeypatch: pyt
         assert communicator.unrealcv.orientations[state.actor_name] == (0.0, agent.yaw_deg, 0.0)
         assert communicator.humanoid_speeds[state.humanoid.id] == speed
         assert communicator.unrealcv.camera_resolutions[state.humanoid.camera_id] == resolution
+
+    resolution_calls = [
+        (index, call[1], call[2])
+        for index, call in enumerate(communicator.log)
+        if call[0] == "set_camera_resolution"
+    ]
+    last_spawn_index = max(
+        index for index, call in enumerate(communicator.log) if call[0] == "spawn_agent"
+    )
+    assert [camera_id for _index, camera_id, _resolution in resolution_calls] == [
+        agent_states[agent.agent_id].humanoid.camera_id for agent in scenario.agents
+    ]
+    assert all(index > last_spawn_index for index, _camera_id, _resolution in resolution_calls)
+    assert communicator.unrealcv.camera_resolution_history == [
+        (camera_id, resolution) for _index, camera_id, resolution in resolution_calls
+    ]
 
     assert [record["model_path"] for record in communicator.spawned_agents] == [AGENT_BLUEPRINT, AGENT_BLUEPRINT]
     assert [record["position"] for record in communicator.spawned_agents] == [

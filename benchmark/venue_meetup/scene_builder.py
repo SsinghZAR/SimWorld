@@ -148,8 +148,16 @@ class SceneBuilder:
             actor_name = self.communicator.get_humanoid_name(humanoid.id)
             self.communicator.unrealcv.set_orientation((0.0, agent.yaw_deg, 0.0), actor_name)
             self.communicator.humanoid_set_speed(humanoid.id, self.speed)
-            self.communicator.unrealcv.set_camera_resolution(humanoid.camera_id, self.resolution)
             agent_states[agent.agent_id] = AgentState(agent_id=agent.agent_id, humanoid=humanoid, actor_name=actor_name)
+
+        # Configure cameras only after every humanoid exists.  Spawning a later
+        # humanoid can reset earlier camera defaults, so this final deterministic
+        # pass makes the requested resolution authoritative for all agents.
+        for agent in self.scenario.agents:
+            self.communicator.unrealcv.set_camera_resolution(
+                agent_states[agent.agent_id].humanoid.camera_id,
+                self.resolution,
+            )
         return agent_states
 
     def settle(self, agent_states: Mapping[str, AgentState], agent_ids: Sequence[str]) -> None:
