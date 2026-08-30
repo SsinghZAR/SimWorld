@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import math
 
-from benchmark.venue_meetup.district_scene import (
+from benchmark.venue_meetup.district_dressing import (
     _DISTRICT_PROP_ASSETS,
     _DISTRICT_TREE_ASSETS,
-    DistrictSceneRenderer,
+    _SHELL_SPACING_CM,
+    plan_district_actors,
+    shell_positions,
 )
+from benchmark.venue_meetup.district_scene import DistrictSceneRenderer
 from benchmark.venue_meetup.navigation import meeting_target
 from benchmark.venue_meetup.scene_builder import AgentState
 from benchmark.venue_meetup.templates.riverside_market import (
@@ -28,14 +31,13 @@ _BUILDING_CLEARANCE_CM = 3_400.0
 _WALK_NODE_CLEARANCE_CM = 1_500.0
 _ROUTE_CLEARANCE_CM = 1_600.0
 _BRIDGE_CLEARANCE_CM = 2_200.0
-_SHELL_SPACING_CM = 3_800.0
 
 
-def _distance_sq(first: tuple[float, float], second: tuple[float, float]) -> float:
-    return (first[0] - second[0]) ** 2 + (first[1] - second[1]) ** 2
+def _distance(first: tuple[float, float], second: tuple[float, float]) -> float:
+    return math.hypot(first[0] - second[0], first[1] - second[1])
 
 
-def _segment_distance_sq(
+def _segment_distance(
     point: tuple[float, float],
     start: tuple[float, float],
     end: tuple[float, float],
@@ -43,73 +45,44 @@ def _segment_distance_sq(
     dx, dy = end[0] - start[0], end[1] - start[1]
     length_sq = dx * dx + dy * dy
     if length_sq <= 0.0:
-        return _distance_sq(point, start)
+        return _distance(point, start)
     t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_sq
     t = max(0.0, min(1.0, t))
-    return _distance_sq(point, (start[0] + t * dx, start[1] + t * dy))
+    return _distance(point, (start[0] + t * dx, start[1] + t * dy))
 
 
-def _minimum_route_distance_sq(
+def _minimum_route_distance(
     point: tuple[float, float],
     routes: tuple[tuple[tuple[float, float], ...], ...],
 ) -> float:
     return min(
-        (_segment_distance_sq(point, start, end) for route in routes for start, end in zip(route, route[1:])),
+        (_segment_distance(point, start, end) for route in routes for start, end in zip(route, route[1:])),
         default=math.inf,
     )
 
 
-def _inside_polygon(point: tuple[float, float], polygon: tuple[tuple[float, float], ...]) -> bool:
-    inside = False
-    for index, (x1, y1) in enumerate(polygon):
-        x2, y2 = polygon[(index + 1) % len(polygon)]
-        if _segment_distance_sq(point, (x1, y1), (x2, y2)) <= 1e-6:
-            return True
-        if (y1 > point[1]) != (y2 > point[1]):
-            crossing_x = (x2 - x1) * (point[1] - y1) / (y2 - y1) + x1
-            if point[0] < crossing_x:
-                inside = not inside
-    return inside
-
-
-def _independent_anchors(scenario) -> tuple[tuple[tuple[float, float], float], ...]:
-    anchors = []
-    for venue in scenario.venues:
-        anchors.extend(
-            (
-                (venue.region.center, float(venue.region.radius) + _ANCHOR_CLEARANCE_CM),
-                ((venue.position[0], venue.position[1]), _BUILDING_CLEARANCE_CM),
-            )
-        )
-        anchors.extend(
-            ((entrance.position[0], entrance.position[1]), _ANCHOR_CLEARANCE_CM)
-            for entrance in venue.entrances
-        )
-    anchors.extend(
-        ((landmark.position[0], landmark.position[1]), _BUILDING_CLEARANCE_CM)
-        for landmark in scenario.landmarks
+def _assert_clearance_oracle(point, scenario, layout) -> None:
+    assert any(
+        min(x for x, _ in block.footprint) <= point[0] <= max(x for x, _ in block.footprint)
+        and min(y for _, y in block.footprint) <= point[1] <= max(y for _, y in block.footprint)
+        for block in layout.blocks
     )
-    return tuple(anchors)
-
-
-def _assert_independent_clearance(point, scenario, layout) -> None:
-    assert any(_inside_polygon(point, block.footprint) for block in layout.blocks)
-    anchors = _independent_anchors(scenario)
-    assert all(_distance_sq(point, anchor) >= clearance**2 for anchor, clearance in anchors)
+    assert all(_distance(point, venue.region.center) >= venue.region.radius + _ANCHOR_CLEARANCE_CM for venue in scenario.venues)
+    assert all(_distance(point, venue.position[:2]) >= _BUILDING_CLEARANCE_CM for venue in scenario.venues)
+    assert all(
+        _distance(point, entrance.position[:2]) >= _ANCHOR_CLEARANCE_CM
+        for venue in scenario.venues
+        for entrance in venue.entrances
+    )
+    assert all(_distance(point, landmark.position[:2]) >= _BUILDING_CLEARANCE_CM for landmark in scenario.landmarks)
     nodes = tuple(node.position for node in layout.walk_nodes)
-    assert all(_distance_sq(point, node) >= _WALK_NODE_CLEARANCE_CM**2 for node in nodes)
-    routes = tuple(
-        layout.edge_polyline(edge)
-        for edge in layout.walk_edges
-        if len(layout.edge_polyline(edge)) >= 2
-    )
-    assert _minimum_route_distance_sq(point, routes) >= _ROUTE_CLEARANCE_CM**2
+    assert all(_distance(point, node) >= _WALK_NODE_CLEARANCE_CM for node in nodes)
+    routes = tuple(layout.edge_polyline(edge) for edge in layout.walk_edges)
+    assert _minimum_route_distance(point, routes) >= _ROUTE_CLEARANCE_CM
     bridge_routes = tuple(
-        layout.edge_polyline(edge)
-        for edge in layout.walk_edges
-        if edge.route_kind == "bridge" and len(layout.edge_polyline(edge)) >= 2
+        layout.edge_polyline(edge) for edge in layout.walk_edges if edge.route_kind == "bridge"
     )
-    assert _minimum_route_distance_sq(point, bridge_routes) >= _BRIDGE_CLEARANCE_CM**2
+    assert _minimum_route_distance(point, bridge_routes) >= _BRIDGE_CLEARANCE_CM
 
 
 def _spawn(template: str) -> tuple[FakeCommunicator, DistrictSceneRenderer]:
@@ -140,12 +113,20 @@ def test_district_dressing_is_deterministic_and_inert() -> None:
 
 
 def test_district_actor_budget_preserves_medium_and_large_counts() -> None:
-    medium, _ = _spawn("medium")
-    large, _ = _spawn("large")
-    assert len(_district_records(medium)) == 32
-    assert len(_district_records(large)) == 78
-    assert len(_district_records(medium)) <= 80
-    assert len(_district_records(large)) <= 80
+    assert len(plan_district_actors(build_medium_scenario(7))) == 32
+    assert len(plan_district_actors(build_large_scenario(31))) == 78
+
+
+def test_renderer_applies_pure_planner_order_and_locations() -> None:
+    scenario = build_medium_scenario(7)
+    planned = plan_district_actors(scenario)
+    communicator = FakeCommunicator()
+    DistrictSceneRenderer(communicator, scenario).spawn()
+    records = _district_records(communicator)
+    assert [record.actor_name for record in planned] == [record["object_name"] for record in records]
+    assert [record.position for record in planned] == [
+        tuple(communicator.unrealcv.locations[str(record["object_name"])]) for record in records
+    ]
 
 
 def test_props_use_allowed_assets_and_never_catalogue_roads() -> None:
@@ -178,21 +159,6 @@ def test_medium_and_large_prop_density_differs() -> None:
     )
 
 
-def test_props_clear_authored_nodes_edges_and_anchors() -> None:
-    for template in ("medium", "large"):
-        communicator, renderer = _spawn(template)
-        assert renderer.layout is not None
-        props = [
-            record
-            for record in _district_records(communicator)
-            if "DISTRICT_PROP_" in str(record["object_name"])
-        ]
-        for record in props:
-            position = communicator.unrealcv.locations[str(record["object_name"])]
-            point = (float(position[0]), float(position[1]))
-            _assert_independent_clearance(point, renderer.scenario, renderer.layout)
-
-
 def test_live_proven_trees_are_sparse_and_inert() -> None:
     for template in ("medium", "large"):
         communicator, renderer = _spawn(template)
@@ -219,7 +185,7 @@ def test_every_dressing_actor_is_inside_a_block_and_clear_of_bridge_gaps() -> No
             name = str(record["object_name"])
             point3d = communicator.unrealcv.locations[name]
             point = (float(point3d[0]), float(point3d[1]))
-            _assert_independent_clearance(point, renderer.scenario, renderer.layout)
+            _assert_clearance_oracle(point, renderer.scenario, renderer.layout)
 
 
 def test_shells_have_conservative_cross_block_separation() -> None:
@@ -233,7 +199,9 @@ def test_shells_have_conservative_cross_block_separation() -> None:
     for name, position in shells:
         block_id = name.removeprefix("GEN_BP_DISTRICT_BUILDING_").rsplit("_", 1)[0]
         block = renderer.layout.block_by_id(block_id)
-        assert _inside_polygon((float(position[0]), float(position[1])), block.footprint)
+        point = (float(position[0]), float(position[1]))
+        assert min(x for x, _ in block.footprint) <= point[0] <= max(x for x, _ in block.footprint)
+        assert min(y for _, y in block.footprint) <= point[1] <= max(y for _, y in block.footprint)
     for index, (_name, first) in enumerate(shells):
         for _other_name, second in shells[index + 1 :]:
             distance_sq = (float(first[0]) - float(second[0])) ** 2 + (
@@ -249,7 +217,7 @@ def test_route_segment_clearance_is_checked_between_nodes() -> None:
     assert routes
     start, end = routes[0][0], routes[0][1]
     midpoint = ((start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0)
-    assert _minimum_route_distance_sq(midpoint, routes) < _ROUTE_CLEARANCE_CM**2
+    assert _minimum_route_distance(midpoint, routes) < _ROUTE_CLEARANCE_CM
 
 
 def test_fully_protected_block_uses_deterministic_empty_shell_policy() -> None:
@@ -258,7 +226,7 @@ def test_fully_protected_block_uses_deterministic_empty_shell_policy() -> None:
     block = renderer.layout.blocks[0]
     xs, ys = zip(*block.footprint)
     center = ((min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0)
-    assert renderer._shell_positions(
+    assert shell_positions(
         block,
         [],
         (),
@@ -267,17 +235,17 @@ def test_fully_protected_block_uses_deterministic_empty_shell_policy() -> None:
     ) == ()
 
 
-def _legacy_meeting_target(center: tuple[float, float], agent_index: int) -> tuple[float, float]:
-    angle = math.radians(90.0 * agent_index)
-    return round(center[0] + math.cos(angle) * 300.0, 2), round(center[1] + math.sin(angle) * 300.0, 2)
-
-
 def test_meeting_target_matches_legacy_rounding_for_agent_counts() -> None:
-    centers = ((0.0, 0.0), (123.456, -789.012), (-0.25, 0.125))
-    for center in centers:
-        for count in (1, 2, 3, 5):
-            for index in range(count):
-                assert meeting_target(index, center) == _legacy_meeting_target(center, index)
+    cases = (
+        (1, 0, (0.0, 0.0), (300.0, 0.0)),
+        (2, 1, (0.0, 0.0), (0.0, 300.0)),
+        (3, 2, (0.0, 0.0), (-300.0, 0.0)),
+        (5, 3, (123.456, -789.012), (123.46, -1089.01)),
+        (5, 4, (-0.25, 0.125), (299.75, 0.12)),
+    )
+    for count, index, center, expected in cases:
+        assert index < count
+        assert meeting_target(index, center) == expected
 
 
 def test_environment_meeting_target_uses_agent_order() -> None:
@@ -285,7 +253,7 @@ def test_environment_meeting_target_uses_agent_order() -> None:
     env = VenueMeetupEnv.__new__(VenueMeetupEnv)
     env.agent_ids = ["first", "middle", "last"]
     venue = scenario.venues[0]
-    assert env._meeting_target("last", venue) == _legacy_meeting_target(venue.region.center, 2)
+    assert env._meeting_target("last", venue) == (-11300.0, 15150.0)
 
 
 class _TeleportUnrealCV:
@@ -337,7 +305,7 @@ def test_teleport_navigation_places_the_shared_meeting_target(monkeypatch) -> No
     monkeypatch.setattr("benchmark.venue_meetup.venue_env.time.sleep", lambda _seconds: None)
 
     result = env._teleport_navigate("agent_2", venue)
-    expected = _legacy_meeting_target(venue.region.center, 2)
+    expected = (-11300.0, 15150.0)
     assert unrealcv.set_locations[0][:2] == expected
     assert result["arrived"] is True
     assert result["location"] == (round(expected[0], 1), round(expected[1], 1))

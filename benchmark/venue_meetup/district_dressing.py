@@ -77,8 +77,7 @@ class DistrictActorRecord:
     """One inert visual actor planned for a district.
 
     ``position`` is the exact three-dimensional Unreal location supplied by the
-    renderer.  Collision and mobility are part of the record so the adapter cannot
-    accidentally diverge from the planner's inert-actor contract.
+    renderer.  The adapter applies the fixed inert-actor policy when spawning.
     """
 
     actor_name: str
@@ -86,14 +85,6 @@ class DistrictActorRecord:
     position: tuple[float, float, float]
     yaw_deg: float
     scale: tuple[float, float, float]
-    collision: bool = False
-    movable: bool = False
-
-    @property
-    def object_name(self) -> str:
-        """Compatibility spelling used by UnrealCV spawn records."""
-
-        return self.actor_name
 
 
 def _distance_sq(a: tuple[float, float], b: tuple[float, float]) -> float:
