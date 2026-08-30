@@ -45,21 +45,31 @@ _DISTRICT_PROP_ASSETS = (
     "BP_Trash_bin_a_C",
     "BP_Hydrant_C",
 )
+# These two catalogue assets were live-probed on the packaged map.  They are
+# readable at district scale while the scooter/cart/box candidates are not.
+_DISTRICT_TREE_ASSETS = ("BP_Tree1_C", "BP_Tree2_C")
 _PROP_SCALES = {
-    "RoadBlocker_C": (0.55, 0.55, 0.55),
-    "RoadCone_C": (0.45, 0.45, 0.45),
-    "BP_Table_C": (0.50, 0.50, 0.50),
-    "BP_Table2_C": (0.50, 0.50, 0.50),
-    "BP_Can_C": (0.28, 0.28, 0.28),
-    "BP_Soda1_C": (0.28, 0.28, 0.28),
-    "BP_Trash_bin_a_C": (0.48, 0.48, 0.48),
-    "BP_Hydrant_C": (0.52, 0.52, 0.52),
+    "RoadBlocker_C": (0.70, 0.70, 0.70),
+    "RoadCone_C": (0.58, 0.58, 0.58),
+    "BP_Table_C": (0.78, 0.78, 0.78),
+    "BP_Table2_C": (0.78, 0.78, 0.78),
+    "BP_Can_C": (0.40, 0.40, 0.40),
+    "BP_Soda1_C": (0.40, 0.40, 0.40),
+    "BP_Trash_bin_a_C": (0.68, 0.68, 0.68),
+    "BP_Hydrant_C": (0.70, 0.70, 0.70),
+}
+_TREE_SCALES = {
+    "BP_Tree1_C": (1.45, 1.45, 1.45),
+    "BP_Tree2_C": (1.35, 1.35, 1.35),
 }
 _BUILDING_CLEARANCE_CM = 3_400.0
 _WALK_NODE_CLEARANCE_CM = 1_500.0
 _ROUTE_CLEARANCE_CM = 1_600.0
+_BRIDGE_CLEARANCE_CM = 2_200.0
 _ANCHOR_CLEARANCE_CM = 1_200.0
 _PROP_SPACING_CM = 1_800.0
+_TREE_SPACING_CM = 2_800.0
+_SHELL_SPACING_CM = 3_800.0
 
 
 def _distance_sq(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -78,6 +88,22 @@ def _point_to_segment_distance_sq(
     t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_sq
     t = min(1.0, max(0.0, t))
     return _distance_sq(point, (start[0] + t * dx, start[1] + t * dy))
+
+
+def _minimum_segment_distance_sq(
+    point: tuple[float, float],
+    polylines: Sequence[tuple[tuple[float, float], ...]],
+) -> float:
+    """Return the squared distance to authored route segments, not just nodes."""
+
+    return min(
+        (
+            _point_to_segment_distance_sq(point, start, end)
+            for polyline in polylines
+            for start, end in zip(polyline, polyline[1:])
+        ),
+        default=math.inf,
+    )
 
 
 class DistrictSceneRenderer:
@@ -100,6 +126,7 @@ class DistrictSceneRenderer:
         venues = [(venue.position[0], venue.position[1]) for venue in self.scenario.venues]
         anchors = self._protected_anchors()
         routes = self._route_polylines()
+        bridge_routes = self._bridge_gap_polylines()
         by_block = self._frontages_by_block()
         spawned: list[tuple[float, float]] = []
         for block_index, block in enumerate(self.layout.blocks):
@@ -111,6 +138,8 @@ class DistrictSceneRenderer:
                 frontages=frontages,
                 protected_anchors=anchors,
                 route_polylines=routes,
+                bridge_polylines=bridge_routes,
+                occupied_positions=spawned,
             )
             for shell_index, point in enumerate(positions):
                 asset = _SHELL_BUILDINGS[(block_index * 5 + shell_index) % len(_SHELL_BUILDINGS)]
@@ -134,7 +163,11 @@ class DistrictSceneRenderer:
         frontages: Sequence[Frontage] = (),
         protected_anchors: Sequence[tuple[tuple[float, float], float]] = (),
         route_polylines: Sequence[tuple[tuple[float, float], ...]] = (),
+        bridge_polylines: Sequence[tuple[tuple[float, float], ...]] = (),
+        occupied_positions: Sequence[tuple[float, float]] = (),
     ) -> tuple[tuple[float, float], ...]:
+        """Choose deterministic shells; an empty block is an intentional safe fallback."""
+
         xs, ys = zip(*block.footprint)
         min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
         width, height = max_x - min_x, max_y - min_y
@@ -157,9 +190,20 @@ class DistrictSceneRenderer:
 
         selected: list[tuple[float, float]] = []
         for point in candidates:
-            if any(_distance_sq(point, previous) < 3_800.0**2 for previous in selected):
+            if not self._inside_block(block, point):
                 continue
-            if not self._clear(point, protected_anchors, walk_node_positions, route_polylines):
+            if any(
+                _distance_sq(point, previous) < _SHELL_SPACING_CM**2
+                for previous in (*occupied_positions, *selected)
+            ):
+                continue
+            if not self._clear(
+                point,
+                protected_anchors,
+                walk_node_positions,
+                route_polylines,
+                bridge_polylines=bridge_polylines,
+            ):
                 continue
             if any(_distance_sq(point, venue) < _BUILDING_CLEARANCE_CM**2 for venue in venue_positions):
                 continue
@@ -202,7 +246,34 @@ class DistrictSceneRenderer:
         ) if medium else ("BP_Table_C", "BP_Hydrant_C")
         nodes = tuple(node.position for node in self.layout.walk_nodes)
         anchors, routes = self._protected_anchors(), self._route_polylines()
+        bridge_routes = self._bridge_gap_polylines()
         by_block, occupied, serial = self._frontages_by_block(), list(shell_positions), 0
+        # One scaled tree per authored block gives the camera a readable depth
+        # cue without changing the route graph or introducing dynamic actors.
+        for block_index, block in enumerate(self.layout.blocks):
+            trees = self._prop_candidates(
+                block,
+                by_block.get(block.block_id, ()),
+                occupied,
+                nodes,
+                anchors,
+                routes,
+                1,
+                spacing=_TREE_SPACING_CM,
+                bridge_polylines=bridge_routes,
+            )
+            if not trees:
+                continue
+            point, yaw = trees[0]
+            asset = _DISTRICT_TREE_ASSETS[block_index % len(_DISTRICT_TREE_ASSETS)]
+            self._spawn_decor(
+                self.district_tree_actor_name(block.block_id, 0),
+                asset,
+                (point[0], point[1], 0.0),
+                yaw,
+                _TREE_SCALES[asset],
+            )
+            occupied.append(point)
         for block in self.layout.blocks:
             candidates = self._prop_candidates(
                 block,
@@ -212,9 +283,16 @@ class DistrictSceneRenderer:
                 anchors,
                 routes,
                 limit,
+                bridge_polylines=bridge_routes,
             )
             for local_index, (point, yaw) in enumerate(candidates):
-                asset = assets[serial % len(assets)]
+                # Keep one table at every frontage so the sparse dressing reads
+                # as street furniture; the remaining cues cycle by layout size.
+                asset = (
+                    "BP_Table_C"
+                    if local_index == 0
+                    else assets[(serial + local_index - 1) % len(assets)]
+                )
                 self._spawn_decor(
                     self.district_prop_actor_name(block.block_id, local_index),
                     asset,
@@ -234,6 +312,9 @@ class DistrictSceneRenderer:
         anchors: Sequence[tuple[tuple[float, float], float]],
         routes: Sequence[tuple[tuple[float, float], ...]],
         limit: int,
+        *,
+        spacing: float = _PROP_SPACING_CM,
+        bridge_polylines: Sequence[tuple[tuple[float, float], ...]] = (),
     ) -> tuple[tuple[tuple[float, float], float], ...]:
         xs, ys = zip(*block.footprint)
         min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
@@ -251,9 +332,17 @@ class DistrictSceneRenderer:
                 candidates.append((point, self._shell_yaw(block, point, frontages=frontages)))
         selected, placed = [], list(occupied)
         for point, yaw in candidates:
-            if not (min_x <= point[0] <= max_x and min_y <= point[1] <= max_y):
+            if not self._inside_block(block, point):
                 continue
-            if not self._clear(point, anchors, nodes, routes, placed, _PROP_SPACING_CM):
+            if not self._clear(
+                point,
+                anchors,
+                nodes,
+                routes,
+                placed,
+                spacing,
+                bridge_polylines=bridge_polylines,
+            ):
                 continue
             selected.append((point, yaw))
             placed.append(point)
@@ -294,6 +383,22 @@ class DistrictSceneRenderer:
                 polylines.append(polyline)
         return tuple(polylines)
 
+    def _bridge_gap_polylines(self) -> tuple[tuple[tuple[float, float], ...], ...]:
+        """Return bridge spans separately for their stronger dressing exclusion."""
+
+        assert self.layout is not None
+        polylines = []
+        for edge in self.layout.walk_edges:
+            if edge.route_kind != "bridge":
+                continue
+            try:
+                polyline = self.layout.edge_polyline(edge)
+            except (KeyError, ValueError):
+                continue
+            if len(polyline) >= 2:
+                polylines.append(polyline)
+        return tuple(polylines)
+
     def _protected_anchors(self) -> tuple[tuple[tuple[float, float], float], ...]:
         anchors = []
         for venue in self.scenario.venues:
@@ -319,18 +424,36 @@ class DistrictSceneRenderer:
         routes: Sequence[tuple[tuple[float, float], ...]],
         occupied: Sequence[tuple[float, float]] = (),
         spacing: float = 0.0,
+        *,
+        bridge_polylines: Sequence[tuple[tuple[float, float], ...]] = (),
     ) -> bool:
         if any(_distance_sq(point, anchor) < clearance**2 for anchor, clearance in anchors):
             return False
         if any(_distance_sq(point, node) < _WALK_NODE_CLEARANCE_CM**2 for node in nodes):
             return False
-        if any(
-            _point_to_segment_distance_sq(point, start, end) < _ROUTE_CLEARANCE_CM**2
-            for polyline in routes
-            for start, end in zip(polyline, polyline[1:])
-        ):
+        if _minimum_segment_distance_sq(point, routes) < _ROUTE_CLEARANCE_CM**2:
+            return False
+        if _minimum_segment_distance_sq(point, bridge_polylines) < _BRIDGE_CLEARANCE_CM**2:
             return False
         return not spacing or all(_distance_sq(point, other) >= spacing**2 for other in occupied)
+
+    @staticmethod
+    def _inside_block(block: Block, point: tuple[float, float]) -> bool:
+        """Return whether a dressing point is contained by the authored footprint."""
+
+        polygon = block.footprint
+        if len(polygon) < 3:
+            return False
+        inside = False
+        for index, (x1, y1) in enumerate(polygon):
+            x2, y2 = polygon[(index + 1) % len(polygon)]
+            if _point_to_segment_distance_sq(point, (x1, y1), (x2, y2)) <= 1e-6:
+                return True
+            if (y1 > point[1]) != (y2 > point[1]):
+                crossing_x = (x2 - x1) * (point[1] - y1) / (y2 - y1) + x1
+                if point[0] < crossing_x:
+                    inside = not inside
+        return inside
 
     def _spawn_decor(
         self,
@@ -355,3 +478,7 @@ class DistrictSceneRenderer:
     @staticmethod
     def district_prop_actor_name(block_id: str, prop_index: int) -> str:
         return f"GEN_BP_DISTRICT_PROP_{block_id}_{prop_index:02d}"
+
+    @staticmethod
+    def district_tree_actor_name(block_id: str, tree_index: int) -> str:
+        return f"GEN_BP_DISTRICT_TREE_{block_id}_{tree_index:02d}"
