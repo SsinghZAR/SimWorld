@@ -10,28 +10,48 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from benchmark.venue_meetup.district_geometry import (
+    DistrictShellFootprint,
+    _ANCHOR_CLEARANCE_CM,
+    _BRIDGE_CLEARANCE_CM,
+    _BUILDING_CLEARANCE_CM,
+    _ROUTE_CLEARANCE_CM,
+    _SHELL_ASSET_MARGIN_CM,
+    _SHELL_EDGE_END_GAP_CM,
+    _SHELL_EDGE_SETBACK_CM,
+    _SHELL_FRONTAGE_BUFFER_CM,
+    _SHELL_FRONTAGE_GAP_CM,
+    _SHELL_RHYTHM,
+    _SHELL_SCALES,
+    _SHELL_SEAM_GAP_CM,
+    _SHELL_TARGET_LARGE,
+    _SHELL_TARGET_MEDIUM,
+    _WALK_NODE_CLEARANCE_CM,
+    _augment_shell_shortfall,
+    _distance_sq,
+    _make_shell_placement,
+    _minimum_segment_distance_sq,
+    _offset,
+    _oriented_half_extents,
+    _tile_block,
+    bridge_gap_polylines,
+    clear,
+    frontages_by_block,
+    inside_block,
+    protected_anchors,
+    route_polylines,
+    shell_positions,
+    shell_yaw,
+    shell_protected_bounds,
+)
 from benchmark.venue_meetup.layout import Block, Frontage
 
 if TYPE_CHECKING:
     from benchmark.venue_meetup.scenario import Scenario
 
-
-_SHELL_BUILDINGS = (
-    "BP_Building_05_C",
-    "BP_Building_06_C",
-    "BP_Building_20_C",
-    "BP_Building_24_C",
-    "BP_Building_25_C",
-    "BP_Building_44_C",
-    "BP_Building_87_C",
-    "BP_Building_95_C",
-    "BP_Building_99_C",
-    "BP_Building_101_C",
-    "BP_Building_123_C",
-)
 
 # Do not add catalogue-only road blueprints here: they are unavailable on the
 # packaged empty map and have previously crashed Unreal when spawned.
@@ -62,16 +82,8 @@ _TREE_SCALES = {
     "BP_Tree1_C": (1.45, 1.45, 1.45),
     "BP_Tree2_C": (1.35, 1.35, 1.35),
 }
-_BUILDING_CLEARANCE_CM = 3_400.0
-_WALK_NODE_CLEARANCE_CM = 1_500.0
-_ROUTE_CLEARANCE_CM = 1_600.0
-_BRIDGE_CLEARANCE_CM = 2_200.0
-_ANCHOR_CLEARANCE_CM = 1_200.0
 _PROP_SPACING_CM = 1_800.0
 _TREE_SPACING_CM = 2_800.0
-_SHELL_SPACING_CM = 3_800.0
-
-
 @dataclass(frozen=True, slots=True)
 class DistrictActorRecord:
     """One inert visual actor planned for a district.
@@ -85,235 +97,8 @@ class DistrictActorRecord:
     position: tuple[float, float, float]
     yaw_deg: float
     scale: tuple[float, float, float]
-
-
-def _distance_sq(a: tuple[float, float], b: tuple[float, float]) -> float:
-    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
-
-
-def _point_to_segment_distance_sq(
-    point: tuple[float, float],
-    start: tuple[float, float],
-    end: tuple[float, float],
-) -> float:
-    dx, dy = end[0] - start[0], end[1] - start[1]
-    length_sq = dx * dx + dy * dy
-    if length_sq <= 0.0:
-        return _distance_sq(point, start)
-    t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_sq
-    t = min(1.0, max(0.0, t))
-    return _distance_sq(point, (start[0] + t * dx, start[1] + t * dy))
-
-
-def _minimum_segment_distance_sq(
-    point: tuple[float, float],
-    polylines: Sequence[tuple[tuple[float, float], ...]],
-) -> float:
-    """Return the squared distance to authored route segments, not just nodes."""
-
-    return min(
-        (
-            _point_to_segment_distance_sq(point, start, end)
-            for polyline in polylines
-            for start, end in zip(polyline, polyline[1:])
-        ),
-        default=math.inf,
-    )
-
-
-def _offset(
-    point: tuple[float, float],
-    center: tuple[float, float],
-    distance: float,
-    lateral: float = 0.0,
-) -> tuple[float, float]:
-    dx, dy = center[0] - point[0], center[1] - point[1]
-    length = math.hypot(dx, dy)
-    if length <= 1e-9:
-        return point
-    ux, uy = dx / length, dy / length
-    return (point[0] + ux * distance - uy * lateral, point[1] + uy * distance + ux * lateral)
-
-
-def frontages_by_block(layout) -> dict[str, tuple[Frontage, ...]]:
-    """Group authored frontages in layout order by block id."""
-
-    return {
-        block.block_id: tuple(frontage for frontage in layout.frontages if frontage.block_id == block.block_id)
-        for block in layout.blocks
-    }
-
-
-def route_polylines(layout) -> tuple[tuple[tuple[float, float], ...], ...]:
-    """Return valid authored edge polylines in walk-edge order."""
-
-    polylines = []
-    for edge in layout.walk_edges:
-        try:
-            polyline = layout.edge_polyline(edge)
-        except (KeyError, ValueError):
-            continue
-        if len(polyline) >= 2:
-            polylines.append(polyline)
-    return tuple(polylines)
-
-
-def bridge_gap_polylines(layout) -> tuple[tuple[tuple[float, float], ...], ...]:
-    """Return bridge spans separately for their stronger dressing exclusion."""
-
-    polylines = []
-    for edge in layout.walk_edges:
-        if edge.route_kind != "bridge":
-            continue
-        try:
-            polyline = layout.edge_polyline(edge)
-        except (KeyError, ValueError):
-            continue
-        if len(polyline) >= 2:
-            polylines.append(polyline)
-    return tuple(polylines)
-
-
-def protected_anchors(scenario) -> tuple[tuple[tuple[float, float], float], ...]:
-    """Return venue/landmark points and their conservative clearances."""
-
-    anchors = []
-    for venue in scenario.venues:
-        anchors.extend((
-            (venue.region.center, float(venue.region.radius) + _ANCHOR_CLEARANCE_CM),
-            ((venue.position[0], venue.position[1]), _BUILDING_CLEARANCE_CM),
-        ))
-        anchors.extend(
-            ((entrance.position[0], entrance.position[1]), _ANCHOR_CLEARANCE_CM)
-            for entrance in venue.entrances
-        )
-    anchors.extend(
-        ((landmark.position[0], landmark.position[1]), _BUILDING_CLEARANCE_CM)
-        for landmark in scenario.landmarks
-    )
-    return tuple(anchors)
-
-
-def clear(
-    point: tuple[float, float],
-    anchors: Sequence[tuple[tuple[float, float], float]],
-    nodes: Sequence[tuple[float, float]],
-    routes: Sequence[tuple[tuple[float, float], ...]],
-    occupied: Sequence[tuple[float, float]] = (),
-    spacing: float = 0.0,
-    *,
-    bridge_polylines: Sequence[tuple[tuple[float, float], ...]] = (),
-) -> bool:
-    """Return whether a dressing point respects all authored clearances."""
-
-    if any(_distance_sq(point, anchor) < clearance**2 for anchor, clearance in anchors):
-        return False
-    if any(_distance_sq(point, node) < _WALK_NODE_CLEARANCE_CM**2 for node in nodes):
-        return False
-    if _minimum_segment_distance_sq(point, routes) < _ROUTE_CLEARANCE_CM**2:
-        return False
-    if _minimum_segment_distance_sq(point, bridge_polylines) < _BRIDGE_CLEARANCE_CM**2:
-        return False
-    return not spacing or all(_distance_sq(point, other) >= spacing**2 for other in occupied)
-
-
-def inside_block(block: Block, point: tuple[float, float]) -> bool:
-    """Return whether a dressing point is contained by an authored footprint."""
-
-    polygon = block.footprint
-    if len(polygon) < 3:
-        return False
-    inside = False
-    for index, (x1, y1) in enumerate(polygon):
-        x2, y2 = polygon[(index + 1) % len(polygon)]
-        if _point_to_segment_distance_sq(point, (x1, y1), (x2, y2)) <= 1e-6:
-            return True
-        if (y1 > point[1]) != (y2 > point[1]):
-            crossing_x = (x2 - x1) * (point[1] - y1) / (y2 - y1) + x1
-            if point[0] < crossing_x:
-                inside = not inside
-    return inside
-
-
-def shell_yaw(
-    block: Block,
-    position: tuple[float, float],
-    *,
-    frontages: Sequence[Frontage] = (),
-) -> float:
-    if frontages:
-        nearest = min(frontages, key=lambda frontage: _distance_sq(position, frontage.position[:2]))
-        if _distance_sq(position, nearest.position[:2]) <= 8_000.0**2:
-            return float(nearest.yaw_deg)
-    xs, ys = zip(*block.footprint)
-    _, yaw = min(
-        (
-            (abs(position[0] - min(xs)), 180.0),
-            (abs(position[0] - max(xs)), 0.0),
-            (abs(position[1] - min(ys)), -90.0),
-            (abs(position[1] - max(ys)), 90.0),
-        ),
-        key=lambda item: item[0],
-    )
-    return yaw
-
-
-def shell_positions(
-    block: Block,
-    venue_positions: list[tuple[float, float]],
-    walk_node_positions: tuple[tuple[float, float], ...],
-    *,
-    frontages: Sequence[Frontage] = (),
-    protected_anchors: Sequence[tuple[tuple[float, float], float]] = (),
-    route_polylines: Sequence[tuple[tuple[float, float], ...]] = (),
-    bridge_polylines: Sequence[tuple[tuple[float, float], ...]] = (),
-    occupied_positions: Sequence[tuple[float, float]] = (),
-) -> tuple[tuple[float, float], ...]:
-    """Choose deterministic shells; an empty block is an intentional safe fallback."""
-
-    xs, ys = zip(*block.footprint)
-    min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
-    width, height = max_x - min_x, max_y - min_y
-    center = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
-    inset = min(2_200.0, max(1_300.0, min(width, height) * 0.15))
-    columns = max(2, min(5, math.ceil((width - 2.0 * inset) / 4_800.0)))
-    rows = max(2, min(4, math.ceil((height - 2.0 * inset) / 4_800.0)))
-    candidates: list[tuple[float, float]] = []
-    for frontage in frontages:
-        point = _offset(frontage.position[:2], center, max(7_000.0, min(width, height) * 0.45))
-        if min_x <= point[0] <= max_x and min_y <= point[1] <= max_y:
-            candidates.append(point)
-    for column in range(columns):
-        x = min_x + inset + (width - 2.0 * inset) * (column + 0.5) / columns
-        candidates.extend(((x, min_y + inset), (x, max_y - inset)))
-    for row in range(rows):
-        y = min_y + inset + (height - 2.0 * inset) * (row + 0.5) / rows
-        candidates.extend(((min_x + inset, y), (max_x - inset, y)))
-    candidates.append(center)
-
-    selected: list[tuple[float, float]] = []
-    for point in candidates:
-        if not inside_block(block, point):
-            continue
-        if any(
-            _distance_sq(point, previous) < _SHELL_SPACING_CM**2
-            for previous in (*occupied_positions, *selected)
-        ):
-            continue
-        if not clear(
-            point,
-            protected_anchors,
-            walk_node_positions,
-            route_polylines,
-            bridge_polylines=bridge_polylines,
-        ):
-            continue
-        if any(_distance_sq(point, venue) < _BUILDING_CLEARANCE_CM**2 for venue in venue_positions):
-            continue
-        selected.append(point)
-        if len(selected) == 8:
-            break
-    return tuple(selected)
+    collision: bool = False
+    footprint: DistrictShellFootprint | None = None
 
 
 def prop_candidates(
@@ -363,6 +148,53 @@ def prop_candidates(
     return tuple(selected)
 
 
+def _tree_fallback_candidate(
+    block: Block,
+    *,
+    occupied: Sequence[tuple[float, float]],
+    nodes: Sequence[tuple[float, float]],
+    anchors: Sequence[tuple[tuple[float, float], float]],
+    routes: Sequence[tuple[tuple[float, float], ...]],
+    bridge_polylines: Sequence[tuple[tuple[float, float], ...]],
+) -> tuple[tuple[float, float], float] | None:
+    """Find a deterministic sparse tree point when frontage candidates are full.
+
+    Shells intentionally consume most perimeter slots.  A tree is non-colliding
+    dressing, so when the normal frontage/interior candidates are blocked we
+    scan the block interior at a coarse fixed lattice while retaining the same
+    venue, node, route, and bridge clearances as every other prop.
+    """
+
+    if len(block.footprint) < 3:
+        return None
+    xs, ys = zip(*block.footprint)
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    step = 1_000.0
+    candidates: list[tuple[float, float]] = []
+    for iy, y in enumerate(range(int(math.ceil(min_y)), int(math.floor(max_y)) + 1, int(step))):
+        # Alternate the x scan direction by row so the fallback remains stable
+        # but does not stack every block's first tree on one corner.
+        row = list(range(int(math.ceil(min_x)), int(math.floor(max_x)) + 1, int(step)))
+        if iy % 2:
+            row.reverse()
+        candidates.extend((float(x), float(y)) for x in row)
+    for point in candidates:
+        if not inside_block(block, point):
+            continue
+        if clear(
+            point,
+            anchors,
+            nodes,
+            routes,
+            occupied,
+            _TREE_SPACING_CM,
+            bridge_polylines=bridge_polylines,
+        ):
+            return point, shell_yaw(block, point)
+    return None
+
+
 def building_actor_name(block_id: str, shell_index: int) -> str:
     return f"GEN_BP_DISTRICT_BUILDING_{block_id}_{shell_index:02d}"
 
@@ -376,45 +208,89 @@ def district_tree_actor_name(block_id: str, tree_index: int) -> str:
 
 
 def plan_shell_records(scenario: Scenario) -> tuple[DistrictActorRecord, ...]:
-    """Plan shell records in the exact historical block/shell order."""
+    """Plan dense perimeter shell records in deterministic block/edge order."""
 
     layout = scenario.layout
     if layout is None:
         return ()
     nodes = tuple(node.position for node in layout.walk_nodes)
-    venues = [(venue.position[0], venue.position[1]) for venue in scenario.venues]
-    anchors = protected_anchors(scenario)
+    # Shells use measured AABBs and small authored point margins.  The legacy
+    # 3.4m venue-center/1.2m anchor buffers are for props and trees; retaining
+    # them here would reject most valid perimeter frontage slots.
+    anchors = tuple(
+        [
+            (venue.region.center, float(venue.region.radius) + _SHELL_FRONTAGE_BUFFER_CM),
+            *((entrance.position[:2], _SHELL_ASSET_MARGIN_CM) for entrance in venue.entrances),
+        ]
+        for venue in scenario.venues
+    )
+    anchors = tuple(item for group in anchors for item in group)
+    protected_bounds = shell_protected_bounds(scenario)
     routes = route_polylines(layout)
     bridge_routes = bridge_gap_polylines(layout)
     by_block = frontages_by_block(layout)
-    spawned: list[tuple[float, float]] = []
+    large = "large" in layout.layout_id.lower() or len(layout.blocks) >= 6
+    target_count = _SHELL_TARGET_LARGE if large else _SHELL_TARGET_MEDIUM
+    venue_by_slot = {venue.slot_id: venue for venue in scenario.venues}
+    spawned_placements: list[_ShellPlacement] = []
     records: list[DistrictActorRecord] = []
     for block_index, block in enumerate(layout.blocks):
         frontages = by_block.get(block.block_id, ())
-        positions = shell_positions(
+        placements = _tile_block(
             block,
-            venues,
-            nodes,
             frontages=frontages,
+            venue_by_slot=venue_by_slot,
+            venue_positions=(),
+            walk_node_positions=nodes,
             protected_anchors=anchors,
             route_polylines=routes,
             bridge_polylines=bridge_routes,
-            occupied_positions=spawned,
+            occupied_placements=spawned_placements,
+            occupied_positions=(),
+            protected_bounds=protected_bounds,
+            target_count=target_count,
+            block_index=block_index,
         )
-        for shell_index, point in enumerate(positions):
-            asset = _SHELL_BUILDINGS[(block_index * 5 + shell_index) % len(_SHELL_BUILDINGS)]
-            scale = (0.24, 0.28, 0.32)[(block_index + shell_index) % 3]
+        placements = _augment_shell_shortfall(
+            block,
+            placements,
+            minimum_count=target_count,
+            frontages=frontages,
+            venue_by_slot=venue_by_slot,
+            walk_node_positions=nodes,
+            protected_anchors=anchors,
+            route_polylines=routes,
+            bridge_polylines=bridge_routes,
+            occupied_placements=spawned_placements,
+            block_index=block_index,
+            protected_bounds=protected_bounds,
+        )
+        for shell_index, placement in enumerate(placements):
+            actor_name = building_actor_name(block.block_id, shell_index)
+            footprint = replace(placement.footprint, actor_name=actor_name)
             records.append(
                 DistrictActorRecord(
-                    actor_name=building_actor_name(block.block_id, shell_index),
-                    asset_key=asset,
-                    position=(point[0], point[1], 0.0),
-                    yaw_deg=shell_yaw(block, point, frontages=frontages),
-                    scale=(scale, scale, scale),
+                    actor_name=actor_name,
+                    asset_key=placement.asset_key,
+                    position=(placement.point[0], placement.point[1], 0.0),
+                    yaw_deg=placement.yaw_deg,
+                    scale=placement.scale,
+                    collision=True,
+                    footprint=footprint,
                 )
             )
-            spawned.append(point)
+            spawned_placements.append(replace(placement, footprint=footprint))
     return tuple(records)
+
+
+def plan_shell_footprints(scenario: Scenario) -> tuple[DistrictShellFootprint, ...]:
+    """Return the authoritative conservative footprint for every shell."""
+
+    return tuple(
+        record.footprint
+        for record in plan_shell_records(scenario)
+        if record.footprint is not None
+    )
 
 
 def plan_prop_records(
@@ -436,15 +312,32 @@ def plan_prop_records(
     nodes = tuple(node.position for node in layout.walk_nodes)
     anchors, routes = protected_anchors(scenario), route_polylines(layout)
     bridge_routes = bridge_gap_polylines(layout)
-    by_block, occupied, serial = frontages_by_block(layout), list(shell_positions), 0
+    # Shells are solid but props/trees are inert visual cues; do not let the
+    # shell center list erase the authored furniture budget at dense counts.
+    # Tree candidates still use local shell positions below to avoid obvious
+    # visual stacking, while props share only the tree/prop occupancy list.
+    by_block, occupied, serial = frontages_by_block(layout), [], 0
+    # Keep tree placement local to its owning block.  A global shell-spacing
+    # exclusion can erase a valid interior point when neighbouring blocks share
+    # a street seam; the tree is non-colliding and its local spacing/route
+    # checks are the relevant constraints.
+    shell_positions_by_block = {
+        block.block_id: [point for point in shell_positions if inside_block(block, point)]
+        for block in layout.blocks
+    }
     records: list[DistrictActorRecord] = []
     # One scaled tree per authored block gives the camera a readable depth
     # cue without changing the route graph or introducing dynamic actors.
     for block_index, block in enumerate(layout.blocks):
+        tree_occupied = [*shell_positions_by_block.get(block.block_id, ()), *(
+            (record.position[0], record.position[1])
+            for record in records
+            if "DISTRICT_TREE_" in record.actor_name
+        )]
         trees = prop_candidates(
             block,
             by_block.get(block.block_id, ()),
-            occupied,
+            tree_occupied,
             nodes,
             anchors,
             routes,
@@ -452,6 +345,16 @@ def plan_prop_records(
             spacing=_TREE_SPACING_CM,
             bridge_polylines=bridge_routes,
         )
+        if not trees:
+            fallback_tree = _tree_fallback_candidate(
+                block,
+                occupied=tree_occupied,
+                nodes=nodes,
+                anchors=anchors,
+                routes=routes,
+                bridge_polylines=bridge_routes,
+            )
+            trees = (fallback_tree,) if fallback_tree is not None else ()
         if not trees:
             continue
         point, yaw = trees[0]
@@ -515,7 +418,6 @@ __all__ = [
     "building_actor_name",
     "district_prop_actor_name",
     "district_tree_actor_name",
-    "_SHELL_BUILDINGS",
     "_DISTRICT_PROP_ASSETS",
     "_DISTRICT_TREE_ASSETS",
     "_PROP_SCALES",
@@ -527,7 +429,6 @@ __all__ = [
     "_ANCHOR_CLEARANCE_CM",
     "_PROP_SPACING_CM",
     "_TREE_SPACING_CM",
-    "_SHELL_SPACING_CM",
     "clear",
     "inside_block",
     "shell_positions",

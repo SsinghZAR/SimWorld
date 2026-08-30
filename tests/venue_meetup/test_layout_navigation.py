@@ -4,8 +4,17 @@ from __future__ import annotations
 
 import pytest
 
+from benchmark.venue_meetup.district_dressing import plan_shell_records
+from benchmark.venue_meetup.district_geometry import DistrictShellFootprint
 from benchmark.venue_meetup.layout import DistrictLayout, Frontage, MeetingRegion, WalkEdge, WalkNode
-from benchmark.venue_meetup.navigation import plan_layout_route, select_walk_planner
+from benchmark.venue_meetup.navigation import (
+    Obstacle,
+    building_obstacles,
+    plan_layout_route,
+    plan_path,
+    segment_clear,
+    select_walk_planner,
+)
 from benchmark.venue_meetup.templates.central_square import build_fixed_scenario as build_central
 from benchmark.venue_meetup.templates.riverside_market import (
     build_district_layout as build_riverside_layout,
@@ -19,6 +28,11 @@ from benchmark.venue_meetup.templates.station_quarter import (
 )
 from benchmark.venue_meetup.templates.station_quarter import (
     build_fixed_scenario as build_station,
+)
+from tests.venue_meetup._district_geometry_oracle import (
+    disc_chain,
+    enabled_bridge_routes,
+    enabled_routes,
 )
 
 
@@ -109,6 +123,18 @@ def test_riverside_unreachable_when_both_bridges_disabled() -> None:
     assert same_bank.used_bridge is False
 
 
+def test_disabled_bridges_are_absent_from_district_geometry() -> None:
+    layout = layout_with_bridges_disabled()
+    bridge_edges = tuple(edge for edge in layout.walk_edges if edge.route_kind == "bridge")
+    enabled_edges = tuple(edge for edge in layout.walk_edges if edge.enabled)
+
+    assert bridge_edges and all(not edge.enabled for edge in bridge_edges)
+    assert enabled_routes(layout) == tuple(layout.edge_polyline(edge) for edge in enabled_edges)
+    assert enabled_bridge_routes(layout) == ()
+    assert layout.is_reachable("spawn_civic_plaza", "swk_nw_cafe")
+    assert not layout.is_reachable("spawn_civic_plaza", "swk_ne_shop")
+
+
 def test_central_square_lacks_layout_and_falls_back() -> None:
     scenario = build_central(seed=7)
     assert scenario.layout is None
@@ -117,6 +143,147 @@ def test_central_square_lacks_layout_and_falls_back() -> None:
     assert select_walk_planner(layout=None, walk_node_id="spawn_clock_tower") == "obstacle_astar"
     empty = DistrictLayout(layout_id="empty")
     assert select_walk_planner(layout=empty, walk_node_id="spawn") == "obstacle_astar"
+
+
+def _test_shell_footprint(
+    half_extents: tuple[float, float],
+    position: tuple[float, float],
+) -> DistrictShellFootprint:
+    return DistrictShellFootprint(
+        actor_name="GEN_BP_DISTRICT_BUILDING_fixture_00",
+        asset_key="BP_Building_05_C",
+        block_id="fixture",
+        edge_index=0,
+        position=position,
+        yaw_deg=0.0,
+        scale=(1.0, 1.0, 1.0),
+        half_extents=half_extents,
+        tangent_half_extent=max(half_extents),
+        normal_half_extent=min(half_extents),
+    )
+
+
+def _disc_obstacles(footprint: DistrictShellFootprint, clearance: float) -> tuple[Obstacle, ...]:
+    return tuple(Obstacle(*values) for values in disc_chain(footprint.half_extents, footprint.position, clearance))
+
+
+def _assert_disc_chains_match(actual, expected: tuple[Obstacle, ...]) -> None:
+    assert len(actual) == len(expected)
+    for observed, wanted in zip(actual, expected):
+        assert observed.cx == pytest.approx(wanted.cx)
+        assert observed.cy == pytest.approx(wanted.cy)
+        assert observed.radius == pytest.approx(wanted.radius)
+
+
+@pytest.mark.parametrize(
+    ("half_extents", "position"),
+    (
+        ((120.0, 40.0), (10.0, -20.0)),
+        ((40.0, 120.0), (-100.0, 70.0)),
+    ),
+)
+def test_shell_obstacles_cover_horizontal_and_vertical_aabb_samples(
+    half_extents: tuple[float, float],
+    position: tuple[float, float],
+) -> None:
+    footprint = _test_shell_footprint(half_extents, position)
+    caller_clearance = 20.0
+    obstacles = _disc_obstacles(footprint, caller_clearance)
+    assert obstacles
+
+    hx, hy = half_extents
+    cx, cy = position
+    samples = []
+    for fraction in (0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0):
+        samples.extend(
+            (
+                (cx - hx + 2.0 * hx * fraction, cy - hy),
+                (cx - hx + 2.0 * hx * fraction, cy + hy),
+                (cx - hx, cy - hy + 2.0 * hy * fraction),
+                (cx + hx, cy - hy + 2.0 * hy * fraction),
+            )
+        )
+    assert all(any(obstacle.contains(sample) for obstacle in obstacles) for sample in samples)
+
+    expected_radius = min(hx, hy) + caller_clearance
+    assert all(obstacle.radius == pytest.approx(expected_radius) for obstacle in obstacles)
+    repeated = _disc_obstacles(footprint, caller_clearance)
+    assert obstacles == repeated
+    centers = tuple((obstacle.cx, obstacle.cy) for obstacle in obstacles)
+    if hx >= hy:
+        assert all(y == pytest.approx(cy) for _, y in centers)
+        assert tuple(x for x, _ in centers) == tuple(sorted(x for x, _ in centers))
+        assert centers[0][0] == pytest.approx(cx - hx)
+        assert centers[-1][0] == pytest.approx(cx + hx)
+    else:
+        assert all(x == pytest.approx(cx) for x, _ in centers)
+        assert tuple(y for _, y in centers) == tuple(sorted(y for _, y in centers))
+        assert centers[0][1] == pytest.approx(cy - hy)
+        assert centers[-1][1] == pytest.approx(cy + hy)
+
+
+def test_dense_shell_footprints_are_tiled_in_fallback_obstacles() -> None:
+    caller_clearance = 500.0
+    for scenario in (build_station(seed=21), build_riverside(seed=31)):
+        shell_records = plan_shell_records(scenario)
+        assert shell_records
+        obstacles = building_obstacles(scenario, clearance=caller_clearance)
+        expected_shells = 64 if len(scenario.venues) == 8 else 144
+        prefix_count = len(scenario.venues) + len(scenario.landmarks)
+        assert len(shell_records) == expected_shells
+        shell_obstacles = obstacles[prefix_count:]
+        expected_shell_obstacles = tuple(
+            obstacle
+            for record in shell_records
+            for obstacle in _disc_obstacles(record.footprint, caller_clearance)
+        )
+        _assert_disc_chains_match(shell_obstacles, expected_shell_obstacles)
+        assert len(shell_obstacles) >= len(shell_records)
+        offset = 0
+        for record in shell_records:
+            footprint = record.footprint
+            assert footprint is not None
+            chain = _disc_obstacles(footprint, caller_clearance)
+            assert chain
+            _assert_disc_chains_match(shell_obstacles[offset : offset + len(chain)], chain)
+            assert all(
+                obstacle.radius == pytest.approx(min(footprint.half_extents) + caller_clearance)
+                for obstacle in chain
+            )
+            offset += len(chain)
+        assert offset == len(shell_obstacles)
+
+
+@pytest.mark.parametrize(
+    ("half_extents", "position"),
+    (
+        ((120.0, 40.0), (10.0, -20.0)),
+        ((40.0, 120.0), (-100.0, 70.0)),
+    ),
+)
+def test_shell_chain_preserves_parallel_clear_corridor_and_blocks_shell(
+    half_extents: tuple[float, float],
+    position: tuple[float, float],
+) -> None:
+    footprint = _test_shell_footprint(half_extents, position)
+    caller_clearance = 20.0
+    obstacles = list(_disc_obstacles(footprint, caller_clearance))
+    hx, hy = half_extents
+    cx, cy = position
+    if hx >= hy:
+        corridor_start = (cx - hx - 500.0, cy + hy + caller_clearance + 1.0)
+        corridor_goal = (cx + hx + 500.0, cy + hy + caller_clearance + 1.0)
+        through_start = (cx - hx - 500.0, cy)
+        through_goal = (cx + hx + 500.0, cy)
+    else:
+        corridor_start = (cx + hx + caller_clearance + 1.0, cy - hy - 500.0)
+        corridor_goal = (cx + hx + caller_clearance + 1.0, cy + hy + 500.0)
+        through_start = (cx, cy - hy - 500.0)
+        through_goal = (cx, cy + hy + 500.0)
+
+    assert segment_clear(corridor_start, corridor_goal, obstacles)
+    assert plan_path(corridor_start, corridor_goal, obstacles, cell=20.0) == [corridor_goal]
+    assert not segment_clear(through_start, through_goal, obstacles)
 
 
 def test_unknown_references_raise_clear_errors() -> None:

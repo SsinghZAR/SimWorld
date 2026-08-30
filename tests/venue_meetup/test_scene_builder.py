@@ -317,9 +317,15 @@ def test_layout_backed_scene_spawns_inert_city_dressing_from_authored_geometry()
     dressing = communicator.unrealcv.visual_spawns
     names = [item["object_name"] for item in dressing]
     assert dressing
+    assert len(names) == 76  # 64 solid shells + 8 props + 4 trees
     assert len(names) == len(set(names))
     assert any(name.startswith("GEN_BP_DISTRICT_BUILDING_") for name in names)
-    assert all(communicator.unrealcv.collisions[name] is False for name in names)
+    # Solid shells back the authored city geometry; decorative props and trees
+    # remain inert so they do not perturb navigation clearance.
+    assert all(
+        communicator.unrealcv.collisions[name] is name.startswith("GEN_BP_DISTRICT_BUILDING_")
+        for name in names
+    )
     assert all(communicator.unrealcv.movability[name] is False for name in names)
 
 

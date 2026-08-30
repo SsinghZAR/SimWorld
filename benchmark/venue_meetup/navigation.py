@@ -12,11 +12,15 @@ and the agent has a known walk-graph node, routes prefer that authored sidewalk 
 crossing / bridge graph. Building keep-out discs remain the legacy free-space
 fallback for plaza templates without usable layout graph data.
 
-Building footprints are modeled as inflated keep-out discs derived purely from
-scenario geometry (a building's pivot, and for a venue its plaza-side meeting
-region), so the planner is template-agnostic and needs no UE bounding-box query
-(UnrealCV exposes none). The route is found with an 8-connected grid A* and then
-simplified by line-of-sight string-pulling into a few waypoints.
+Building keep-out regions are derived purely from scenario geometry, so the
+planner is template-agnostic and needs no UE bounding-box query (UnrealCV
+exposes none). Venue and landmark proxies remain single inflated discs. Authored
+district shells use their measured world-axis AABBs instead: each shell is a
+deterministic overlapping chain of discs along its long axis, with radius equal
+to the short half-extent plus caller clearance. This avoids the unnecessary
+lateral over-width of one circumscribed disc. The route is found with an
+8-connected grid A* and then simplified by line-of-sight string-pulling into a
+few waypoints.
 """
 
 from __future__ import annotations
@@ -24,9 +28,12 @@ from __future__ import annotations
 import heapq
 import math
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from benchmark.venue_meetup.layout import DistrictLayout, Frontage, WalkRouteKind
+
+if TYPE_CHECKING:
+    from benchmark.venue_meetup.district_geometry import DistrictShellFootprint
 
 Point = tuple[float, float]
 WalkPlannerKind = Literal["layout_graph", "obstacle_astar"]
@@ -219,6 +226,55 @@ class Obstacle:
         return Obstacle(self.cx, self.cy, max(0.0, radius))
 
 
+def _shell_obstacles_for_footprint(
+    footprint: "DistrictShellFootprint",
+    *,
+    clearance: float,
+) -> tuple[Obstacle, ...]:
+    """Cover a shell AABB with deterministic discs along its long axis.
+
+    A single circumscribed disc is needlessly wide for a frontage shell.  A
+    row of discs with radius ``short_half_extent + clearance`` follows the
+    long axis instead.  Endpoint centres span the complete long half-extent;
+    interior spacing is tightened to keep adjacent discs overlapping across
+    the rectangle's short-edge corners whenever caller clearance is positive.
+    """
+
+    hx, hy = (float(value) for value in footprint.half_extents)
+    if not all(math.isfinite(value) and value > 0.0 for value in (hx, hy)):
+        return ()
+    caller_clearance = float(clearance)
+    if not math.isfinite(caller_clearance):
+        raise ValueError(f"clearance must be finite: {clearance!r}")
+    long_axis = 0 if hx >= hy else 1
+    long_half = max(hx, hy)
+    short_half = min(hx, hy)
+    radius = short_half + caller_clearance
+    if radius <= 0.0:
+        return ()
+
+    # At the short edge (|short-axis| == short_half), each disc covers a
+    # long-axis half-span of sqrt(radius² - short_half²).  Use that span to
+    # choose overlapping centres.  With zero caller clearance the exact span is
+    # zero, so retain a finite centreline-overlap fallback for compatibility;
+    # callers that need continuous edge coverage should provide positive
+    # clearance (the normal walk-mode configuration does).
+    edge_reach_sq = radius * radius - short_half * short_half
+    edge_reach = math.sqrt(max(0.0, edge_reach_sq))
+    spacing_limit = 2.0 * edge_reach if edge_reach > 1e-6 else 2.0 * radius
+    spacing_limit = max(spacing_limit, 1e-6)
+    span = 2.0 * long_half
+    segments = max(1, int(math.ceil(span / spacing_limit)))
+    step = span / segments
+    cx, cy = (float(value) for value in footprint.position)
+    centres: list[Obstacle] = []
+    for index in range(segments + 1):
+        offset = -long_half + step * index
+        center = (cx + offset, cy) if long_axis == 0 else (cx, cy + offset)
+        centres.append(Obstacle(center[0], center[1], radius))
+    return tuple(centres)
+
+
 def _point_to_segment_distance(point: Point, start: Point, end: Point) -> float:
     """Shortest distance from ``point`` to segment ``start``-``end``."""
 
@@ -280,6 +336,18 @@ def building_obstacles(
         obstacles.append(Obstacle(center[0], center[1], radius))
     for landmark in scenario.landmarks:
         obstacles.append(Obstacle(float(landmark.position[0]), float(landmark.position[1]), landmark_radius + clearance))
+    # Layout-backed district shells are authored visual geometry with measured
+    # conservative AABBs.  Tile each shell with a deterministic disc chain so
+    # obstacle-A* fallback cannot walk through a solid shell when a graph route
+    # is unavailable, without adding the footprint's legacy circumscribed
+    # margin a second time.  Import locally to keep the planner free of a
+    # module-level dressing dependency and to preserve central-square scenarios
+    # (which have no layout shells).
+    if getattr(scenario, "layout", None) is not None:
+        from benchmark.venue_meetup.district_dressing import plan_shell_footprints
+
+        for footprint in plan_shell_footprints(scenario):
+            obstacles.extend(_shell_obstacles_for_footprint(footprint, clearance=clearance))
     return obstacles
 
 

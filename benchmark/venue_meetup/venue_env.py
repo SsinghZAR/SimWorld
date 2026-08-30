@@ -243,6 +243,15 @@ class VenueMeetupEnv:
         self._agent_walk_nodes = {
             agent.agent_id: agent.walk_node_id for agent in self.scenario.agents
         }
+        # Rebuild the static obstacle cache with the same authored shell
+        # footprints used by the renderer. This keeps fallback walk-mode
+        # planning aligned with collision-enabled district shells while still
+        # allowing callers that bypass reset in unit tests to use the lazy path.
+        self._obstacles = building_obstacles(
+            self.scenario,
+            clearance=self.walk_clearance,
+            landmark_radius=self.walk_landmark_radius,
+        )
         self.scene_builder.prepare_environment()
         self._setup_lighting()
         self._spawn_static_scene()

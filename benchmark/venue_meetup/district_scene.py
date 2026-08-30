@@ -41,7 +41,11 @@ class DistrictSceneRenderer:
         unrealcv.set_location(record.position, record.actor_name)
         unrealcv.set_orientation((0.0, record.yaw_deg, 0.0), record.actor_name)
         unrealcv.set_scale(record.scale, record.actor_name)
-        unrealcv.set_collision(record.actor_name, False)
+        # The planner owns collision policy: authored shell footprints are
+        # conservative and must remain solid for physical navigation, while
+        # props/trees stay inert visual dressing.  Do not duplicate that policy
+        # in the UE adapter or silently turn shells into non-colliders.
+        unrealcv.set_collision(record.actor_name, bool(record.collision))
         unrealcv.set_movable(record.actor_name, False)
 
     @staticmethod

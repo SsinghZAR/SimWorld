@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+import math
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
+from numbers import Real
 from pathlib import Path
-from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UE_ASSETS_PATH = REPO_ROOT / "data" / "ue_assets.json"
 DESCRIPTION_MAP_PATH = REPO_ROOT / "data" / "description_map.json"
+BOUNDING_BOXES_PATH = REPO_ROOT / "data" / "bounding_boxes.json"
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,86 @@ def description_map() -> dict[str, str]:
     """Load human-readable building descriptions."""
 
     return json.loads(DESCRIPTION_MAP_PATH.read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=1)
+def bounding_boxes() -> dict[str, dict[str, dict[str, float]]]:
+    """Load measured UE asset bounds.
+
+    The catalog records Unreal centimetres at unit scale.  Keeping this lookup
+    beside :func:`asset_path` avoids each scene/planner module carrying a stale
+    copy of the measurements.
+    """
+
+    try:
+        payload = json.loads(BOUNDING_BOXES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Unable to load bounding boxes from {BOUNDING_BOXES_PATH}") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"Bounding-box payload must be an object: {BOUNDING_BOXES_PATH}")
+    buildings = payload.get("buildings")
+    if not isinstance(buildings, Mapping):
+        raise ValueError(
+            f"Bounding-box payload requires a buildings object: {BOUNDING_BOXES_PATH}"
+        )
+    # Validate the whole cache once, so callers never receive a malformed
+    # record after the first lookup. Dimensions are Unreal centimetres at unit
+    # scale and must be finite and strictly positive.
+    normalized: dict[str, dict[str, dict[str, float]]] = {"buildings": {}}
+    for asset_key, record in buildings.items():
+        if not isinstance(asset_key, str) or not isinstance(record, Mapping):
+            raise ValueError(
+                f"Invalid building bounding-box record for {asset_key!r}: "
+                f"{BOUNDING_BOXES_PATH}"
+            )
+        bbox = record.get("bbox")
+        if not isinstance(bbox, Mapping):
+            raise ValueError(
+                f"Bounding-box record {asset_key!r} requires bbox.x/y/z: "
+                f"{BOUNDING_BOXES_PATH}"
+            )
+        if set(bbox) != {"x", "y", "z"}:
+            raise ValueError(
+                f"Bounding-box {asset_key!r} must contain exactly x/y/z extents: "
+                f"{BOUNDING_BOXES_PATH}"
+            )
+        dimensions: dict[str, float] = {}
+        for axis in ("x", "y", "z"):
+            raw_value = bbox[axis]
+            if isinstance(raw_value, bool) or not isinstance(raw_value, Real):
+                raise ValueError(
+                    f"Bounding-box {asset_key!r} {axis!r} extent must be numeric: "
+                    f"{raw_value!r}"
+                )
+            try:
+                value = float(raw_value)
+            except (OverflowError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Bounding-box {asset_key!r} has invalid {axis!r} extent: "
+                    f"{BOUNDING_BOXES_PATH}"
+                ) from exc
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(
+                    f"Bounding-box {asset_key!r} {axis!r} extent must be finite "
+                    f"and > 0 cm: {value!r}"
+                )
+            dimensions[axis] = value
+        normalized["buildings"][asset_key] = {"bbox": dimensions}
+    return normalized
+
+
+def building_bbox(asset_key: str) -> tuple[float, float, float]:
+    """Return `(x, y, z)` dimensions for a building asset in centimetres."""
+
+    try:
+        bbox = bounding_boxes()["buildings"][asset_key]["bbox"]
+    except (KeyError, TypeError) as exc:
+        raise KeyError(f"Bounding box not found in {BOUNDING_BOXES_PATH}: {asset_key}") from exc
+    return float(bbox["x"]), float(bbox["y"]), float(bbox["z"])
+
+
+# Descriptive alias for callers that work with mixed UE asset types.
+asset_bbox = building_bbox
 
 
 def asset_path(asset_key: str) -> str:
