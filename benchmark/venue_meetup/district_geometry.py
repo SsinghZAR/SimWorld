@@ -8,12 +8,10 @@ geometry and return deterministic shell placements or clearance decisions.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
 from dataclasses import dataclass
 
 from benchmark.venue_meetup.building_catalog import building_bbox
 from benchmark.venue_meetup.layout import Block, Frontage
-
 
 _BUILDING_CLEARANCE_CM = 3_400.0
 _WALK_NODE_CLEARANCE_CM = 1_500.0

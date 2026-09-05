@@ -17,9 +17,12 @@ Meetup benchmark repeatable without rediscovering the machine setup.
 - `busy_street_playtest_v0` is the dense single-block visual primitive;
   `connected_blocks_playtest_v0` joins three varied copies through two
   collision-aware pedestrian alleys and exposes 36 unique venue identities.
-- `rosebank_grid_9x9_v0` is the Rosebank-inspired city playtest: 81 mixed-zone
-  blocks, Oxford/Tyrwhitt primary axes, 37 alley axes, 36 venues, 6 landmarks,
-  and a graph that spans approximately 684 m.
+- `rosebank_grid_3x3_v0`, `rosebank_grid_5x5_v0`, and
+  `rosebank_grid_7x7_v0` are one parameterized scale family: 9/25/49 blocks and
+  4/8/12 balanced hidden-profile venues with the same Oxford/Tyrwhitt hierarchy.
+- `rosebank_grid_9x9_v0` remains the maximum-size city playtest: 81 mixed-zone
+  blocks, 37 alley axes, 36 venues, 6 landmarks, and a graph spanning
+  approximately 684 m.
 - `runs/` holds generated evaluation artifacts and is intentionally ignored by
   Git.
 
@@ -162,11 +165,26 @@ Then validate an end-to-end physical route and one venue identity per block:
   --output runs\venue_meetup\connected_blocks_three_venue_smoke.json
 ```
 
-For the Rosebank-inspired 9x9 district, regenerate all visual evidence, then
-run the opposite-gateway walk and three-class interaction smoke with:
+For the canonical scale family, first validate all three hidden-profile maps
+offline and capture each live district:
 
 ```powershell
-.\.venv\Scripts\python.exe -m benchmark.venue_meetup.preview_rosebank_grid
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --dry-run --small-eval --hidden-profile --num-agents 2 `
+  --seeds 7 --ablation-matrix --run-name scaled_dry_matrix
+
+foreach ($size in 3, 5, 7) {
+  .\.venv\Scripts\python.exe -m benchmark.venue_meetup.preview_rosebank_grid `
+    --grid-size $size
+}
+```
+
+For the retained Rosebank-inspired 9x9 stress district, regenerate all visual
+evidence, then run the opposite-gateway walk and three-class interaction smoke:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.preview_rosebank_grid `
+  --grid-size 9
 
 .\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
   --template-id rosebank_grid_9x9_v0 --seeds 17 --num-agents 2 `
@@ -182,13 +200,23 @@ run the opposite-gateway walk and three-class interaction smoke with:
   --output runs\venue_meetup\rosebank_grid_interaction_smoke.json
 ```
 
+The 2026-09-05 scale-family preflight captured live overview, road, alley, mask,
+coarse-map, and fitted overhead evidence for all three canonical tiers. Their
+opposite-gateway walks all returned `NAVIGATE_OK` with zero replans. Planned
+agent distances were 58.7/286.7 m (3x3), 122.0/426.0 m (5x5), and 198.0/502.0 m
+(7x7). An all-venue interaction sweep returned `INSPECT_OK` for every one of the
+4 + 8 + 12 candidates; the minimum object-mask count was 6,731 pixels against
+the 50-pixel threshold. Evidence lives under
+`runs/city_landmark_redesign/rosebank_grid_<N>x<N>/`, with walk and inspection
+reports under `runs/venue_meetup/`.
+
 The 2026-09-05 live walk passed with `NAVIGATE_OK` for both agents and zero
 replans: 286.7 m planned from the west gateway and 590.7 m from the east. The
 three interaction targets all returned `INSPECT_OK`. Generated screenshots and
 the 1,400 px coarse map live under
 `runs/city_landmark_redesign/rosebank_grid_9x9/`.
 The road-equipped preview additionally writes the centered 1,200 x 1,200
-`rosebank_grid_district_top_down.png` frame.
+`rosebank_grid_9x9_district_top_down.png` frame.
 The subsequent road-equipped walk passed the same two routes with
 `NAVIGATE_OK`, zero replans, and an episode score of 1.0.
 
@@ -253,10 +281,11 @@ Add `--map-only` to inspect just the authored layout.
 ## Current implementation status
 
 The current playtest stack includes the four-entry dense block, three-block
-alley district, and Rosebank-inspired 9x9 district, with unique interactive
-venues, graph-backed walking, alley-clear frontage placement, a visible road
-hierarchy, and repeatable live visual evidence. Verify the current branch and
-working tree before making further edits:
+alley district, the canonical 3x3/5x5/7x7 scale family, and the retained
+Rosebank-inspired 9x9 stress district. They share unique interactive venues,
+graph-backed walking, alley-clear frontage placement, and a visible road
+hierarchy. Verify the current branch and working tree before making further
+edits:
 
 ```powershell
 git status --short

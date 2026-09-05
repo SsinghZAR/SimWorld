@@ -1,4 +1,4 @@
-"""Street, frontage, and walk graph for the Rosebank-inspired 9x9 grid."""
+"""Street, frontage, and walk graph for scalable Rosebank-inspired grids."""
 
 from __future__ import annotations
 
@@ -6,31 +6,19 @@ import math
 from dataclasses import dataclass
 
 from benchmark.venue_meetup.building_catalog import building_bbox
-from benchmark.venue_meetup.layout import (
-    Block,
-    DistrictLayout,
-    Frontage,
-    Intersection,
-    MeetingRegion,
-    StreetSegment,
-    WalkEdge,
-    WalkNode,
-    WalkRouteKind,
-)
-from benchmark.venue_meetup.rosebank_grid import (
-    BLOCK_SIDE_CM,
-    GRID_SIZE,
-    HIGH_STREET_WIDTH_CM,
-    HORIZONTAL_STREET_NAMES,
-    MINOR_STREET_WIDTH_CM,
-    OXFORD_ROAD_WIDTH_CM,
-    RosebankGridPlan,
-    RosebankVenueSite,
-    SECONDARY_STREET_WIDTH_CM,
-    SIDEWALK_WIDTH_CM,
-    VERTICAL_STREET_NAMES,
-    frontage_tangent,
-)
+from benchmark.venue_meetup.layout import (Block, DistrictLayout, Frontage,
+                                           Intersection, MeetingRegion,
+                                           StreetSegment, WalkEdge, WalkNode,
+                                           WalkRouteKind)
+from benchmark.venue_meetup.rosebank_grid import (BLOCK_SIDE_CM,
+                                                  HIGH_STREET_WIDTH_CM,
+                                                  MINOR_STREET_WIDTH_CM,
+                                                  OXFORD_ROAD_WIDTH_CM,
+                                                  SECONDARY_STREET_WIDTH_CM,
+                                                  SIDEWALK_WIDTH_CM,
+                                                  RosebankGridPlan,
+                                                  RosebankVenueSite,
+                                                  frontage_tangent)
 
 Point2D = tuple[float, float]
 MEETING_OFFSET_CM = 500.0
@@ -81,12 +69,28 @@ def alley_center_node_id(block_id: str) -> str:
     return f"alley_{block_id.lower()}_center"
 
 
-def _street_width(index: int, *, vertical: bool) -> float:
-    if vertical and index == 5:
+def _street_width(
+    index: int,
+    *,
+    vertical: bool,
+    plan: RosebankGridPlan,
+) -> float:
+    if vertical and index == plan.primary_street_index:
         return OXFORD_ROAD_WIDTH_CM
-    if not vertical and index == 5:
+    if not vertical and index == plan.primary_street_index:
         return HIGH_STREET_WIDTH_CM
-    if index in {1, 4, 6, 8}:
+    secondary_indices = {
+        candidate
+        for candidate in (
+            1,
+            plan.primary_street_index - 1,
+            plan.primary_street_index + 1,
+            plan.grid_size - 1,
+        )
+        if 0 < candidate < plan.grid_size
+        and candidate != plan.primary_street_index
+    }
+    if index in secondary_indices:
         return SECONDARY_STREET_WIDTH_CM
     return MINOR_STREET_WIDTH_CM
 
@@ -189,7 +193,7 @@ def _build_street_nodes(plan: RosebankGridPlan) -> dict[str, WalkNode]:
         for y_index, y in enumerate(plan.street_y):
             node_id = intersection_node_id(x_index, y_index)
             nodes[node_id] = WalkNode(node_id, (x, y), "intersection")
-        for row in range(GRID_SIZE):
+        for row in range(plan.grid_size):
             node_id = vertical_mid_node_id(x_index, row)
             nodes[node_id] = WalkNode(
                 node_id,
@@ -197,7 +201,7 @@ def _build_street_nodes(plan: RosebankGridPlan) -> dict[str, WalkNode]:
                 "sidewalk",
             )
     for y_index, y in enumerate(plan.street_y):
-        for column in range(GRID_SIZE):
+        for column in range(plan.grid_size):
             node_id = horizontal_mid_node_id(column, y_index)
             nodes[node_id] = WalkNode(
                 node_id,
@@ -224,20 +228,32 @@ def _street_edges(
     nodes: dict[str, WalkNode],
 ) -> list[WalkEdge]:
     edges: list[WalkEdge] = []
-    for x_index in range(GRID_SIZE + 1):
+    for x_index in range(plan.grid_size + 1):
         node_ids = [
-            *(intersection_node_id(x_index, y_index) for y_index in range(GRID_SIZE + 1)),
-            *(vertical_mid_node_id(x_index, row) for row in range(GRID_SIZE)),
+            *(
+                intersection_node_id(x_index, y_index)
+                for y_index in range(plan.grid_size + 1)
+            ),
+            *(
+                vertical_mid_node_id(x_index, row)
+                for row in range(plan.grid_size)
+            ),
         ]
         node_ids.sort(key=lambda node_id: nodes[node_id].position[1])
         edges.extend(
             _edge(nodes, start_id, end_id)
             for start_id, end_id in zip(node_ids, node_ids[1:])
         )
-    for y_index in range(GRID_SIZE + 1):
+    for y_index in range(plan.grid_size + 1):
         node_ids = [
-            *(intersection_node_id(x_index, y_index) for x_index in range(GRID_SIZE + 1)),
-            *(horizontal_mid_node_id(column, y_index) for column in range(GRID_SIZE)),
+            *(
+                intersection_node_id(x_index, y_index)
+                for x_index in range(plan.grid_size + 1)
+            ),
+            *(
+                horizontal_mid_node_id(column, y_index)
+                for column in range(plan.grid_size)
+            ),
         ]
         node_ids.sort(key=lambda node_id: nodes[node_id].position[0])
         edges.extend(
@@ -310,7 +326,7 @@ def build_rosebank_grid_layout(
     *,
     layout_id: str,
 ) -> DistrictLayout:
-    """Return all 81 blocks, hierarchical streets, and alley shortcuts."""
+    """Return all blocks, hierarchical streets, and alley shortcuts."""
 
     nodes = _build_street_nodes(plan)
     frontages: list[Frontage] = []
@@ -362,11 +378,11 @@ def build_rosebank_grid_layout(
                 street_id=name,
                 start=(x, plan.street_y[0]),
                 end=(x, plan.street_y[-1]),
-                width_cm=_street_width(index, vertical=True),
+                width_cm=_street_width(index, vertical=True, plan=plan),
                 sidewalk_width_cm=SIDEWALK_WIDTH_CM,
             )
             for index, (name, x) in enumerate(
-                zip(VERTICAL_STREET_NAMES, plan.street_x)
+                zip(plan.vertical_street_names, plan.street_x)
             )
         ]
         + [
@@ -374,11 +390,11 @@ def build_rosebank_grid_layout(
                 street_id=name,
                 start=(plan.street_x[0], y),
                 end=(plan.street_x[-1], y),
-                width_cm=_street_width(index, vertical=False),
+                width_cm=_street_width(index, vertical=False, plan=plan),
                 sidewalk_width_cm=SIDEWALK_WIDTH_CM,
             )
             for index, (name, y) in enumerate(
-                zip(HORIZONTAL_STREET_NAMES, plan.street_y)
+                zip(plan.horizontal_street_names, plan.street_y)
             )
         ]
     )

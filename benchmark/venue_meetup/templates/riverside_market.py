@@ -12,28 +12,14 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 
-from benchmark.venue_meetup.building_catalog import MASK_COLORS, asset_path, building_description
-from benchmark.venue_meetup.layout import (
-    Block,
-    DistrictLayout,
-    Frontage,
-    Intersection,
-    MeetingRegion,
-    StreetSegment,
-    WalkEdge,
-    WalkNode,
-)
-from benchmark.venue_meetup.scenario import (
-    AgentSpec,
-    Entrance,
-    Landmark,
-    PropSpec,
-    Region,
-    Requirement,
-    Scenario,
-    Venue,
-    VenueProperties,
-)
+from benchmark.venue_meetup.building_catalog import (MASK_COLORS, asset_path,
+                                                     building_description)
+from benchmark.venue_meetup.layout import (Block, DistrictLayout, Frontage,
+                                           Intersection, MeetingRegion,
+                                           StreetSegment, WalkEdge, WalkNode)
+from benchmark.venue_meetup.scenario import (AgentSpec, Entrance, Landmark,
+                                             PropSpec, Region, Requirement,
+                                             Scenario, Venue, VenueProperties)
 
 MAP_TEMPLATE_ID = "riverside_market_large_v1"
 LAYOUT_ID = "riverside_market_large_v1"
@@ -788,7 +774,6 @@ def build_district_layout() -> DistrictLayout:
         route_kind="bridge",
         waypoints=((0.0, PRIMARY_BRIDGE_Y),),
     )
-    secondary_span = _dist(nodes["bridge_secondary_west"].position, nodes["bridge_secondary_east"].position)
     # Secondary crossing is a noticeably longer detour (winding rail span).
     secondary_waypoints = (
         (-1000.0, SECONDARY_BRIDGE_Y - 5000.0),

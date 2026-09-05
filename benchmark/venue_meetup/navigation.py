@@ -31,7 +31,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from benchmark.venue_meetup.building_catalog import building_bbox
-from benchmark.venue_meetup.layout import DistrictLayout, Frontage, WalkRouteKind
+from benchmark.venue_meetup.layout import (DistrictLayout, Frontage, WalkEdge,
+                                           WalkRouteKind)
 
 if TYPE_CHECKING:
     from benchmark.venue_meetup.district_geometry import DistrictShellFootprint
@@ -121,12 +122,14 @@ def _resolve_frontage(
     return matches[0]
 
 
-def _find_route_edge(layout: DistrictLayout, start_node_id: str, end_node_id: str) -> "WalkEdge":
+def _find_route_edge(
+    layout: DistrictLayout,
+    start_node_id: str,
+    end_node_id: str,
+) -> WalkEdge:
     """Return the best enabled undirected edge between two adjacent path nodes."""
 
-    from benchmark.venue_meetup.layout import WalkEdge as _WE  # noqa: F811
-
-    matches: list[_WE] = []
+    matches: list[WalkEdge] = []
     for edge in layout.walk_edges:
         if not edge.enabled:
             continue
@@ -383,7 +386,8 @@ def building_obstacles(
     # module-level dressing dependency and to preserve central-square scenarios
     # (which have no layout shells).
     if getattr(scenario, "layout", None) is not None:
-        from benchmark.venue_meetup.district_dressing import plan_shell_footprints
+        from benchmark.venue_meetup.district_dressing import \
+            plan_shell_footprints
 
         for footprint in plan_shell_footprints(scenario):
             obstacles.extend(_shell_obstacles_for_footprint(footprint, clearance=clearance))

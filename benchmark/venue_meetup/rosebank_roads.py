@@ -12,15 +12,14 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
-from benchmark.venue_meetup.building_catalog import (
-    asset_path,
-    building_bbox,
-)
+from benchmark.venue_meetup.building_catalog import asset_path, building_bbox
 from benchmark.venue_meetup.layout import DistrictLayout, StreetSegment
+from benchmark.venue_meetup.rosebank_grid import ROSEBANK_GRID_TEMPLATE_IDS
 
 RoadActorKind = Literal["carriageway", "sidewalk", "lane_marking", "crosswalk"]
 
 ROSEBANK_LAYOUT_ID = "rosebank_grid_9x9_v0"
+ROSEBANK_LAYOUT_IDS = frozenset(ROSEBANK_GRID_TEMPLATE_IDS.values())
 ASPHALT_ASSET_KEY = "BP_Building_44_C"
 SIDEWALK_ASSET_KEY = "BP_Building_05_C"
 MARKING_ASSET_KEY = "BP_RoadBlocker_C"
@@ -273,9 +272,9 @@ def _crosswalk_actors(
 def plan_rosebank_road_actors(
     layout: DistrictLayout | None,
 ) -> tuple[RosebankRoadActor, ...]:
-    """Return inert road actors for the 9x9 layout and nothing for other maps."""
+    """Return inert road actors for supported grids and nothing for other maps."""
 
-    if layout is None or layout.layout_id != ROSEBANK_LAYOUT_ID:
+    if layout is None or layout.layout_id not in ROSEBANK_LAYOUT_IDS:
         return ()
     streets = tuple(layout.streets)
     actors: list[RosebankRoadActor] = []
@@ -291,6 +290,7 @@ __all__ = [
     "ASPHALT_ASSET_KEY",
     "MARKING_ASSET_KEY",
     "ROSEBANK_LAYOUT_ID",
+    "ROSEBANK_LAYOUT_IDS",
     "SIDEWALK_ASSET_KEY",
     "RosebankRoadActor",
     "plan_rosebank_road_actors",

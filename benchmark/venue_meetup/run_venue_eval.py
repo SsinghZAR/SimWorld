@@ -19,18 +19,20 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - dry-run environments may not install OpenCV.
     cv2 = None
 
-from benchmark.venue_meetup._core.policy import ScriptedVenueNavPolicy, ScriptedVenueSmokePolicy, VenueMeetupPolicy
-from benchmark.venue_meetup.ablations import (
-    ConditionSpec,
-    all_condition_names,
-    minimal_ablation_names,
-    poc_condition_names,
-    resolve_condition,
-)
+from benchmark.venue_meetup._core.policy import (ScriptedVenueNavPolicy,
+                                                 ScriptedVenueSmokePolicy,
+                                                 VenueMeetupPolicy)
+from benchmark.venue_meetup.ablations import (ConditionSpec,
+                                              all_condition_names,
+                                              minimal_ablation_names,
+                                              poc_condition_names,
+                                              resolve_condition)
 from benchmark.venue_meetup.coarse_map import with_rendered_coarse_map
-from benchmark.venue_meetup.generator import evaluation_matrix, generate_scenario
-from benchmark.venue_meetup.social_metrics import compute_social_metrics
+from benchmark.venue_meetup.generator import (evaluation_matrix,
+                                              generate_scenario)
+from benchmark.venue_meetup.rosebank_grid import ROSEBANK_GRID_TEMPLATE_IDS
 from benchmark.venue_meetup.scoring import episode_score
+from benchmark.venue_meetup.social_metrics import compute_social_metrics
 from benchmark.venue_meetup.venue_env import VenueMeetupEnv
 from simworld.communicator.communicator import Communicator
 from simworld.communicator.unrealcv import UnrealCV
@@ -570,7 +572,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--connect-timeout", type=float, default=2.0)
     parser.add_argument("--config", type=Path)
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--small-eval", action="store_true", help="Run the 3-template x seeds x N matrix.")
+    parser.add_argument(
+        "--small-eval",
+        action="store_true",
+        help="Run the 3x3, 5x5, and 7x7 scale matrix across seeds and agent counts.",
+    )
     parser.add_argument("--ablation-matrix", action="store_true", help="Run the four canonical POC conditions in order.")
     parser.add_argument("--template-id", default="central_square_v0")
     parser.add_argument("--seeds", default="7")
@@ -621,20 +627,20 @@ def scenarios_from_args(args: argparse.Namespace):
     """Build scenarios requested by CLI args."""
 
     if args.small_eval:
-        if getattr(args, "hidden_profile", False):
-            raise ValueError("--small-eval cannot be combined with --hidden-profile; choose an explicit template for hidden-profile runs")
-        # Keep the advertised smoke matrix explicit.  ``TEMPLATE_BUILDERS``
-        # also contains legacy aliases that should not silently expand a
-        # small evaluation.
+        agent_counts = tuple(parse_csv_ints(args.num_agents))
+        if getattr(args, "hidden_profile", False) and agent_counts != (2,):
+            raise ValueError(
+                "--small-eval --hidden-profile currently requires "
+                "--num-agents 2"
+            )
         templates = [
-            "central_square_v0",
-            "station_quarter_medium_v1",
-            "riverside_market_large_v1",
+            ROSEBANK_GRID_TEMPLATE_IDS[grid_size] for grid_size in (3, 5, 7)
         ]
         return evaluation_matrix(
             templates=templates,
             seeds=parse_csv_ints(args.seeds),
-            agent_counts=tuple(parse_csv_ints(args.num_agents)),
+            agent_counts=agent_counts,
+            hidden_profile=args.hidden_profile,
         )
 
     scenarios = []

@@ -1,4 +1,4 @@
-"""Pure plan for a Rosebank-inspired nine-by-nine mixed-use district.
+"""Pure plans for scalable Rosebank-inspired mixed-use districts.
 
 The plan borrows Rosebank's legible ingredients rather than copying its cadastral
 map: a strong transit avenue, retail high streets, quieter residential edges,
@@ -25,6 +25,15 @@ BlockZone = Literal[
 AlleyAxis = Literal["horizontal", "vertical"]
 
 GRID_SIZE = 9
+SUPPORTED_GRID_SIZES = (3, 5, 7, 9)
+ROSEBANK_GRID_TEMPLATE_IDS = {
+    3: "rosebank_grid_3x3_v0",
+    5: "rosebank_grid_5x5_v0",
+    7: "rosebank_grid_7x7_v0",
+    9: "rosebank_grid_9x9_v0",
+}
+ROSEBANK_GRID_VENUE_COUNTS = {3: 4, 5: 8, 7: 12, 9: 36}
+ROSEBANK_GRID_MAX_STEPS = {3: 96, 5: 160, 7: 256, 9: 384}
 BLOCK_SIDE_CM = 5_600.0
 BLOCK_PITCH_CM = 7_600.0
 STREET_GAP_CM = BLOCK_PITCH_CM - BLOCK_SIDE_CM
@@ -61,15 +70,101 @@ HORIZONTAL_STREET_NAMES = (
     "north_boundary_road",
 )
 
-LANDMARK_BLOCK_ROLES: dict[str, str] = {
-    "B4": "clock_tower",
-    "C7": "arts_centre",
-    "D5": "market_hall",
-    "E5": "gautrain_tower",
-    "F6": "hotel_tower",
-    "G3": "civic_hall",
+_VERTICAL_STREET_NAMES_BY_SIZE = {
+    3: (
+        "west_boundary_road",
+        "cradock_avenue",
+        "oxford_road",
+        "east_boundary_road",
+    ),
+    5: (
+        "west_boundary_road",
+        "keyes_avenue",
+        "cradock_avenue",
+        "oxford_road",
+        "bath_avenue",
+        "east_boundary_road",
+    ),
+    7: (
+        "west_boundary_road",
+        "jan_smuts_link",
+        "keyes_avenue",
+        "cradock_avenue",
+        "oxford_road",
+        "bath_avenue",
+        "sturdee_avenue",
+        "east_boundary_road",
+    ),
+    9: VERTICAL_STREET_NAMES,
 }
-GARDEN_BLOCK_IDS = frozenset({"B2", "H2", "B8", "H8"})
+_HORIZONTAL_STREET_NAMES_BY_SIZE = {
+    3: (
+        "south_boundary_road",
+        "the_zone_walk",
+        "tyrwhitt_high_street",
+        "north_boundary_road",
+    ),
+    5: (
+        "south_boundary_road",
+        "jellicoe_avenue",
+        "baker_street",
+        "tyrwhitt_high_street",
+        "rosebank_road",
+        "north_boundary_road",
+    ),
+    7: (
+        "south_boundary_road",
+        "bolton_road",
+        "jellicoe_avenue",
+        "baker_street",
+        "tyrwhitt_high_street",
+        "rosebank_road",
+        "north_link",
+        "north_boundary_road",
+    ),
+    9: HORIZONTAL_STREET_NAMES,
+}
+
+_LANDMARK_COORDINATES_BY_SIZE: dict[
+    int,
+    tuple[tuple[int, int, str], ...],
+] = {
+    3: (
+        (0, 1, "clock_tower"),
+        (1, 1, "gautrain_tower"),
+        (2, 1, "civic_hall"),
+    ),
+    5: (
+        (1, 0, "clock_tower"),
+        (3, 1, "arts_centre"),
+        (2, 1, "market_hall"),
+        (2, 2, "gautrain_tower"),
+        (3, 3, "hotel_tower"),
+        (1, 4, "civic_hall"),
+    ),
+    7: (
+        (2, 1, "clock_tower"),
+        (5, 2, "arts_centre"),
+        (3, 2, "market_hall"),
+        (3, 3, "gautrain_tower"),
+        (4, 4, "hotel_tower"),
+        (2, 5, "civic_hall"),
+    ),
+    9: (
+        (3, 1, "clock_tower"),
+        (6, 2, "arts_centre"),
+        (4, 3, "market_hall"),
+        (4, 4, "gautrain_tower"),
+        (5, 5, "hotel_tower"),
+        (2, 6, "civic_hall"),
+    ),
+}
+_GARDEN_COORDINATES_BY_SIZE: dict[int, tuple[tuple[int, int], ...]] = {
+    3: (),
+    5: ((0, 0), (0, 4), (4, 0), (4, 4)),
+    7: ((1, 1), (1, 5), (5, 1), (5, 5)),
+    9: ((1, 1), (1, 7), (7, 1), (7, 7)),
+}
 
 _VENUE_TYPES: tuple[VenueType, ...] = (
     "restaurant",
@@ -101,7 +196,7 @@ _SIDE_TANGENTS: dict[BlockSide, Point2D] = {
 
 @dataclass(frozen=True, slots=True)
 class RosebankBlock:
-    """One addressable cell in the nine-by-nine district."""
+    """One addressable cell in a scalable district."""
 
     row: int
     column: int
@@ -133,11 +228,15 @@ class RosebankVenueSite:
 class RosebankGridPlan:
     """Complete district plan shared by layout, massing, and scenario builders."""
 
+    grid_size: int
     center: Point2D
     blocks: tuple[RosebankBlock, ...]
     venue_sites: tuple[RosebankVenueSite, ...]
     street_x: tuple[float, ...]
     street_y: tuple[float, ...]
+    vertical_street_names: tuple[str, ...]
+    horizontal_street_names: tuple[str, ...]
+    primary_street_index: int
 
     def block_by_id(self, block_id: str) -> RosebankBlock:
         for block in self.blocks:
@@ -146,21 +245,45 @@ class RosebankGridPlan:
         raise ValueError(f"Unknown Rosebank block id: {block_id}")
 
     def block_at(self, row: int, column: int) -> RosebankBlock:
-        if not 0 <= row < GRID_SIZE or not 0 <= column < GRID_SIZE:
-            raise ValueError(f"Block coordinate outside {GRID_SIZE}x{GRID_SIZE}: {(row, column)}")
-        return self.blocks[row * GRID_SIZE + column]
+        if not 0 <= row < self.grid_size or not 0 <= column < self.grid_size:
+            raise ValueError(
+                f"Block coordinate outside {self.grid_size}x{self.grid_size}: "
+                f"{(row, column)}"
+            )
+        return self.blocks[row * self.grid_size + column]
 
     @property
     def extent_cm(self) -> float:
         return max(abs(value) for value in (*self.street_x, *self.street_y))
 
 
-def block_id(row: int, column: int) -> str:
-    """Return the public A1-I9 address for a grid cell."""
+def block_id(row: int, column: int, *, grid_size: int = GRID_SIZE) -> str:
+    """Return the public letter-number address for a grid cell."""
 
-    if not 0 <= row < GRID_SIZE or not 0 <= column < GRID_SIZE:
-        raise ValueError(f"Block coordinate outside {GRID_SIZE}x{GRID_SIZE}: {(row, column)}")
+    if not 0 <= row < grid_size or not 0 <= column < grid_size:
+        raise ValueError(
+            f"Block coordinate outside {grid_size}x{grid_size}: {(row, column)}"
+        )
     return f"{chr(ord('A') + column)}{row + 1}"
+
+
+def _landmark_block_roles(grid_size: int) -> dict[str, str]:
+    return {
+        block_id(row, column, grid_size=grid_size): role
+        for row, column, role in _LANDMARK_COORDINATES_BY_SIZE[grid_size]
+    }
+
+
+def _garden_block_ids(grid_size: int) -> frozenset[str]:
+    return frozenset(
+        block_id(row, column, grid_size=grid_size)
+        for row, column in _GARDEN_COORDINATES_BY_SIZE[grid_size]
+    )
+
+
+# Compatibility aliases for callers that describe the original 9x9 map.
+LANDMARK_BLOCK_ROLES: dict[str, str] = _landmark_block_roles(GRID_SIZE)
+GARDEN_BLOCK_IDS = _garden_block_ids(GRID_SIZE)
 
 
 def frontage_tangent(side: BlockSide) -> Point2D:
@@ -169,15 +292,33 @@ def frontage_tangent(side: BlockSide) -> Point2D:
     return _SIDE_TANGENTS[side]
 
 
-def _block_zone(row: int, column: int, label: str) -> BlockZone:
-    if label in GARDEN_BLOCK_IDS:
+def _block_zone(
+    row: int,
+    column: int,
+    label: str,
+    *,
+    grid_size: int,
+    landmark_roles: dict[str, str],
+    garden_ids: frozenset[str],
+) -> BlockZone:
+    if label in garden_ids:
         return "garden"
-    if label in LANDMARK_BLOCK_ROLES:
-        return "civic" if label != "E5" else "transit_core"
-    distance = max(abs(row - 4), abs(column - 4))
-    if distance <= 1:
+    if label in landmark_roles:
+        return (
+            "transit_core"
+            if landmark_roles[label] == "gautrain_tower"
+            else "civic"
+        )
+    center_index = grid_size // 2
+    distance = max(abs(row - center_index), abs(column - center_index))
+    core_radius = 0 if grid_size == 3 else 1
+    mixed_radius = max(1, grid_size // 4)
+    if distance <= core_radius:
         return "transit_core"
-    if abs(row - 4) <= 2 or abs(column - 4) <= 2:
+    if (
+        abs(row - center_index) <= mixed_radius
+        or abs(column - center_index) <= mixed_radius
+    ):
         return "mixed_use"
     return "residential"
 
@@ -192,48 +333,91 @@ def _visual_style(zone: BlockZone) -> str:
     }[zone]
 
 
-def _alley_blocks() -> tuple[set[tuple[int, int]], set[tuple[int, int]]]:
-    horizontal = {
-        (row, column)
-        for row in (2, 4, 6)
-        for column in range(1, 8)
-    }
-    vertical = {
-        (row, column)
-        for column in (2, 6)
-        for row in range(1, 8)
-    }
-    for label in GARDEN_BLOCK_IDS:
+def _alley_blocks(
+    grid_size: int,
+    *,
+    landmark_roles: dict[str, str],
+    garden_ids: frozenset[str],
+) -> tuple[set[tuple[int, int]], set[tuple[int, int]]]:
+    if grid_size == GRID_SIZE:
+        horizontal = {
+            (row, column)
+            for row in (2, 4, 6)
+            for column in range(1, 8)
+        }
+        vertical = {
+            (row, column)
+            for column in (2, 6)
+            for row in range(1, 8)
+        }
+    elif grid_size == 3:
+        horizontal = {(1, 0), (1, 2)}
+        vertical = {(0, 0), (2, 2)}
+    else:
+        offsets = tuple(range(2, grid_size - 1, 2))
+        interior = range(1, grid_size - 1)
+        horizontal = {
+            (row, column) for row in offsets for column in interior
+        }
+        vertical = {
+            (row, column) for column in offsets for row in interior
+        }
+    for label in garden_ids:
         column = ord(label[0]) - ord("A")
         row = int(label[1:]) - 1
         horizontal.add((row, column))
         vertical.add((row, column))
     landmark_coordinates = {
         (int(label[1:]) - 1, ord(label[0]) - ord("A"))
-        for label in LANDMARK_BLOCK_ROLES
+        for label in landmark_roles
     }
     return horizontal - landmark_coordinates, vertical - landmark_coordinates
 
 
-def _venue_sites(blocks: tuple[RosebankBlock, ...]) -> tuple[RosebankVenueSite, ...]:
-    excluded = set(LANDMARK_BLOCK_ROLES) | set(GARDEN_BLOCK_IDS)
+def _venue_sites(
+    blocks: tuple[RosebankBlock, ...],
+    *,
+    grid_size: int,
+    venue_count: int,
+    landmark_roles: dict[str, str],
+    garden_ids: frozenset[str],
+) -> tuple[RosebankVenueSite, ...]:
+    if venue_count < 4 or venue_count % 2:
+        raise ValueError(
+            f"Rosebank grids require an even venue count of at least 4, got {venue_count}"
+        )
+    excluded = set(landmark_roles) | set(garden_ids)
+    center_index = grid_size // 2
+    venues_per_zone = venue_count // 2
 
     def candidates(*, west: bool) -> list[RosebankBlock]:
         selected = [
             block
             for block in blocks
             if block.block_id not in excluded
-            and (block.column <= 3 if west else block.column >= 5)
+            and (
+                block.column < center_index
+                if west
+                else block.column > center_index
+            )
         ]
-        return sorted(
+        ranked = sorted(
             selected,
             key=lambda block: (
-                abs(block.row - 4) + abs(block.column - 4),
-                abs(block.row - 4),
+                abs(block.row - center_index)
+                + abs(block.column - center_index),
+                abs(block.row - center_index),
                 block.row,
                 block.column,
             ),
-        )[:18]
+        )
+        if len(ranked) < venues_per_zone:
+            side = "west" if west else "east"
+            raise ValueError(
+                f"{grid_size}x{grid_size} grid only has {len(ranked)} usable "
+                f"{side}-zone blocks for {venues_per_zone} venues"
+            )
+        return ranked[:venues_per_zone]
 
     sites: list[RosebankVenueSite] = []
     for zone_id, selected in (
@@ -282,25 +466,54 @@ def _venue_sites(blocks: tuple[RosebankBlock, ...]) -> tuple[RosebankVenueSite, 
     return tuple(sites)
 
 
-def plan_rosebank_grid(*, center: Point2D = (0.0, 0.0)) -> RosebankGridPlan:
-    """Return a deterministic 81-block mixed-use district plan."""
+def plan_rosebank_grid(
+    *,
+    center: Point2D = (0.0, 0.0),
+    grid_size: int = GRID_SIZE,
+    venue_count: int | None = None,
+) -> RosebankGridPlan:
+    """Return a deterministic, supported odd-sized mixed-use district plan."""
 
+    if grid_size not in SUPPORTED_GRID_SIZES:
+        raise ValueError(
+            f"Unsupported Rosebank grid size {grid_size}; expected one of "
+            f"{SUPPORTED_GRID_SIZES}"
+        )
+    resolved_venue_count = (
+        ROSEBANK_GRID_VENUE_COUNTS[grid_size]
+        if venue_count is None
+        else int(venue_count)
+    )
     center = float(center[0]), float(center[1])
-    half_grid = GRID_SIZE / 2.0
+    half_grid = grid_size / 2.0
     street_x = tuple(
         center[0] + (index - half_grid) * BLOCK_PITCH_CM
-        for index in range(GRID_SIZE + 1)
+        for index in range(grid_size + 1)
     )
     street_y = tuple(
         center[1] + (index - half_grid) * BLOCK_PITCH_CM
-        for index in range(GRID_SIZE + 1)
+        for index in range(grid_size + 1)
     )
-    horizontal_alleys, vertical_alleys = _alley_blocks()
+    landmark_roles = _landmark_block_roles(grid_size)
+    garden_ids = _garden_block_ids(grid_size)
+    horizontal_alleys, vertical_alleys = _alley_blocks(
+        grid_size,
+        landmark_roles=landmark_roles,
+        garden_ids=garden_ids,
+    )
+    center_index = grid_size // 2
     blocks: list[RosebankBlock] = []
-    for row in range(GRID_SIZE):
-        for column in range(GRID_SIZE):
-            label = block_id(row, column)
-            zone = _block_zone(row, column, label)
+    for row in range(grid_size):
+        for column in range(grid_size):
+            label = block_id(row, column, grid_size=grid_size)
+            zone = _block_zone(
+                row,
+                column,
+                label,
+                grid_size=grid_size,
+                landmark_roles=landmark_roles,
+                garden_ids=garden_ids,
+            )
             axes: set[AlleyAxis] = set()
             if (row, column) in horizontal_alleys:
                 axes.add("horizontal")
@@ -312,22 +525,33 @@ def plan_rosebank_grid(*, center: Point2D = (0.0, 0.0)) -> RosebankGridPlan:
                     column=column,
                     block_id=label,
                     center=(
-                        center[0] + (column - 4) * BLOCK_PITCH_CM,
-                        center[1] + (row - 4) * BLOCK_PITCH_CM,
+                        center[0]
+                        + (column - center_index) * BLOCK_PITCH_CM,
+                        center[1] + (row - center_index) * BLOCK_PITCH_CM,
                     ),
                     zone=zone,
                     visual_style=_visual_style(zone),
                     alley_axes=frozenset(axes),
-                    landmark_role=LANDMARK_BLOCK_ROLES.get(label),
+                    landmark_role=landmark_roles.get(label),
                 )
             )
     block_tuple = tuple(blocks)
     return RosebankGridPlan(
+        grid_size=grid_size,
         center=center,
         blocks=block_tuple,
-        venue_sites=_venue_sites(block_tuple),
+        venue_sites=_venue_sites(
+            block_tuple,
+            grid_size=grid_size,
+            venue_count=resolved_venue_count,
+            landmark_roles=landmark_roles,
+            garden_ids=garden_ids,
+        ),
         street_x=street_x,
         street_y=street_y,
+        vertical_street_names=_VERTICAL_STREET_NAMES_BY_SIZE[grid_size],
+        horizontal_street_names=_HORIZONTAL_STREET_NAMES_BY_SIZE[grid_size],
+        primary_street_index=grid_size // 2 + 1,
     )
 
 
@@ -345,12 +569,16 @@ __all__ = [
     "LANDMARK_BLOCK_ROLES",
     "MINOR_STREET_WIDTH_CM",
     "OXFORD_ROAD_WIDTH_CM",
+    "ROSEBANK_GRID_MAX_STEPS",
+    "ROSEBANK_GRID_TEMPLATE_IDS",
+    "ROSEBANK_GRID_VENUE_COUNTS",
     "RosebankBlock",
     "RosebankGridPlan",
     "RosebankVenueSite",
     "SECONDARY_STREET_WIDTH_CM",
     "SIDEWALK_WIDTH_CM",
     "STREET_GAP_CM",
+    "SUPPORTED_GRID_SIZES",
     "VERTICAL_STREET_NAMES",
     "block_id",
     "frontage_tangent",

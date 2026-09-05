@@ -9,25 +9,18 @@ import numpy as np
 import pytest
 
 from benchmark.venue_meetup._core.action_space import VenueAgentTurn
-from benchmark.venue_meetup.ablations import (
-    ABLATIONS,
-    all_condition_names,
-    minimal_ablation_names,
-    poc_condition_names,
-    resolve_condition,
-)
-from benchmark.venue_meetup.prompt import (
-    VENUE_MEETUP_SYSTEM_PROMPT,
-    build_agent_prompt,
-    build_system_prompt,
-)
 from benchmark.venue_meetup._core.policy import VenueMeetupPolicy
-from benchmark.venue_meetup.run_venue_eval import (
-    build_parser,
-    build_run_manifest,
-    sanitize_run_args,
-    scenarios_from_args,
-)
+from benchmark.venue_meetup.ablations import (ABLATIONS, all_condition_names,
+                                              minimal_ablation_names,
+                                              poc_condition_names,
+                                              resolve_condition)
+from benchmark.venue_meetup.prompt import (VENUE_MEETUP_SYSTEM_PROMPT,
+                                           build_agent_prompt,
+                                           build_system_prompt)
+from benchmark.venue_meetup.run_venue_eval import (build_parser,
+                                                   build_run_manifest,
+                                                   sanitize_run_args,
+                                                   scenarios_from_args)
 
 
 def test_minimal_is_default_and_does_not_scaffold_strategy() -> None:
@@ -123,7 +116,7 @@ def test_policy_uses_selected_prompt_mode_without_network(monkeypatch) -> None:
     assert "disclose" in calls[0][0].lower()
 
 
-def test_recursive_argument_sanitization_and_small_eval_guard() -> None:
+def test_recursive_argument_sanitization_and_scaled_hidden_profile_eval() -> None:
     sanitized = sanitize_run_args(
         {
             "max_tokens": 2048,
@@ -141,8 +134,19 @@ def test_recursive_argument_sanitization_and_small_eval_guard() -> None:
     assert sanitized == {"max_tokens": 2048, "nested": {"safe": "ok", "list": [{"keep": 3}, "ordinary"]}}
 
     args = build_parser().parse_args(["--small-eval", "--hidden-profile"])
-    with pytest.raises(ValueError, match="cannot be combined"):
-        scenarios_from_args(args)
+    scenarios = scenarios_from_args(args)
+    assert [scenario.map_template_id for scenario in scenarios] == [
+        "rosebank_grid_3x3_v0",
+        "rosebank_grid_5x5_v0",
+        "rosebank_grid_7x7_v0",
+    ]
+    assert all(len(scenario.agents) == 2 for scenario in scenarios)
+
+    invalid = build_parser().parse_args(
+        ["--small-eval", "--hidden-profile", "--num-agents", "2,3"]
+    )
+    with pytest.raises(ValueError, match="requires --num-agents 2"):
+        scenarios_from_args(invalid)
 
 
 def test_ablation_registry_matches_resolved_environment() -> None:

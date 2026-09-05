@@ -2,35 +2,24 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import numpy as np
 
-from benchmark.venue_meetup._core.action_space import SharedFactClaim, VenueAction
+from benchmark.venue_meetup._core.action_space import (SharedFactClaim,
+                                                       VenueAction)
 from benchmark.venue_meetup._core.comms import Message, MessageBus
-from benchmark.venue_meetup.observations import (
-    ACTION_LEGEND,
-    build_observations,
-    can_inspect_zone,
-    compass_label,
-    heading_cue,
-    normalize_angle,
-    observation_summary,
-    target_cue,
-    turn_to_face,
-    vector_to_dict,
-)
-from benchmark.venue_meetup.scenario import (
-    AgentSpec,
-    Entrance,
-    Landmark,
-    Region,
-    Requirement,
-    Scenario,
-    Venue,
-    VenueProperties,
-)
+from benchmark.venue_meetup.observations import (ACTION_LEGEND,
+                                                 build_observations,
+                                                 can_inspect_zone,
+                                                 compass_label, heading_cue,
+                                                 normalize_angle,
+                                                 observation_summary,
+                                                 target_cue, turn_to_face,
+                                                 vector_to_dict)
+from benchmark.venue_meetup.scenario import (AgentSpec, Landmark, Region,
+                                             Requirement, Scenario, Venue,
+                                             VenueProperties)
 from benchmark.venue_meetup.venue_env import VenueMeetupEnv
 
 

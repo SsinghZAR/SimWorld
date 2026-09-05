@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Spawn and capture the Rosebank-inspired 9x9 mixed-use district."""
+"""Spawn and capture a scalable Rosebank-inspired mixed-use district."""
 
 from __future__ import annotations
 
@@ -10,17 +10,14 @@ from collections import Counter
 from pathlib import Path
 
 from benchmark.venue_meetup.coarse_map import render_coarse_map
-from benchmark.venue_meetup.preview_runtime import (
-    backend_reachable,
-    capture_hidden_camera,
-    spawn_hidden_camera,
-)
-from benchmark.venue_meetup.scene_builder import SceneBuilder
+from benchmark.venue_meetup.preview_runtime import (backend_reachable,
+                                                    capture_hidden_camera,
+                                                    spawn_hidden_camera)
+from benchmark.venue_meetup.rosebank_grid import SUPPORTED_GRID_SIZES
 from benchmark.venue_meetup.rosebank_roads import plan_rosebank_road_actors
+from benchmark.venue_meetup.scene_builder import SceneBuilder
 from benchmark.venue_meetup.templates.rosebank_grid_playtest import (
-    build_fixed_scenario,
-    plan_playtest_grid,
-)
+    build_scaled_scenario, plan_playtest_grid)
 from simworld.agent.humanoid import Humanoid
 from simworld.communicator.communicator import Communicator
 from simworld.communicator.unrealcv import UnrealCV
@@ -40,12 +37,15 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
 
     if not backend_reachable(args.ip, args.port):
         raise RuntimeError(f"UnrealCV backend is not reachable at {args.ip}:{args.port}")
+    if args.output_dir is None:
+        raise ValueError("output_dir must be resolved before running a preview")
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    scenario = build_fixed_scenario(seed=args.seed)
-    plan = plan_playtest_grid()
+    scenario = build_scaled_scenario(grid_size=args.grid_size, seed=args.seed)
+    plan = plan_playtest_grid(args.grid_size)
+    artifact_prefix = f"rosebank_grid_{plan.grid_size}x{plan.grid_size}"
     coarse_map_path = render_coarse_map(
         scenario,
-        args.output_dir / "rosebank_grid_coarse_map.png",
+        args.output_dir / f"{artifact_prefix}_coarse_map.png",
         size=1_400,
     )
 
@@ -65,7 +65,12 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
         builder.setup_lighting()
         builder.spawn_static_scene()
 
-        initial_position = (0.0, -62_000.0, 28_000.0)
+        overview_distance = max(14_000.0, plan.extent_cm * 0.8)
+        initial_position = (
+            plan.center[0],
+            plan.street_y[0] - overview_distance,
+            max(12_000.0, plan.extent_cm * 0.82),
+        )
         initial_yaw = _yaw_toward(initial_position, plan.center)
         camera = spawn_hidden_camera(
             communicator,
@@ -76,9 +81,19 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
             ),
             resolution=args.resolution,
         )
-        alley_block = plan.block_by_id("C3")
-        oxford_x = plan.street_x[5]
-        tyrwhitt_y = plan.street_y[5]
+        alley_block = next(
+            (block for block in plan.blocks if block.alley_axes),
+            plan.block_at(plan.grid_size // 2, plan.grid_size // 2),
+        )
+        oxford_x = plan.street_x[plan.primary_street_index]
+        tyrwhitt_y = plan.street_y[plan.primary_street_index]
+        topdown_height_cm = args.topdown_height_cm or (
+            plan.extent_cm
+            * 2.0
+            * 1.35
+            / (2.0 * math.tan(math.radians(args.topdown_fov_deg / 2.0)))
+        )
+        center_index = plan.grid_size // 2
         views = {
             "district_overview": {
                 "position": initial_position,
@@ -87,8 +102,8 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
                 "fov": args.overview_fov_deg,
             },
             "district_top_down": {
-                "position": (0.0, 0.0, args.topdown_height_cm),
-                "target": (1.0, 0.0),
+                "position": (*plan.center, topdown_height_cm),
+                "target": (plan.center[0] + 1.0, plan.center[1]),
                 "pitch": -89.0,
                 "fov": args.topdown_fov_deg,
                 "resolution": args.topdown_resolution,
@@ -106,7 +121,7 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
                 "pitch": args.street_pitch_deg,
                 "fov": args.street_fov_deg,
             },
-            "c3_cross_alley": {
+            "cross_alley": {
                 "position": (
                     alley_block.center[0] - 2_500.0,
                     alley_block.center[1],
@@ -120,8 +135,12 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
                 "fov": args.alley_fov_deg,
             },
             "mixed_use_core": {
-                "position": (plan.street_x[4], plan.street_y[3], 1_200.0),
-                "target": plan.block_by_id("E5").center,
+                "position": (
+                    plan.street_x[max(0, plan.primary_street_index - 1)],
+                    plan.street_y[max(0, plan.primary_street_index - 2)],
+                    1_200.0,
+                ),
+                "target": plan.block_at(center_index, center_index).center,
                 "pitch": args.core_pitch_deg,
                 "fov": args.core_fov_deg,
             },
@@ -137,8 +156,8 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
                 camera.camera_id,
                 view_resolution,
             )
-            image_path = args.output_dir / f"rosebank_grid_{view_name}.png"
-            mask_path = args.output_dir / f"rosebank_grid_{view_name}_mask.png"
+            image_path = args.output_dir / f"{artifact_prefix}_{view_name}.png"
+            mask_path = args.output_dir / f"{artifact_prefix}_{view_name}_mask.png"
             capture_hidden_camera(
                 communicator,
                 camera,
@@ -164,7 +183,7 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
             "status": "ok",
             "scenario_id": scenario.scenario_id,
             "geometry": {
-                "grid_size": [9, 9],
+                "grid_size": [plan.grid_size, plan.grid_size],
                 "district_extent_cm": plan.extent_cm * 2.0,
                 "block_count": len(plan.blocks),
                 "zones": dict(Counter(block.zone for block in plan.blocks)),
@@ -189,7 +208,7 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
                 "coarse_map": str(coarse_map_path),
             },
         }
-        (args.output_dir / "rosebank_grid_preview_report.json").write_text(
+        (args.output_dir / f"{artifact_prefix}_preview_report.json").write_text(
             json.dumps(report, indent=2) + "\n",
             encoding="utf-8",
         )
@@ -200,19 +219,31 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Capture the Rosebank-inspired 9x9 mixed-use district",
+        description="Capture a scalable Rosebank-inspired mixed-use district",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--ip", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--resolution", default="960x540")
     parser.add_argument("--seed", type=int, default=17)
+    parser.add_argument(
+        "--grid-size",
+        type=int,
+        choices=SUPPORTED_GRID_SIZES,
+        default=9,
+        help="Number of blocks on each side of the square district",
+    )
     parser.add_argument("--frame-gamma", type=float, default=0.35)
     parser.add_argument("--overview-pitch-deg", type=float, default=4.0)
     parser.add_argument("--street-pitch-deg", type=float, default=18.0)
     parser.add_argument("--core-pitch-deg", type=float, default=12.0)
     parser.add_argument("--overview-fov-deg", type=float, default=78.0)
-    parser.add_argument("--topdown-height-cm", type=float, default=95_000.0)
+    parser.add_argument(
+        "--topdown-height-cm",
+        type=float,
+        default=None,
+        help="Optional override; by default height is fitted to the grid extent",
+    )
     parser.add_argument("--topdown-fov-deg", type=float, default=52.0)
     parser.add_argument("--topdown-resolution", default="1200x1200")
     parser.add_argument("--street-fov-deg", type=float, default=74.0)
@@ -221,7 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("runs/city_landmark_redesign/rosebank_grid_9x9"),
+        default=None,
     )
     return parser
 
@@ -234,6 +265,11 @@ def main() -> int:
     args.topdown_resolution = tuple(
         int(part) for part in args.topdown_resolution.lower().split("x")
     )
+    if args.output_dir is None:
+        args.output_dir = Path(
+            "runs/city_landmark_redesign/"
+            f"rosebank_grid_{args.grid_size}x{args.grid_size}"
+        )
     report = run_preview(args)
     print(json.dumps(report["geometry"], indent=2))
     return 0

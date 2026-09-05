@@ -10,40 +10,35 @@ from typing import Any
 
 import numpy as np
 
-from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn, sanitize_turn
-from benchmark.venue_meetup._core.comms import BroadcastRouter, CommsRouter, MessageBus, messages_from_turns
-from benchmark.venue_meetup.actions import (
-    InspectionOutcome,
-    complete_inspection,
-    count_mask_pixels,
-    dispatch_single_action,
-    precheck_inspection,
-    resolve_inspect_target,
-)
-from benchmark.venue_meetup.navigation import (
-    Obstacle,
-    building_obstacles,
-    meeting_target,
-    path_length,
-    plan_layout_route,
-    plan_path,
-    select_walk_planner,
-)
-from benchmark.venue_meetup.observations import (
-    build_observations,
-    can_inspect_zone,
-    compass_label,
-    heading_cue,
-    normalize_angle,
-    observation_summary,
-    public_action_result,
-    target_cue,
-    turn_to_face,
-    vector_to_dict,
-)
+from benchmark.venue_meetup._core.action_space import (VenueAction,
+                                                       VenueAgentTurn,
+                                                       sanitize_turn)
+from benchmark.venue_meetup._core.comms import (BroadcastRouter, CommsRouter,
+                                                MessageBus,
+                                                messages_from_turns)
+from benchmark.venue_meetup.actions import (InspectionOutcome,
+                                            complete_inspection,
+                                            count_mask_pixels,
+                                            dispatch_single_action,
+                                            precheck_inspection,
+                                            resolve_inspect_target)
+from benchmark.venue_meetup.navigation import (Obstacle, building_obstacles,
+                                               meeting_target, path_length,
+                                               plan_layout_route, plan_path,
+                                               select_walk_planner)
+from benchmark.venue_meetup.observations import (build_observations,
+                                                 can_inspect_zone, heading_cue,
+                                                 normalize_angle,
+                                                 observation_summary,
+                                                 public_action_result,
+                                                 target_cue)
 from benchmark.venue_meetup.scenario import Scenario, Venue
-from benchmark.venue_meetup.scene_builder import AGENT_BLUEPRINT, AgentState, SceneBuilder, direction_from_yaw
-from benchmark.venue_meetup.scoring import episode_score, final_venue_from_positions, venue_decision_facts
+from benchmark.venue_meetup.scene_builder import (AGENT_BLUEPRINT, AgentState,
+                                                  SceneBuilder,
+                                                  direction_from_yaw)
+from benchmark.venue_meetup.scoring import (episode_score,
+                                            final_venue_from_positions,
+                                            venue_decision_facts)
 from simworld.agent.humanoid import Humanoid
 from simworld.communicator.communicator import Communicator
 from simworld.config import Config
@@ -538,8 +533,6 @@ class VenueMeetupEnv:
         """
 
         state = self.get_agent_state(agent_id)
-        location = self.communicator.unrealcv.get_location(state.actor_name)
-        z = float(location[2])
         # Fan agents along the frontage so they do not stack or move inward
         # into a rotated building envelope.
         # Round the fan offset: math.cos(radians(90)) is 6.1e-17, not 0, so for a

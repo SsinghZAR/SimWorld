@@ -1,40 +1,28 @@
-"""Rosebank-inspired 9x9 mixed-use navigation district."""
+"""Scalable Rosebank-inspired mixed-use navigation districts."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from benchmark.venue_meetup.building_catalog import (
-    assert_catalog_assets_exist,
-    asset_path,
-    building_description,
-)
+    assert_catalog_assets_exist, asset_path, building_description)
 from benchmark.venue_meetup.busy_street import BUSY_STREET_VENUE_MASKS
 from benchmark.venue_meetup.busy_street_scenario import playtest_requirements
 from benchmark.venue_meetup.layout import DistrictLayout
-from benchmark.venue_meetup.rosebank_grid import (
-    LANDMARK_BLOCK_ROLES,
-    RosebankGridPlan,
-    RosebankVenueSite,
-    plan_rosebank_grid,
-)
+from benchmark.venue_meetup.rosebank_grid import (ROSEBANK_GRID_MAX_STEPS,
+                                                  ROSEBANK_GRID_TEMPLATE_IDS,
+                                                  SUPPORTED_GRID_SIZES,
+                                                  RosebankGridPlan,
+                                                  RosebankVenueSite,
+                                                  plan_rosebank_grid)
 from benchmark.venue_meetup.rosebank_grid_layout import (
-    build_rosebank_grid_layout,
-    intersection_node_id,
-)
+    build_rosebank_grid_layout, intersection_node_id)
 from benchmark.venue_meetup.rosebank_grid_massing import plan_rosebank_massing
-from benchmark.venue_meetup.scenario import (
-    AgentSpec,
-    Entrance,
-    Landmark,
-    LandmarkType,
-    Region,
-    Scenario,
-    Venue,
-    VenueProperties,
-)
+from benchmark.venue_meetup.scenario import (AgentSpec, Entrance, Landmark,
+                                             LandmarkType, Region, Scenario,
+                                             Venue, VenueProperties)
 
-MAP_TEMPLATE_ID = "rosebank_grid_9x9_v0"
+MAP_TEMPLATE_ID = ROSEBANK_GRID_TEMPLATE_IDS[9]
 LAYOUT_ID = MAP_TEMPLATE_ID
 AGENT_Z = 150.0
 
@@ -87,20 +75,23 @@ _LANDMARKS = {
 }
 
 
-def plan_playtest_grid() -> RosebankGridPlan:
-    """Return the canonical Rosebank-inspired 81-block plan."""
+def plan_playtest_grid(grid_size: int = 9) -> RosebankGridPlan:
+    """Return a canonical Rosebank-inspired plan at a supported scale."""
 
-    return plan_rosebank_grid()
+    return plan_rosebank_grid(grid_size=grid_size)
 
 
 def build_district_layout(
     plan: RosebankGridPlan | None = None,
+    *,
+    layout_id: str | None = None,
 ) -> DistrictLayout:
     """Return the public street, block, frontage, and alley graph."""
 
+    resolved_plan = plan or plan_playtest_grid()
     return build_rosebank_grid_layout(
-        plan or plan_playtest_grid(),
-        layout_id=LAYOUT_ID,
+        resolved_plan,
+        layout_id=layout_id or ROSEBANK_GRID_TEMPLATE_IDS[resolved_plan.grid_size],
     )
 
 
@@ -151,14 +142,21 @@ def _venue_properties(
         food_drink=food_drink,
         quiet_score=quiet_score,
         crowding_score=crowding_score,
-        near_transit=max(abs(block.row - 4), abs(block.column - 4)) <= 2,
+        near_transit=max(
+            abs(block.row - plan.grid_size // 2),
+            abs(block.column - plan.grid_size // 2),
+        ) <= max(1, plan.grid_size // 4),
     )
 
 
 def _build_landmarks(plan: RosebankGridPlan) -> list[Landmark]:
     landmarks: list[Landmark] = []
-    for index, (block_id, role) in enumerate(LANDMARK_BLOCK_ROLES.items()):
-        block = plan.block_by_id(block_id)
+    landmark_blocks = tuple(
+        block for block in plan.blocks if block.landmark_role is not None
+    )
+    for index, block in enumerate(landmark_blocks):
+        role = block.landmark_role
+        assert role is not None
         definition = _LANDMARKS[role]
         landmarks.append(
             Landmark(
@@ -169,7 +167,9 @@ def _build_landmarks(plan: RosebankGridPlan) -> list[Landmark]:
                 asset_path=asset_path(definition.asset_key),
                 position=(*block.center, 0.0),
                 yaw_deg=float((index * 90) % 360),
-                mask_color_rgb=BUSY_STREET_VENUE_MASKS[36 + index],
+                mask_color_rgb=BUSY_STREET_VENUE_MASKS[
+                    len(plan.venue_sites) + index
+                ],
                 visual_summary=(
                     f"{definition.display_name}. "
                     f"{building_description(definition.asset_key)}"
@@ -180,11 +180,45 @@ def _build_landmarks(plan: RosebankGridPlan) -> list[Landmark]:
     return landmarks
 
 
-def build_fixed_scenario(seed: int = 17) -> Scenario:
-    """Return the deterministic 9x9 mixed-use navigation scenario."""
+def _coarse_map_text(plan: RosebankGridPlan) -> str:
+    """Describe only public structure that actually exists at this scale."""
 
-    plan = plan_playtest_grid()
-    layout = build_district_layout(plan)
+    garden_count = sum(block.zone == "garden" for block in plan.blocks)
+    residential = any(block.zone == "residential" for block in plan.blocks)
+    district_form = (
+        "Dense office and retail blocks cluster around the central station, "
+        "then step down to quieter residential edges."
+        if residential
+        else "Compact office, retail, and civic blocks cluster around the "
+        "central station."
+    )
+    garden_note = (
+        f" {garden_count} garden blocks provide additional green anchors."
+        if garden_count
+        else ""
+    )
+    return (
+        f"Rosebank-inspired {plan.grid_size}x{plan.grid_size} grid with "
+        f"{len(plan.venue_sites)} candidate venues: Oxford Road is the "
+        "north-south transit spine; Tyrwhitt is the east-west high street. "
+        f"{district_form} Brown mid-block alleys provide recognizable "
+        "shortcuts. Distinctive landmark buildings support relative "
+        f"positioning.{garden_note} Venue suitability remains hidden until "
+        "inspection."
+    )
+
+
+def build_scaled_scenario(*, grid_size: int, seed: int = 17) -> Scenario:
+    """Return one deterministic Rosebank grid tier as a complete scenario."""
+
+    if grid_size not in SUPPORTED_GRID_SIZES:
+        raise ValueError(
+            f"Unsupported Rosebank grid size {grid_size}; expected one of "
+            f"{SUPPORTED_GRID_SIZES}"
+        )
+    template_id = ROSEBANK_GRID_TEMPLATE_IDS[grid_size]
+    plan = plan_playtest_grid(grid_size)
+    layout = build_district_layout(plan, layout_id=template_id)
     frontage_by_slot = {
         frontage.venue_slot_id: frontage
         for frontage in layout.frontages
@@ -245,8 +279,11 @@ def build_fixed_scenario(seed: int = 17) -> Scenario:
             *(building.asset_key for building in buildings),
         ]
     )
-    west_spawn_id = intersection_node_id(0, 5)
-    east_spawn_id = intersection_node_id(9, 5)
+    west_spawn_id = intersection_node_id(0, plan.primary_street_index)
+    east_spawn_id = intersection_node_id(
+        plan.grid_size,
+        plan.primary_street_index,
+    )
     west_spawn = layout.node_by_id(west_spawn_id).position
     east_spawn = layout.node_by_id(east_spawn_id).position
     agents = [
@@ -272,34 +309,53 @@ def build_fixed_scenario(seed: int = 17) -> Scenario:
         ),
     ]
     return Scenario(
-        scenario_id=f"rosebank_grid_9x9_seed_{seed}",
-        map_template_id=MAP_TEMPLATE_ID,
+        scenario_id=f"rosebank_grid_{grid_size}x{grid_size}_seed_{seed}",
+        map_template_id=template_id,
         seed=seed,
         venues=venues,
         landmarks=landmarks,
         agents=agents,
         requirements=playtest_requirements(),
         soft_weights={"quiet_threshold": 0.65, "crowding_threshold": 0.5},
-        coarse_map_text=(
-            "Rosebank-inspired 9x9 grid: Oxford Road is the north-south transit "
-            "spine; Tyrwhitt is the east-west high street. Dense office and "
-            "retail blocks cluster around the central station, mixed-use blocks "
-            "step down to leafy residential edges, and brown mid-block alleys "
-            "provide recognizable shortcuts. Landmark towers, the market hall, "
-            "arts centre, civic hall, hotel, and four garden blocks support "
-            "relative positioning. Venue suitability remains hidden until "
-            "inspection."
-        ),
-        max_steps=384,
+        coarse_map_text=_coarse_map_text(plan),
+        max_steps=ROSEBANK_GRID_MAX_STEPS[grid_size],
         layout=layout,
         buildings=buildings,
     )
 
 
+def build_3x3_scenario(seed: int = 17) -> Scenario:
+    """Return the compact 3x3 / four-venue benchmark tier."""
+
+    return build_scaled_scenario(grid_size=3, seed=seed)
+
+
+def build_5x5_scenario(seed: int = 17) -> Scenario:
+    """Return the intermediate 5x5 / eight-venue benchmark tier."""
+
+    return build_scaled_scenario(grid_size=5, seed=seed)
+
+
+def build_7x7_scenario(seed: int = 17) -> Scenario:
+    """Return the large 7x7 / twelve-venue benchmark tier."""
+
+    return build_scaled_scenario(grid_size=7, seed=seed)
+
+
+def build_fixed_scenario(seed: int = 17) -> Scenario:
+    """Return the original 9x9 / 36-venue playtest for compatibility."""
+
+    return build_scaled_scenario(grid_size=9, seed=seed)
+
+
 __all__ = [
     "LAYOUT_ID",
     "MAP_TEMPLATE_ID",
+    "build_3x3_scenario",
+    "build_5x5_scenario",
+    "build_7x7_scenario",
     "build_district_layout",
     "build_fixed_scenario",
+    "build_scaled_scenario",
     "plan_playtest_grid",
 ]

@@ -5,12 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-import pytest
 
-from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn
-from benchmark.venue_meetup.actions import count_mask_pixels, compute_inspection, dispatch_single_action, resolve_inspect_target
+from benchmark.venue_meetup._core.action_space import (VenueAction,
+                                                       VenueAgentTurn)
+from benchmark.venue_meetup.actions import (compute_inspection,
+                                            count_mask_pixels,
+                                            dispatch_single_action,
+                                            resolve_inspect_target)
 from benchmark.venue_meetup.scenario import Region, Venue, VenueProperties
-
 
 # ---------------------------------------------------------------------------
 # Helpers

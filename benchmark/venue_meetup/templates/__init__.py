@@ -1,19 +1,26 @@
 """Built-in venue-meetup templates."""
 
-from .busy_street_playtest import (
-    build_fixed_scenario as build_busy_street_playtest_scenario,
-)
+from .busy_street_playtest import \
+    build_fixed_scenario as build_busy_street_playtest_scenario
 from .canal_bridge import build_fixed_scenario as build_canal_bridge_scenario
-from .central_square import build_fixed_scenario as build_central_square_scenario
-from .connected_blocks_playtest import (
-    build_fixed_scenario as build_connected_blocks_playtest_scenario,
-)
-from .riverside_market import build_fixed_scenario as build_riverside_market_scenario
-from .rosebank_grid_playtest import (
-    build_fixed_scenario as build_rosebank_grid_playtest_scenario,
-)
-from .station_quarter import build_fixed_scenario as build_station_quarter_scenario
-from .station_street import build_fixed_scenario as build_station_street_scenario
+from .central_square import \
+    build_fixed_scenario as build_central_square_scenario
+from .connected_blocks_playtest import \
+    build_fixed_scenario as build_connected_blocks_playtest_scenario
+from .riverside_market import \
+    build_fixed_scenario as build_riverside_market_scenario
+from .rosebank_grid_playtest import \
+    build_3x3_scenario as build_rosebank_grid_3x3_scenario
+from .rosebank_grid_playtest import \
+    build_5x5_scenario as build_rosebank_grid_5x5_scenario
+from .rosebank_grid_playtest import \
+    build_7x7_scenario as build_rosebank_grid_7x7_scenario
+from .rosebank_grid_playtest import \
+    build_fixed_scenario as build_rosebank_grid_playtest_scenario
+from .station_quarter import \
+    build_fixed_scenario as build_station_quarter_scenario
+from .station_street import \
+    build_fixed_scenario as build_station_street_scenario
 
 TEMPLATE_BUILDERS = {
     "central_square_v0": build_central_square_scenario,
@@ -21,6 +28,9 @@ TEMPLATE_BUILDERS = {
     "canal_bridge_v0": build_canal_bridge_scenario,
     "busy_street_playtest_v0": build_busy_street_playtest_scenario,
     "connected_blocks_playtest_v0": build_connected_blocks_playtest_scenario,
+    "rosebank_grid_3x3_v0": build_rosebank_grid_3x3_scenario,
+    "rosebank_grid_5x5_v0": build_rosebank_grid_5x5_scenario,
+    "rosebank_grid_7x7_v0": build_rosebank_grid_7x7_scenario,
     "rosebank_grid_9x9_v0": build_rosebank_grid_playtest_scenario,
     "station_quarter_medium_v1": build_station_quarter_scenario,
     "riverside_market_large_v1": build_riverside_market_scenario,
@@ -33,6 +43,9 @@ __all__ = [
     "build_central_square_scenario",
     "build_connected_blocks_playtest_scenario",
     "build_riverside_market_scenario",
+    "build_rosebank_grid_3x3_scenario",
+    "build_rosebank_grid_5x5_scenario",
+    "build_rosebank_grid_7x7_scenario",
     "build_rosebank_grid_playtest_scenario",
     "build_station_quarter_scenario",
     "build_station_street_scenario",

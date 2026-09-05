@@ -14,39 +14,13 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from benchmark.venue_meetup.district_geometry import (
-    DistrictShellFootprint,
-    _ANCHOR_CLEARANCE_CM,
-    _BRIDGE_CLEARANCE_CM,
-    _BUILDING_CLEARANCE_CM,
-    _ROUTE_CLEARANCE_CM,
-    _SHELL_ASSET_MARGIN_CM,
-    _SHELL_EDGE_END_GAP_CM,
-    _SHELL_EDGE_SETBACK_CM,
-    _SHELL_FRONTAGE_BUFFER_CM,
-    _SHELL_FRONTAGE_GAP_CM,
-    _SHELL_RHYTHM,
-    _SHELL_SCALES,
-    _SHELL_SEAM_GAP_CM,
-    _SHELL_TARGET_LARGE,
-    _SHELL_TARGET_MEDIUM,
-    _WALK_NODE_CLEARANCE_CM,
-    _augment_shell_shortfall,
-    _distance_sq,
-    _make_shell_placement,
-    _minimum_segment_distance_sq,
-    _offset,
-    _oriented_half_extents,
-    _tile_block,
-    bridge_gap_polylines,
-    clear,
-    frontages_by_block,
-    inside_block,
-    protected_anchors,
-    route_polylines,
-    shell_positions,
-    shell_yaw,
-    shell_protected_bounds,
-)
+    _ANCHOR_CLEARANCE_CM, _BRIDGE_CLEARANCE_CM, _BUILDING_CLEARANCE_CM,
+    _ROUTE_CLEARANCE_CM, _SHELL_ASSET_MARGIN_CM, _SHELL_FRONTAGE_BUFFER_CM,
+    _SHELL_TARGET_LARGE, _SHELL_TARGET_MEDIUM, _WALK_NODE_CLEARANCE_CM,
+    DistrictShellFootprint, _augment_shell_shortfall, _offset, _ShellPlacement,
+    _tile_block, bridge_gap_polylines, clear, frontages_by_block, inside_block,
+    protected_anchors, route_polylines, shell_positions,
+    shell_protected_bounds, shell_yaw)
 from benchmark.venue_meetup.layout import Block, Frontage
 
 if TYPE_CHECKING:

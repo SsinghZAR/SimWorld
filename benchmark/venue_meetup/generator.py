@@ -6,7 +6,8 @@ import random
 from dataclasses import dataclass, replace
 from typing import Callable
 
-from benchmark.venue_meetup.scenario import AgentSpec, Entrance, Requirement, Scenario, Venue, VenueProperties
+from benchmark.venue_meetup.scenario import (AgentSpec, Entrance, Requirement,
+                                             Scenario, Venue, VenueProperties)
 from benchmark.venue_meetup.scoring import satisfies, score_venue
 from benchmark.venue_meetup.templates import TEMPLATE_BUILDERS
 
@@ -543,7 +544,13 @@ def generate_scenario(
     )
 
 
-def evaluation_matrix(templates: list[str] | None = None, seeds: range | list[int] = range(10), agent_counts: tuple[int, ...] = (2, 3)) -> list[Scenario]:
+def evaluation_matrix(
+    templates: list[str] | None = None,
+    seeds: range | list[int] = range(10),
+    agent_counts: tuple[int, ...] = (2, 3),
+    *,
+    hidden_profile: bool = False,
+) -> list[Scenario]:
     """Return the small-evaluation scenario matrix."""
 
     template_ids = templates or list(TEMPLATE_BUILDERS.keys())
@@ -551,5 +558,13 @@ def evaluation_matrix(templates: list[str] | None = None, seeds: range | list[in
     for template_id in template_ids:
         for seed in seeds:
             for num_agents in agent_counts:
-                scenarios.append(generate_scenario(seed=int(seed), template_id=template_id, num_agents=num_agents, randomize=True))
+                scenarios.append(
+                    generate_scenario(
+                        seed=int(seed),
+                        template_id=template_id,
+                        num_agents=num_agents,
+                        randomize=not hidden_profile,
+                        hidden_profile=hidden_profile,
+                    )
+                )
     return scenarios

@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import math
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
-from benchmark.venue_meetup.inspection_evidence import build_inspection_evidence
+from benchmark.venue_meetup.inspection_evidence import \
+    build_inspection_evidence
 from benchmark.venue_meetup.scenario import Scenario, Venue
-
-if TYPE_CHECKING:
-    from simworld.utils.vector import Vector
 
 
 class _Vec2(Protocol):

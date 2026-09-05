@@ -8,6 +8,7 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 
 from benchmark.venue_meetup.layout import DistrictLayout
+from benchmark.venue_meetup.rosebank_grid import ROSEBANK_GRID_TEMPLATE_IDS
 from benchmark.venue_meetup.scenario import Scenario
 
 # Trait / constraint names that must never appear as keys in the public schematic JSON.
@@ -262,7 +263,15 @@ def _render_layout_district(
 
     busy_street = layout.layout_id == "busy_street_playtest_v0"
     connected_blocks = layout.layout_id == "connected_blocks_playtest_v0"
-    rosebank_grid = layout.layout_id == "rosebank_grid_9x9_v0"
+    rosebank_grid_size = next(
+        (
+            grid_size
+            for grid_size, template_id in ROSEBANK_GRID_TEMPLATE_IDS.items()
+            if layout.layout_id == template_id
+        ),
+        None,
+    )
+    rosebank_grid = rosebank_grid_size is not None
     dense_facades = busy_street or connected_blocks or rosebank_grid
 
     # Frontage markers. Candidate identity is labelled once by the venue
@@ -347,6 +356,8 @@ def _render_layout_district(
             font=small_font,
         )
     elif rosebank_grid:
+        assert rosebank_grid_size is not None
+        last_block = f"{chr(ord('A') + rosebank_grid_size - 1)}{rosebank_grid_size}"
         draw.rectangle(
             (14, 42, size - 14, 108),
             fill="#f8f8f4",
@@ -367,7 +378,8 @@ def _render_layout_district(
         )
         draw.text(
             (24, 89),
-            "Blocks use A1-I9 addresses; V1-V36 are inspectable mixed-use venues.",
+            f"Blocks use A1-{last_block} addresses; V1-V{len(scenario.venues)} "
+            "are inspectable mixed-use venues.",
             fill="darkgreen",
             font=small_font,
         )
@@ -395,8 +407,11 @@ def _render_layout_district(
         if layout.layout_id == "busy_street_playtest_v0"
         else "Structure: West Market -- alley -- Central Arcade -- alley -- East Tower"
         if layout.layout_id == "connected_blocks_playtest_v0"
-        else "Structure: 9x9 blocks | Oxford transit spine | Tyrwhitt high street | alley shortcuts"
-        if layout.layout_id == "rosebank_grid_9x9_v0"
+        else (
+            f"Structure: {rosebank_grid_size}x{rosebank_grid_size} blocks | "
+            "Oxford transit spine | Tyrwhitt high street | alley shortcuts"
+        )
+        if rosebank_grid
         else ""
     )
     if structure_note:

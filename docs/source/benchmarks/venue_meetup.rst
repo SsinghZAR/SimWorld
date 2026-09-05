@@ -52,7 +52,8 @@ Teleport vs walk navigation
 Map templates
 -------------
 
-Use these three real template IDs:
+Use these real template IDs. The three Rosebank scale tiers are the canonical
+size comparison; the earlier layouts remain useful compatibility baselines:
 
 .. list-table::
    :header-rows: 1
@@ -74,6 +75,22 @@ Use these three real template IDs:
      - ~700–900 m
      - 12 venues, 6+ blocks, barrier + bridges
      - 128 turns
+   * - ``rosebank_grid_3x3_v0``
+     - 9 blocks
+     - 4 venues, 3 landmarks
+     - 96 turns
+   * - ``rosebank_grid_5x5_v0``
+     - 25 blocks
+     - 8 venues, 6 landmarks
+     - 160 turns
+   * - ``rosebank_grid_7x7_v0``
+     - 49 blocks
+     - 12 venues, 6 landmarks
+     - 256 turns
+   * - ``rosebank_grid_9x9_v0``
+     - 81 blocks
+     - 36-venue visual/navigation stress map
+     - 384 turns
 
 ``station_street_v0`` and ``canal_bridge_v0`` are **legacy metadata aliases of
 central-square geometry**. Do not treat them as independent maps.
@@ -81,9 +98,10 @@ central-square geometry**. Do not treat them as independent maps.
 Layout authoring model
 ----------------------
 
-Medium/large templates are deterministic Python-authored ``DistrictLayout``
-specs (streets, blocks, frontages, landmarks, spawns, walk graph). Actors spawn
-into the existing SimWorld base map via the asset catalog.
+District templates are deterministic Python-authored ``DistrictLayout`` specs
+(streets, blocks, frontages, landmarks, spawns, walk graph). The Rosebank family
+uses one size-aware planner for its 3x3, 5x5, 7x7, and retained 9x9 forms. Actors
+spawn into the existing SimWorld base map via the asset catalog.
 
 Hidden-profile invariants
 -------------------------
@@ -130,7 +148,8 @@ Setup and commands
 
    # Dry-run (no UE)
    python -m benchmark.venue_meetup.run_venue_eval \
-     --dry-run --hidden-profile --info-partition spatial --seeds 7
+     --dry-run --small-eval --hidden-profile --num-agents 2 \
+     --info-partition spatial --seeds 7
 
    # Live scripted smoke
    python -m benchmark.venue_meetup.run_venue_eval \
@@ -174,6 +193,8 @@ Known limitations
 * Ego camera is third-person (the agent sees its own back).
 * UE preflight has not been claimed for the new medium/large maps here; do not
   treat this page as evidence of completed UE validation.
+* The 3x3/5x5/7x7 scale tiers require per-tier live preflight after geometry or
+  packaged-asset changes.
 * Default provider assumptions favor MiniMax-compatible APIs.
 * V2 ``skill_check`` is absent; hidden profile is 2-agent only.
 * Structured ``shared_facts`` metrics are exact claim checks; legacy free-text

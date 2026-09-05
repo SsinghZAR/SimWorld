@@ -1,14 +1,12 @@
-"""Bounded actor massing for the Rosebank-inspired 81-block layout."""
+"""Bounded actor massing for scalable Rosebank-inspired grid layouts."""
 
 from __future__ import annotations
 
-from benchmark.venue_meetup.building_catalog import asset_path, building_description
-from benchmark.venue_meetup.rosebank_grid import (
-    AlleyAxis,
-    RosebankGridPlan,
-    RosebankVenueSite,
-    frontage_tangent,
-)
+from benchmark.venue_meetup.building_catalog import (asset_path,
+                                                     building_description)
+from benchmark.venue_meetup.rosebank_grid import (AlleyAxis, RosebankGridPlan,
+                                                  RosebankVenueSite,
+                                                  frontage_tangent)
 from benchmark.venue_meetup.scenario import StaticBuilding
 
 _CELL_OFFSET_CM = 1_800.0

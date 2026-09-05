@@ -7,7 +7,8 @@ import argparse
 import json
 from pathlib import Path
 
-from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn
+from benchmark.venue_meetup._core.action_space import (VenueAction,
+                                                       VenueAgentTurn)
 from benchmark.venue_meetup.templates import TEMPLATE_BUILDERS
 from benchmark.venue_meetup.venue_env import VenueMeetupEnv
 from simworld.communicator.communicator import Communicator
@@ -22,6 +23,9 @@ DEFAULT_VENUE_TYPES = (
 PLAYTEST_TEMPLATES = (
     "busy_street_playtest_v0",
     "connected_blocks_playtest_v0",
+    "rosebank_grid_3x3_v0",
+    "rosebank_grid_5x5_v0",
+    "rosebank_grid_7x7_v0",
     "rosebank_grid_9x9_v0",
 )
 
