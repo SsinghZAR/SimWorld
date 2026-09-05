@@ -111,6 +111,19 @@ class FakeUnrealCV:
         self.ticks += 1
 
 
+class BatchFakeUnrealCV(FakeUnrealCV):
+    """Fake that exposes the optimized large-scene batch API."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.batch_specs: tuple[Any, ...] = ()
+
+    def spawn_bp_assets_batch(self, specs: Any) -> list[str]:
+        self.batch_specs = tuple(specs)
+        self.log.append(("spawn_bp_assets_batch", len(self.batch_specs)))
+        return ["ok"] * len(self.batch_specs)
+
+
 class FakeCommunicator:
     """Communicator stub used by SceneBuilder / VenueMeetupEnv offline tests."""
 
@@ -318,14 +331,20 @@ def test_static_scene_actor_names_path_pose_color_scale() -> None:
     assert venue_spawn["model_path"] == venue.asset_path
     assert venue_spawn["position"] == venue.position
     assert venue_spawn["direction"] == (0.0, venue.yaw_deg, 0.0)
-    assert communicator.unrealcv.colors[SceneBuilder.venue_actor_name(venue.venue_id)] == venue.mask_color_rgb
+    assert communicator.unrealcv.colors[
+        SceneBuilder.venue_actor_name(venue.venue_id)
+    ] == venue.mask_color_rgb
 
     cone_spawn = by_name[SceneBuilder.prop_actor_name(cone.prop_id)]
     assert cone_spawn["model_path"] == asset_path(cone.asset_key)
     assert cone_spawn["position"] == cone.position
     assert cone_spawn["direction"] == (0.0, cone.yaw_deg, 0.0)
-    assert communicator.unrealcv.scales[SceneBuilder.prop_actor_name(cone.prop_id)] == cone.scale
-    assert communicator.unrealcv.colors[SceneBuilder.prop_actor_name(cone.prop_id)] == cone.color_rgb
+    assert communicator.unrealcv.scales[
+        SceneBuilder.prop_actor_name(cone.prop_id)
+    ] == cone.scale
+    assert communicator.unrealcv.colors[
+        SceneBuilder.prop_actor_name(cone.prop_id)
+    ] == cone.color_rgb
 
     blocker_name = SceneBuilder.prop_actor_name(blocker.prop_id)
     assert communicator.unrealcv.scales[blocker_name] == blocker.scale
@@ -335,7 +354,39 @@ def test_static_scene_actor_names_path_pose_color_scale() -> None:
     assert landmark_spawn["model_path"] == landmark.asset_path
     assert landmark_spawn["position"] == landmark.position
     assert landmark_spawn["direction"] == (0.0, landmark.yaw_deg, 0.0)
-    assert communicator.unrealcv.colors[SceneBuilder.landmark_actor_name(landmark.landmark_id)] == landmark.mask_color_rgb
+    assert communicator.unrealcv.colors[
+        SceneBuilder.landmark_actor_name(landmark.landmark_id)
+    ] == landmark.mask_color_rgb
+
+
+def test_large_static_scene_uses_complete_batch_specs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unrealcv = BatchFakeUnrealCV()
+    communicator = FakeCommunicator(unrealcv)
+    scenario = _tiny_scenario()
+    monkeypatch.setattr(
+        "benchmark.venue_meetup.scene_builder.BATCH_SPAWN_THRESHOLD",
+        1,
+    )
+
+    _builder(communicator, scenario).spawn_static_scene()
+
+    specs = unrealcv.batch_specs
+    assert len(specs) == 5
+    by_name = {spec.name: spec for spec in specs}
+    building = scenario.buildings[0]
+    building_spec = by_name[SceneBuilder.building_actor_name(building.building_id)]
+    assert building_spec.prefab_path == building.asset_path
+    assert building_spec.location == building.position
+    assert building_spec.collision is True
+    assert building_spec.movable is False
+    venue = scenario.venues[0]
+    venue_spec = by_name[SceneBuilder.venue_actor_name(venue.venue_id)]
+    assert venue_spec.color == venue.mask_color_rgb
+    assert venue_spec.scale == venue.scale
+    assert ("spawn_bp_assets_batch", 5) in communicator.log
+    assert communicator.spawned_objects == []
 
 
 def test_layout_backed_scene_spawns_inert_city_dressing_from_authored_geometry() -> None:

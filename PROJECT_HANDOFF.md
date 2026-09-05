@@ -17,6 +17,9 @@ Meetup benchmark repeatable without rediscovering the machine setup.
 - `busy_street_playtest_v0` is the dense single-block visual primitive;
   `connected_blocks_playtest_v0` joins three varied copies through two
   collision-aware pedestrian alleys and exposes 36 unique venue identities.
+- `rosebank_grid_9x9_v0` is the Rosebank-inspired city playtest: 81 mixed-zone
+  blocks, Oxford/Tyrwhitt primary axes, 37 alley axes, 36 venues, 6 landmarks,
+  and a graph that spans approximately 684 m.
 - `runs/` holds generated evaluation artifacts and is intentionally ignored by
   Git.
 
@@ -159,6 +162,32 @@ Then validate an end-to-end physical route and one venue identity per block:
   --output runs\venue_meetup\connected_blocks_three_venue_smoke.json
 ```
 
+For the Rosebank-inspired 9x9 district, regenerate all visual evidence, then
+run the opposite-gateway walk and three-class interaction smoke with:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.preview_rosebank_grid
+
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --template-id rosebank_grid_9x9_v0 --seeds 17 --num-agents 2 `
+  --policy nav_smoke --walk --max-steps 1 --speed 1000 `
+  --resolution 640x360 --output-dir runs\venue_meetup `
+  --run-name rosebank_grid_9x9_walk
+
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.smoke_busy_street `
+  --template-id rosebank_grid_9x9_v0 `
+  --venue-id venue_red_awning_bistro `
+  --venue-id venue_g5_bookshop `
+  --venue-id venue_f2_skyscraper_lobby `
+  --output runs\venue_meetup\rosebank_grid_interaction_smoke.json
+```
+
+The 2026-09-05 live walk passed with `NAVIGATE_OK` for both agents and zero
+replans: 286.7 m planned from the west gateway and 590.7 m from the east. The
+three interaction targets all returned `INSPECT_OK`. Generated screenshots and
+the 1,400 px coarse map live under
+`runs/city_landmark_redesign/rosebank_grid_9x9/`.
+
 For a VLM run, use `--policy minimax` and configure provider credentials in the
 environment. Never pass secrets on the command line or commit them.
 
@@ -197,8 +226,15 @@ Add `--map-only` to inspect just the authored layout.
   installed package and previously caused a UE crash when spawned.
 - `DistrictSceneRenderer` intentionally uses raw UnrealCV spawning with
   collision disabled. `Communicator.spawn_object` enables collision by default
-  and is appropriate for venues and interactive props, not the decorative
-  building shells.
+  and is appropriate for venues, interactive props, and the Rosebank planner's
+  explicitly clearance-checked massing. Generic decorative district shells
+  remain non-colliding.
+- Keep the Rosebank physical smoke at `--speed 1000`. At 5,000 cm/s the packaged
+  controller can overshoot short graph waypoints and trigger a false stall even
+  on a clear street.
+- Large scenes use bounded UnrealCV request batches once the static actor count
+  reaches 96. Preserve the sequential compatibility path for small templates
+  and test adapters.
 - The `GEN_BP_` actor prefix is required so scene reset removes all generated
   actors. Preserve that naming convention.
 - The packaged humanoid blueprint may register multiple FusionCam sensors in
@@ -208,7 +244,8 @@ Add `--map-only` to inspect just the authored layout.
 ## Current implementation status
 
 The current playtest stack includes the four-entry dense block, three-block
-alley district, unique interactive venues, graph-backed walking, and repeatable
+alley district, and Rosebank-inspired 9x9 district, with unique interactive
+venues, graph-backed walking, alley-clear frontage placement, and repeatable
 live visual evidence. Verify the current branch and working tree before making
 further edits:
 

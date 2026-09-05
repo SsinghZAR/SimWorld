@@ -14,6 +14,18 @@ range. Each layout must represent an intentional urban district: streets,
 intersections, blocks, frontages, sidewalks, landmarks, entrance points, and
 route constraints all come from one fixed layout specification.
 
+### Implementation update (2026-09-05)
+
+The original medium/large architecture below is implemented. A subsequent
+playtest extension adds `rosebank_grid_9x9_v0`: an 81-block, mixed-zone district
+with hierarchical streets, mid-block alleys, 36 venues, 6 landmarks, bounded
+parcel massing, graph-wide reachability tests, live object-mask inspection, and
+a successful opposite-gateway physical walk. Planner, layout, massing,
+scenario, and preview responsibilities remain in separate modules; large scene
+spawns use bounded UnrealCV batches while small templates retain the sequential
+compatibility path. Treat the historical gaps below as rationale for the target
+architecture, not as the current implementation status.
+
 The benchmark's primary dependent variables remain social:
 
 - Can agents pool private observations to identify the unique group-feasible

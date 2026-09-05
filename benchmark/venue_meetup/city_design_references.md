@@ -1,6 +1,6 @@
 # Venue Meetup city-design references
 
-The two authored districts borrow legible spatial rules from real cities. They
+The authored districts borrow legible spatial rules from real cities. They
 do not reproduce a copyrighted map or claim architectural fidelity; the
 precedents are translated into deterministic geometry that can be spawned from
 the packaged SimWorld asset catalogue.
@@ -49,6 +49,37 @@ Venue Meetup translates that hierarchy into:
 Source:
 
 - [UNESCO Urban Heritage Atlas: Amsterdam Canal Ring](https://whc.unesco.org/en/urban-heritage-atlas/Amsterdam)
+
+## Rosebank grid: Johannesburg mixed-use transit district
+
+The City of Johannesburg publishes a Rosebank Urban Development Framework for
+Region B. The district's Gautrain station sits beneath Oxford Road between
+Baker Street and Tyrwhitt Avenue, opposite The Zone, which gives the benchmark
+a real, legible pair of primary axes. Current City and Johannesburg Development
+Agency projects also emphasize mixed uses, reused buildings, green public
+space, upgraded sidewalks and intersections, market activity, and continuous
+pedestrian links around the station precinct.
+
+Venue Meetup translates those ingredients rather than copying property lines:
+
+- a 9x9 orthogonal grid spans approximately 684 m;
+- Oxford Road is the north/south transit spine and Tyrwhitt the east/west high
+  street;
+- 7 transit-core, 53 mixed-use, 12 residential, 5 civic, and 4 garden blocks
+  create a readable density gradient;
+- 21 horizontal and 16 vertical mid-block alley axes add shortcuts without
+  replacing the public street grid;
+- 36 uniquely inspectable venues cover restaurants, cafes, shops, bookshops,
+  bars, pubs, hotels, and tower lobbies;
+- the Gautrain tower, market hall, hotel tower, arts centre, civic hall, and
+  clock tower anchor relative positioning.
+
+Sources:
+
+- [City of Johannesburg Region B plans](https://joburg.org.za/documents_/Pages/Key%20Documents/other/policies/Development%20Planning%20%26%20Urban%20Management/Region%20B/Region-B-Plans.aspx)
+- [Gautrain: Rosebank station information](https://www.gautrain.co.za/commuter/stationinfo?stationName=Rosebank)
+- [City of Johannesburg: Nine Yards mixed-use precinct](https://joburg.org.za/media_/Newsroom/Pages/2026-News-Articles/Nine-Yards-Joburg%E2%80%99s-green-town-square-reaches-full-bloom.aspx)
+- [Johannesburg Development Agency: Rosebank public transport facility phase 2](https://www.jda.org.za/wp-content/uploads/2025/06/20250617-PREPARATORY-WORK-COMMENCES-FOR-PHASE-2-OF-THE-ROSEBANK-PUBLIC-TRANSPORT-FACILITY-.pdf)
 
 ## Landmark placement and relative positioning
 

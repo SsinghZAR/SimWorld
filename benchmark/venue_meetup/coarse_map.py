@@ -38,6 +38,11 @@ _BLOCK_STYLE_FILLS = {
     "canal_merchant": "#dfd1c3",
     "civic_masonry": "#e7dbcc",
     "transit_mixed": "#d4e0e8",
+    "rosebank_core": "#c8d4df",
+    "rosebank_mixed": "#dfcfae",
+    "rosebank_residential": "#dce6cf",
+    "rosebank_civic": "#d8c8df",
+    "rosebank_garden": "#b9d7ad",
     "mixed": "#e8e8e8",
 }
 
@@ -257,13 +262,14 @@ def _render_layout_district(
 
     busy_street = layout.layout_id == "busy_street_playtest_v0"
     connected_blocks = layout.layout_id == "connected_blocks_playtest_v0"
-    dense_facades = busy_street or connected_blocks
+    rosebank_grid = layout.layout_id == "rosebank_grid_9x9_v0"
+    dense_facades = busy_street or connected_blocks or rosebank_grid
 
     # Frontage markers. Candidate identity is labelled once by the venue
     # marker below; repeating the full frontage id makes dense maps illegible.
     for frontage in layout.frontages:
         x, y = _world_to_image((frontage.position[0], frontage.position[1]), size=size, extent=extent)
-        half_size = 4 if connected_blocks else 6 if busy_street else 10
+        half_size = 3 if rosebank_grid else 4 if connected_blocks else 6 if busy_street else 10
         draw.rectangle(
             (x - half_size, y - half_size, x + half_size, y + half_size),
             outline="#2e7d32",
@@ -275,7 +281,7 @@ def _render_layout_district(
     # cannot remain legible along one horizontal block edge.
     for venue_index, venue in enumerate(scenario.venues, start=1):
         x, y = _world_to_image((venue.position[0], venue.position[1]), size=size, extent=extent)
-        radius = 7 if connected_blocks else 11 if busy_street else 18
+        radius = 5 if rosebank_grid else 7 if connected_blocks else 11 if busy_street else 18
         draw.ellipse(
             (x - radius, y - radius, x + radius, y + radius),
             outline="darkgreen",
@@ -286,11 +292,13 @@ def _render_layout_district(
         elif connected_blocks:
             block_prefix = ("W", "C", "E")[(venue_index - 1) // 12]
             label = f"{block_prefix}{(venue_index - 1) % 12 + 1}"
+        elif rosebank_grid:
+            label = f"V{venue_index}"
         else:
             label = venue.slot_id.replace("_", " ")
         label_position = (
             (x - 7, y + 9)
-            if connected_blocks
+            if connected_blocks or rosebank_grid
             else (x - 8, y + 14)
             if busy_street
             else (x - 42, y + 22)
@@ -338,6 +346,31 @@ def _render_layout_district(
             fill="#6f4523",
             font=small_font,
         )
+    elif rosebank_grid:
+        draw.rectangle(
+            (14, 42, size - 14, 108),
+            fill="#f8f8f4",
+            outline="#b0b0a8",
+            width=1,
+        )
+        draw.text(
+            (24, 49),
+            "Blue: transit core | tan: mixed use | green: residential/gardens | purple: civic",
+            fill="#304860",
+            font=small_font,
+        )
+        draw.text(
+            (24, 69),
+            "Oxford Road: N-S transit spine | Tyrwhitt: E-W high street | brown: mid-block alleys",
+            fill="#6f4523",
+            font=small_font,
+        )
+        draw.text(
+            (24, 89),
+            "Blocks use A1-I9 addresses; V1-V36 are inspectable mixed-use venues.",
+            fill="darkgreen",
+            font=small_font,
+        )
 
     for landmark in scenario.landmarks:
         x, y = _world_to_image((landmark.position[0], landmark.position[1]), size=size, extent=extent)
@@ -362,6 +395,8 @@ def _render_layout_district(
         if layout.layout_id == "busy_street_playtest_v0"
         else "Structure: West Market -- alley -- Central Arcade -- alley -- East Tower"
         if layout.layout_id == "connected_blocks_playtest_v0"
+        else "Structure: 9x9 blocks | Oxford transit spine | Tyrwhitt high street | alley shortcuts"
+        if layout.layout_id == "rosebank_grid_9x9_v0"
         else ""
     )
     if structure_note:

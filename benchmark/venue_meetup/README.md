@@ -87,6 +87,7 @@ action log. A live walk smoke is not a social-evaluation score.
 | `riverside_market_large_v1` | Canal market, 12 venues across 12 narrow blocks and 2 bridges | 128 |
 | `busy_street_playtest_v0` | Compact 24-facade city block with 4 entries, a courtyard loop, and 12 uniquely inspectable venues | 96 |
 | `connected_blocks_playtest_v0` | Three dense 24-facade blocks joined by 2 portal-aligned pedestrian alleys | 192 |
+| `rosebank_grid_9x9_v0` | Rosebank-inspired 9x9 mixed-use district with 81 blocks, hierarchical streets, 37 alley axes, 36 venues, and 6 landmarks | 384 |
 
 `busy_street_playtest_v0` is the fast visual/interaction sandbox. Six measured
 facades line each side of one dense block, with centred north, east, south, and
@@ -101,6 +102,15 @@ primitive into West Market, Central Arcade, and East Tower blocks. The facing
 east/west portals share explicit alley edges, giving both agents a continuous
 collision-aware route through two connectors and three courtyard/perimeter
 graphs. Venue ids and object-mask colors remain unique across all 36 candidates.
+
+`rosebank_grid_9x9_v0` expands the playtest into an approximately 684 m square
+district. Oxford Road provides the north/south transit spine and Tyrwhitt the
+east/west high street. Transit-core and mixed-use blocks step down toward
+residential edges, four garden blocks provide relief, and 21 horizontal plus
+16 vertical alley axes create optional mid-block shortcuts. Its 36 venues cover
+eight types and remain uniquely inspectable; six landmark buildings anchor
+major decisions. This is a Rosebank-inspired benchmark abstraction, not a
+cadastral copy of Johannesburg.
 
 The geometry and landmark rationale, including the municipal and heritage
 references behind each layout, is documented in
@@ -206,6 +216,25 @@ Run a one-step physical traversal smoke independently:
   --output-dir runs\venue_meetup\live_smoke
 ```
 
+For the full Rosebank-inspired grid, use the packaged humanoid's stable
+1,000 cm/s speed. The two agents start at opposite ends of Tyrwhitt and walk to
+the same west-side venue, so the east agent crosses almost the full district:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --template-id rosebank_grid_9x9_v0 --seeds 17 --num-agents 2 `
+  --policy nav_smoke --walk --max-steps 1 --speed 1000 `
+  --resolution 640x360 --output-dir runs\venue_meetup `
+  --run-name rosebank_grid_9x9_walk
+```
+
+Regenerate its overview, street-canyon, alley, core, mask, and coarse-map
+evidence with:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.preview_rosebank_grid
+```
+
 For a later VLM run, configure the provider credential in the environment (do
 not put it in a command or commit it) and select the MiniMax-compatible policy:
 
@@ -272,9 +301,9 @@ evaluator use. Render a top-down trajectory (or just the authored map) with:
 - The ego camera is third-person, so the agent sees its own back; use the
   world-frame compass/coarse map for orientation.
 - Hidden-profile generation is deliberately limited to two agents.
-- Live object-mask calibration and UE preflight for every authored layout are
-  still pending; offline evidence is deterministic, but the live pixel threshold
-  must be checked against the installed package.
+- Live object-mask calibration remains package-specific. The compact block,
+  connected blocks, and Rosebank 9x9 playtests have reproducible live smoke
+  coverage; new assets or package revisions still require recalibration.
 - `skill_check`/DnD perception is not implemented.
 - Teleport/reference social scores and `--walk` navigation diagnostics must be
   reported separately. The current physical renderer uses authored shells and

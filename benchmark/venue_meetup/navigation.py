@@ -359,6 +359,8 @@ def building_obstacles(
             )
         )
     for building in getattr(scenario, "buildings", ()):
+        if not getattr(building, "collision", True):
+            continue
         raw_x, raw_y, _raw_z = building_bbox(building.asset_key)
         half_x = raw_x * float(building.scale[0]) / 2.0
         half_y = raw_y * float(building.scale[1]) / 2.0

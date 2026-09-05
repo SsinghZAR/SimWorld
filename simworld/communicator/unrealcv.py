@@ -8,6 +8,8 @@ import json
 import os
 import struct
 import time
+from collections.abc import Iterable
+from dataclasses import dataclass
 from io import BytesIO
 from threading import Lock
 
@@ -18,6 +20,20 @@ import unrealcv
 from IPython.display import display
 
 from simworld.utils.logger import Logger
+
+
+@dataclass(frozen=True, slots=True)
+class BlueprintObjectSpec:
+    """Complete setup record for one batched blueprint actor."""
+
+    prefab_path: str
+    name: str
+    location: tuple[float, float, float]
+    rotation: tuple[float, float, float]
+    scale: tuple[float, float, float]
+    collision: bool = True
+    movable: bool = True
+    color: tuple[int, int, int] | None = None
 
 
 class UnrealCV(object):
@@ -95,6 +111,52 @@ class UnrealCV(object):
         cmd = f'vset /objects/spawn_bp_asset {prefab_path} {name}'
         with self.lock:
             self.client.request(cmd)
+
+    def spawn_bp_assets_batch(
+        self,
+        specs: Iterable[BlueprintObjectSpec],
+        batch_size: int = 32,
+    ) -> list[object]:
+        """Spawn and configure blueprint actors in bounded request batches.
+
+        Commands remain ordered per actor, but batching removes thousands of
+        client/server round trips for large authored districts.
+        """
+
+        specs = tuple(specs)
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive")
+        responses: list[object] = []
+        for offset in range(0, len(specs), batch_size):
+            commands: list[str] = []
+            for spec in specs[offset : offset + batch_size]:
+                x, y, z = spec.location
+                pitch, yaw, roll = spec.rotation
+                sx, sy, sz = spec.scale
+                collision = "true" if spec.collision else "false"
+                commands.extend(
+                    (
+                        f"vset /objects/spawn_bp_asset {spec.prefab_path} {spec.name}",
+                        f"vset /object/{spec.name}/location "
+                        f"{float(x):.4f} {float(y):.4f} {float(z):.4f}",
+                        f"vset /object/{spec.name}/rotation {pitch} {yaw} {roll}",
+                        f"vset /object/{spec.name}/scale {sx} {sy} {sz}",
+                    )
+                )
+                if spec.color is not None:
+                    red, green, blue = spec.color
+                    commands.append(
+                        f"vset /object/{spec.name}/color {red} {green} {blue}"
+                    )
+                commands.extend(
+                    (
+                        f"vset /object/{spec.name}/collision {collision}",
+                        f"vset /object/{spec.name}/object_mobility {spec.movable}",
+                    )
+                )
+            with self.lock:
+                responses.extend(self.client.request_batch(commands))
+        return responses
 
     def clean_garbage(self):
         """Clean garbage objects."""

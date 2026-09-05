@@ -13,10 +13,12 @@ from benchmark.venue_meetup.district_scene import DistrictSceneRenderer
 from benchmark.venue_meetup.scenario import Scenario
 from simworld.agent.humanoid import Humanoid
 from simworld.communicator.communicator import Communicator
+from simworld.communicator.unrealcv import BlueprintObjectSpec
 from simworld.config import Config
 from simworld.utils.vector import Vector
 
 AGENT_BLUEPRINT = "/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C"
+BATCH_SPAWN_THRESHOLD = 96
 
 
 @dataclass
@@ -107,6 +109,70 @@ class SceneBuilder:
         """Spawn authored city dressing, venues, landmarks, and visible props."""
 
         DistrictSceneRenderer(self.communicator, self.scenario).spawn()
+        specs = self._blueprint_object_specs()
+        batch_spawn = getattr(
+            self.communicator.unrealcv,
+            "spawn_bp_assets_batch",
+            None,
+        )
+        if callable(batch_spawn) and len(specs) >= BATCH_SPAWN_THRESHOLD:
+            batch_spawn(specs)
+            return
+        self._spawn_static_scene_sequential()
+
+    def _blueprint_object_specs(self) -> tuple[BlueprintObjectSpec, ...]:
+        """Flatten scenario actors into complete engine setup records."""
+
+        specs: list[BlueprintObjectSpec] = []
+        for building in self.scenario.buildings:
+            specs.append(
+                BlueprintObjectSpec(
+                    prefab_path=building.asset_path,
+                    name=self.building_actor_name(building.building_id),
+                    location=building.position,
+                    rotation=(0.0, building.yaw_deg, 0.0),
+                    scale=building.scale,
+                    collision=building.collision,
+                    movable=False,
+                )
+            )
+        for venue in self.scenario.venues:
+            specs.append(
+                BlueprintObjectSpec(
+                    prefab_path=venue.asset_path,
+                    name=self.venue_actor_name(venue.venue_id),
+                    location=venue.position,
+                    rotation=(0.0, venue.yaw_deg, 0.0),
+                    scale=venue.scale,
+                    color=venue.mask_color_rgb,
+                )
+            )
+            specs.extend(
+                BlueprintObjectSpec(
+                    prefab_path=asset_path(prop.asset_key),
+                    name=self.prop_actor_name(prop.prop_id),
+                    location=prop.position,
+                    rotation=(0.0, prop.yaw_deg, 0.0),
+                    scale=prop.scale,
+                    color=prop.color_rgb,
+                )
+                for prop in venue.props
+            )
+        specs.extend(
+            BlueprintObjectSpec(
+                prefab_path=landmark.asset_path,
+                name=self.landmark_actor_name(landmark.landmark_id),
+                location=landmark.position,
+                rotation=(0.0, landmark.yaw_deg, 0.0),
+                scale=landmark.scale,
+                color=landmark.mask_color_rgb,
+            )
+            for landmark in self.scenario.landmarks
+        )
+        return tuple(specs)
+
+    def _spawn_static_scene_sequential(self) -> None:
+        """Apply the compatibility path used by small scenes and test adapters."""
 
         for building in self.scenario.buildings:
             actor_name = self.building_actor_name(building.building_id)

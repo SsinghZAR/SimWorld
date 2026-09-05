@@ -22,6 +22,7 @@ DEFAULT_VENUE_TYPES = (
 PLAYTEST_TEMPLATES = (
     "busy_street_playtest_v0",
     "connected_blocks_playtest_v0",
+    "rosebank_grid_9x9_v0",
 )
 
 
