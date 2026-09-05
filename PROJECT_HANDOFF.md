@@ -187,6 +187,10 @@ replans: 286.7 m planned from the west gateway and 590.7 m from the east. The
 three interaction targets all returned `INSPECT_OK`. Generated screenshots and
 the 1,400 px coarse map live under
 `runs/city_landmark_redesign/rosebank_grid_9x9/`.
+The road-equipped preview additionally writes the centered 1,200 x 1,200
+`rosebank_grid_district_top_down.png` frame.
+The subsequent road-equipped walk passed the same two routes with
+`NAVIGATE_OK`, zero replans, and an episode score of 1.0.
 
 For a VLM run, use `--policy minimax` and configure provider credentials in the
 environment. Never pass secrets on the command line or commit them.
@@ -224,6 +228,11 @@ Add `--map-only` to inspect just the authored layout.
 - Do not use catalogue road assets (`BP_Road_C` / `BP_Road1_C`) in this packaged
   empty-map renderer. They are catalogued but unavailable/incompatible in the
   installed package and previously caused a UE crash when spawned.
+- `rosebank_roads.py` is the supported fallback: it plans 152 non-colliding
+  visual actors from three measured, known-stable blueprints. They provide 20
+  carriageways, 40 sidewalks, 12 center markings, and 80 Oxford/Tyrwhitt zebra
+  bars. Do not replace them with `BP_Road1` without a separately re-authored UE
+  package and live crash preflight.
 - `DistrictSceneRenderer` intentionally uses raw UnrealCV spawning with
   collision disabled. `Communicator.spawn_object` enables collision by default
   and is appropriate for venues, interactive props, and the Rosebank planner's
@@ -245,16 +254,16 @@ Add `--map-only` to inspect just the authored layout.
 
 The current playtest stack includes the four-entry dense block, three-block
 alley district, and Rosebank-inspired 9x9 district, with unique interactive
-venues, graph-backed walking, alley-clear frontage placement, and repeatable
-live visual evidence. Verify the current branch and working tree before making
-further edits:
+venues, graph-backed walking, alley-clear frontage placement, a visible road
+hierarchy, and repeatable live visual evidence. Verify the current branch and
+working tree before making further edits:
 
 ```powershell
 git status --short
 git log -1 --oneline
 ```
 
-The next substantive visual upgrade is a compatible authored UE city map or
-packaged road/sidewalk assets; it needs a re-authoring pass for coordinate
-alignment and live physics, not a blind expansion of the current shell
-renderer.
+The next substantive visual upgrade is a custom-authored UE street kit with
+materials, curbs, traffic signals, and vehicle lanes. It needs a re-authoring
+pass for coordinate alignment and live physics rather than the incompatible
+packaged `BP_Road1` blueprint.

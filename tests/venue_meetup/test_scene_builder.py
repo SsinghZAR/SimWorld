@@ -8,6 +8,10 @@ import pytest
 
 from benchmark.venue_meetup.building_catalog import asset_path
 from benchmark.venue_meetup.district_dressing import plan_district_actors
+from benchmark.venue_meetup.rosebank_roads import plan_rosebank_road_actors
+from benchmark.venue_meetup.templates.rosebank_grid_playtest import (
+    build_fixed_scenario as build_rosebank_scenario,
+)
 from benchmark.venue_meetup.templates.station_quarter import build_fixed_scenario as build_station_scenario
 from benchmark.venue_meetup.scenario import (
     AgentSpec,
@@ -162,6 +166,9 @@ class FakeCommunicator:
         }
         self.spawned_objects.append(record)
         self.log.append(("spawn_object", object_name, model_path, position, direction))
+        self.unrealcv.scales[object_name] = scale
+        self.unrealcv.collisions[object_name] = True
+        self.unrealcv.movability[object_name] = True
 
     def spawn_agent(self, agent: Any, name: Any, position: Any = None, model_path: str = "", type: str = "humanoid") -> None:
         record = {
@@ -387,6 +394,23 @@ def test_large_static_scene_uses_complete_batch_specs(
     assert venue_spec.scale == venue.scale
     assert ("spawn_bp_assets_batch", 5) in communicator.log
     assert communicator.spawned_objects == []
+
+
+def test_rosebank_batch_specs_put_inert_roads_before_solid_buildings() -> None:
+    scenario = build_rosebank_scenario()
+    unrealcv = BatchFakeUnrealCV()
+    communicator = FakeCommunicator(unrealcv)
+
+    _builder(communicator, scenario).spawn_static_scene()
+
+    specs = unrealcv.batch_specs
+    road_specs = [spec for spec in specs if spec.name.startswith("GEN_BP_ROAD_")]
+    assert len(specs) == 624
+    assert len(road_specs) == 152
+    assert all(not spec.collision and not spec.movable for spec in road_specs)
+    assert [spec.name for spec in specs[:152]] == [
+        actor.actor_id for actor in plan_rosebank_road_actors(scenario.layout)
+    ]
 
 
 def test_layout_backed_scene_spawns_inert_city_dressing_from_authored_geometry() -> None:

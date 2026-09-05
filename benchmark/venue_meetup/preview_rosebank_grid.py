@@ -16,6 +16,7 @@ from benchmark.venue_meetup.preview_runtime import (
     spawn_hidden_camera,
 )
 from benchmark.venue_meetup.scene_builder import SceneBuilder
+from benchmark.venue_meetup.rosebank_roads import plan_rosebank_road_actors
 from benchmark.venue_meetup.templates.rosebank_grid_playtest import (
     build_fixed_scenario,
     plan_playtest_grid,
@@ -85,6 +86,14 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
                 "pitch": args.overview_pitch_deg,
                 "fov": args.overview_fov_deg,
             },
+            "district_top_down": {
+                "position": (0.0, 0.0, args.topdown_height_cm),
+                "target": (1.0, 0.0),
+                "pitch": -89.0,
+                "fov": args.topdown_fov_deg,
+                "resolution": args.topdown_resolution,
+                "direct_camera_pitch": -90.0,
+            },
             "oxford_transit_spine": {
                 "position": (oxford_x, plan.street_y[0] - 3_500.0, 650.0),
                 "target": (oxford_x, plan.street_y[-1]),
@@ -122,6 +131,12 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
             position = view["position"]
             target = view["target"]
             assert isinstance(position, tuple) and isinstance(target, tuple)
+            view_resolution = view.get("resolution", args.resolution)
+            assert isinstance(view_resolution, tuple)
+            communicator.unrealcv.set_camera_resolution(
+                camera.camera_id,
+                view_resolution,
+            )
             image_path = args.output_dir / f"rosebank_grid_{view_name}.png"
             mask_path = args.output_dir / f"rosebank_grid_{view_name}_mask.png"
             capture_hidden_camera(
@@ -130,6 +145,11 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
                 position=position,
                 yaw_deg=_yaw_toward(position, target),
                 actor_pitch_deg=float(view["pitch"]),
+                direct_camera_pitch_deg=(
+                    float(view["direct_camera_pitch"])
+                    if "direct_camera_pitch" in view
+                    else None
+                ),
                 fov_deg=float(view["fov"]),
                 frame_gamma=args.frame_gamma,
                 output_path=image_path,
@@ -160,6 +180,9 @@ def run_preview(args: argparse.Namespace) -> dict[str, object]:
                 "solid_massing_count": sum(
                     building.collision for building in scenario.buildings
                 ),
+                "road_actor_count": len(
+                    plan_rosebank_road_actors(scenario.layout)
+                ),
             },
             "artifacts": {
                 **artifacts,
@@ -189,6 +212,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--street-pitch-deg", type=float, default=18.0)
     parser.add_argument("--core-pitch-deg", type=float, default=12.0)
     parser.add_argument("--overview-fov-deg", type=float, default=78.0)
+    parser.add_argument("--topdown-height-cm", type=float, default=95_000.0)
+    parser.add_argument("--topdown-fov-deg", type=float, default=52.0)
+    parser.add_argument("--topdown-resolution", default="1200x1200")
     parser.add_argument("--street-fov-deg", type=float, default=74.0)
     parser.add_argument("--alley-fov-deg", type=float, default=78.0)
     parser.add_argument("--core-fov-deg", type=float, default=78.0)
@@ -204,6 +230,9 @@ def main() -> int:
     args = build_parser().parse_args()
     args.resolution = tuple(
         int(part) for part in args.resolution.lower().split("x")
+    )
+    args.topdown_resolution = tuple(
+        int(part) for part in args.topdown_resolution.lower().split("x")
     )
     report = run_preview(args)
     print(json.dumps(report["geometry"], indent=2))

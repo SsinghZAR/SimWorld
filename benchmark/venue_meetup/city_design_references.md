@@ -73,6 +73,9 @@ Venue Meetup translates those ingredients rather than copying property lines:
   bars, pubs, hotels, and tower lobbies;
 - the Gautrain tower, market hall, hotel tower, arts centre, civic hall, and
   clock tower anchor relative positioning.
+- a non-colliding visual road layer distinguishes carriageways, raised
+  sidewalks, center markings, and main-axis zebra crossings while preserving
+  the independently measured pedestrian graph.
 
 Sources:
 

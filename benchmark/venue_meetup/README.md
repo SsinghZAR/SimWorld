@@ -109,8 +109,10 @@ east/west high street. Transit-core and mixed-use blocks step down toward
 residential edges, four garden blocks provide relief, and 21 horizontal plus
 16 vertical alley axes create optional mid-block shortcuts. Its 36 venues cover
 eight types and remain uniquely inspectable; six landmark buildings anchor
-major decisions. This is a Rosebank-inspired benchmark abstraction, not a
-cadastral copy of Johannesburg.
+major decisions. A separate 152-actor visual road layer adds measured
+carriageway slabs, raised sidewalks, hierarchy-aware center markings, and
+Oxford/Tyrwhitt zebra crossings without changing pedestrian collision. This is
+a Rosebank-inspired benchmark abstraction, not a cadastral copy of Johannesburg.
 
 The geometry and landmark rationale, including the municipal and heritage
 references behind each layout, is documented in
@@ -235,6 +237,9 @@ evidence with:
 .\.venv\Scripts\python.exe -m benchmark.venue_meetup.preview_rosebank_grid
 ```
 
+The preview also writes a centered 1,200 x 1,200 true-overhead frame named
+`rosebank_grid_district_top_down.png`.
+
 For a later VLM run, configure the provider credential in the environment (do
 not put it in a command or commit it) and select the MiniMax-compatible policy:
 
@@ -307,6 +312,8 @@ evaluator use. Render a top-down trajectory (or just the authored map) with:
 - `skill_check`/DnD perception is not implemented.
 - Teleport/reference social scores and `--walk` navigation diagnostics must be
   reported separately. The current physical renderer uses authored shells and
-  graph routes; it is not a replacement for a fully authored UE city map.
+  graph routes. Rosebank road dressing reuses measured, stable packaged
+  blueprints because the package's native road blueprint is incompatible; it
+  is not a replacement for a custom-authored UE street kit.
 - Legacy free-text social metrics are heuristic. Exact sharing metrics require
   structured claims attached to `COMMUNICATE` and first-hand inspection records.

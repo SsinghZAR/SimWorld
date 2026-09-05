@@ -90,6 +90,7 @@ def capture_hidden_camera(
     position: tuple[float, float, float],
     yaw_deg: float,
     actor_pitch_deg: float,
+    direct_camera_pitch_deg: float | None = None,
     fov_deg: float,
     frame_gamma: float,
     output_path: Path,
@@ -104,6 +105,14 @@ def capture_hidden_camera(
         (actor_pitch_deg, yaw_deg, 0.0),
         camera.actor_name,
     )
+    if direct_camera_pitch_deg is not None:
+        # A near-vertical humanoid spring arm offsets the scene substantially.
+        # Direct camera rotation is opt-in so ordinary street previews retain
+        # the packaged third-person framing while survey views stay centered.
+        unrealcv.set_camera_rotation(
+            camera.camera_id,
+            (direct_camera_pitch_deg, yaw_deg, 0.0),
+        )
     unrealcv.set_camera_fov(camera.camera_id, fov_deg)
     # The attached spring arm eases after a large teleport. Advance several
     # deterministic frames so each capture reaches its requested pose.

@@ -20,7 +20,9 @@ The original medium/large architecture below is implemented. A subsequent
 playtest extension adds `rosebank_grid_9x9_v0`: an 81-block, mixed-zone district
 with hierarchical streets, mid-block alleys, 36 venues, 6 landmarks, bounded
 parcel massing, graph-wide reachability tests, live object-mask inspection, and
-a successful opposite-gateway physical walk. Planner, layout, massing,
+a successful opposite-gateway physical walk. A later road pass adds 20
+carriageways, 40 raised sidewalks, hierarchical markings, main-axis crossings,
+and a centered square overhead capture. Planner, layout, massing, road dressing,
 scenario, and preview responsibilities remain in separate modules; large scene
 spawns use bounded UnrealCV batches while small templates retain the sequential
 compatibility path. Treat the historical gaps below as rationale for the target

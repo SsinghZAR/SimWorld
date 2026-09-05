@@ -10,6 +10,7 @@ from typing import Any, Mapping, Sequence
 
 from benchmark.venue_meetup.building_catalog import asset_path
 from benchmark.venue_meetup.district_scene import DistrictSceneRenderer
+from benchmark.venue_meetup.rosebank_roads import plan_rosebank_road_actors
 from benchmark.venue_meetup.scenario import Scenario
 from simworld.agent.humanoid import Humanoid
 from simworld.communicator.communicator import Communicator
@@ -118,12 +119,23 @@ class SceneBuilder:
         if callable(batch_spawn) and len(specs) >= BATCH_SPAWN_THRESHOLD:
             batch_spawn(specs)
             return
-        self._spawn_static_scene_sequential()
+        self._spawn_static_scene_sequential(specs)
 
     def _blueprint_object_specs(self) -> tuple[BlueprintObjectSpec, ...]:
         """Flatten scenario actors into complete engine setup records."""
 
-        specs: list[BlueprintObjectSpec] = []
+        specs = [
+            BlueprintObjectSpec(
+                prefab_path=actor.asset_path,
+                name=actor.actor_id,
+                location=actor.position,
+                rotation=(0.0, actor.yaw_deg, 0.0),
+                scale=actor.scale,
+                collision=actor.collision,
+                movable=actor.movable,
+            )
+            for actor in plan_rosebank_road_actors(self.scenario.layout)
+        ]
         for building in self.scenario.buildings:
             specs.append(
                 BlueprintObjectSpec(
@@ -171,55 +183,27 @@ class SceneBuilder:
         )
         return tuple(specs)
 
-    def _spawn_static_scene_sequential(self) -> None:
+    def _spawn_static_scene_sequential(
+        self,
+        specs: Sequence[BlueprintObjectSpec],
+    ) -> None:
         """Apply the compatibility path used by small scenes and test adapters."""
 
-        for building in self.scenario.buildings:
-            actor_name = self.building_actor_name(building.building_id)
+        for spec in specs:
             self.communicator.spawn_object(
-                actor_name,
-                building.asset_path,
-                building.position,
-                (0.0, building.yaw_deg, 0.0),
-                scale=building.scale,
+                spec.name,
+                spec.prefab_path,
+                spec.location,
+                spec.rotation,
+                scale=spec.scale,
             )
+            if spec.color is not None:
+                self.communicator.unrealcv.set_color(spec.name, spec.color)
             self.communicator.unrealcv.set_collision(
-                actor_name, building.collision
+                spec.name,
+                spec.collision,
             )
-            self.communicator.unrealcv.set_movable(actor_name, False)
-
-        for venue in self.scenario.venues:
-            actor_name = self.venue_actor_name(venue.venue_id)
-            self.communicator.spawn_object(
-                actor_name,
-                venue.asset_path,
-                venue.position,
-                (0.0, venue.yaw_deg, 0.0),
-                scale=venue.scale,
-            )
-            self.communicator.unrealcv.set_color(actor_name, venue.mask_color_rgb)
-            for prop in venue.props:
-                prop_name = self.prop_actor_name(prop.prop_id)
-                self.communicator.spawn_object(
-                    prop_name,
-                    asset_path(prop.asset_key),
-                    prop.position,
-                    (0.0, prop.yaw_deg, 0.0),
-                )
-                self.communicator.unrealcv.set_scale(prop.scale, prop_name)
-                if prop.color_rgb is not None:
-                    self.communicator.unrealcv.set_color(prop_name, prop.color_rgb)
-
-        for landmark in self.scenario.landmarks:
-            actor_name = self.landmark_actor_name(landmark.landmark_id)
-            self.communicator.spawn_object(
-                actor_name,
-                landmark.asset_path,
-                landmark.position,
-                (0.0, landmark.yaw_deg, 0.0),
-                scale=landmark.scale,
-            )
-            self.communicator.unrealcv.set_color(actor_name, landmark.mask_color_rgb)
+            self.communicator.unrealcv.set_movable(spec.name, spec.movable)
 
     def spawn_agents(self) -> dict[str, AgentState]:
         """Spawn all humanoid agents and return their runtime states."""
