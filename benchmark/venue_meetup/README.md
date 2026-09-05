@@ -61,6 +61,10 @@ metadata, but no claims. The evaluator transcript retains the exact
 `shared_facts` claims and checks them against the sender's first-hand canonical
 inspection records.
 
+Delivered `COMMUNICATE` text is capped at 512 characters. Longer model output
+is trimmed at the delivery boundary while the original turn remains available
+in evaluator logs.
+
 ## Actions and navigation
 
 Agents act synchronously once per turn:

@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-from benchmark.venue_meetup._core.action_space import (
-    SharedFactClaim,
-    VenueAction,
-    VenueAgentTurn,
-    sanitize_turn,
-)
-from benchmark.venue_meetup._core.comms import BroadcastRouter, Message, MessageBus, messages_from_turns
-from benchmark.venue_meetup.prompt import VENUE_MEETUP_SYSTEM_PROMPT, build_agent_prompt
-from benchmark.venue_meetup.scenario import (
-    AgentSpec,
-    Region,
-    Requirement,
-    Scenario,
-    Venue,
-    VenueProperties,
-)
+from benchmark.venue_meetup._core.action_space import (SharedFactClaim,
+                                                       VenueAction,
+                                                       VenueAgentTurn,
+                                                       sanitize_turn)
+from benchmark.venue_meetup._core.comms import (BroadcastRouter, Message,
+                                                MessageBus,
+                                                messages_from_turns)
+from benchmark.venue_meetup.prompt import (VENUE_MEETUP_SYSTEM_PROMPT,
+                                           build_agent_prompt)
+from benchmark.venue_meetup.scenario import (AgentSpec, Region, Requirement,
+                                             Scenario, Venue, VenueProperties)
 from benchmark.venue_meetup.scoring import venue_decision_facts
 from benchmark.venue_meetup.social_metrics import compute_social_metrics
 
@@ -212,6 +207,19 @@ def test_text_communication_delivers_and_recipient_view_keeps_delivery_metadata(
         "delivered_to": ["agent_1"],
     }
     assert "claims" not in recipient_view
+
+
+def test_default_communication_limit_is_512_characters() -> None:
+    exact = Message(sender="agent_0", content="a" * 512, step=1)
+    oversized = Message(sender="agent_0", content="b" * 513, step=2)
+
+    _inboxes, transcript, _errors = BroadcastRouter().deliver(
+        [exact, oversized],
+        ["agent_0", "agent_1"],
+    )
+
+    assert transcript[0].content == "a" * 512
+    assert transcript[1].content == "b" * 512
 
 
 def test_non_communicate_payloads_never_create_messages() -> None:

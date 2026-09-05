@@ -8,7 +8,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from benchmark.venue_meetup._core.action_space import VenueAction, SharedFactClaim, parse_shared_facts
+from benchmark.venue_meetup._core.action_space import (SharedFactClaim,
+                                                       VenueAction,
+                                                       parse_shared_facts)
+
+DEFAULT_MAX_CONTENT_CHARS = 512
 
 ALL_RECIPIENTS = "all"
 
@@ -81,7 +85,7 @@ class CommsError(BaseModel):
 class CommsRouter:
     """Base class for turning communication intents into per-agent inboxes."""
 
-    def __init__(self, *, max_content_chars: int = 280):
+    def __init__(self, *, max_content_chars: int = DEFAULT_MAX_CONTENT_CHARS):
         self.max_content_chars = max_content_chars
 
     def resolve_recipients(
@@ -182,7 +186,7 @@ class DirectedRouter(CommsRouter):
 class ProximityRouter(DirectedRouter):
     """Route directed messages only to recipients within a communication radius."""
 
-    def __init__(self, *, radius: float, max_content_chars: int = 280):
+    def __init__(self, *, radius: float, max_content_chars: int = DEFAULT_MAX_CONTENT_CHARS):
         super().__init__(max_content_chars=max_content_chars)
         self.radius = radius
 
