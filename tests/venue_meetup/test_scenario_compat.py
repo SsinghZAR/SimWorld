@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from benchmark.venue_meetup.layout import DistrictLayout, WalkEdge, WalkNode
-from benchmark.venue_meetup.scenario import scenario_from_dict
+from benchmark.venue_meetup.scenario import StaticBuilding, scenario_from_dict
 from benchmark.venue_meetup.templates.central_square import build_fixed_scenario
 
 
@@ -32,12 +32,25 @@ def test_old_scenario_json_without_layout_loads_with_none() -> None:
 
 
 def test_scenario_with_layout_round_trips() -> None:
-    scenario = replace(build_fixed_scenario(seed=7), layout=_tiny_layout())
+    building = StaticBuilding(
+        building_id="house_01",
+        asset_key="BP_Building_01_C",
+        asset_path="/Game/Fake/House.House_C",
+        position=(20.0, 30.0, 0.0),
+        yaw_deg=90.0,
+        scale=(0.4, 0.4, 0.5),
+    )
+    scenario = replace(
+        build_fixed_scenario(seed=7),
+        layout=_tiny_layout(),
+        buildings=[building],
+    )
     payload = scenario.compact(include_hidden=True)
     assert payload["layout"]["layout_id"] == "compat_layout"
     restored = scenario_from_dict(payload)
     assert restored.layout is not None
     assert restored.layout == scenario.layout
+    assert restored.buildings == [building]
     assert restored.layout.shortest_path("a", "b") == ["a", "b"]
 
 
@@ -51,3 +64,4 @@ def test_public_compact_still_hides_venue_secrets_with_layout() -> None:
         assert "properties" not in venue
         assert "entrances" not in venue
         assert "mask_color_rgb" not in venue
+    assert all("asset_path" not in building for building in public["buildings"])

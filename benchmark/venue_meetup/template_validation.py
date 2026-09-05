@@ -47,6 +47,17 @@ def collect_layout_errors(
     errors.extend(_duplicate_id_errors("frontage_id", frontage_ids))
     errors.extend(_duplicate_id_errors("walk node_id", node_ids))
 
+    for block in layout.blocks:
+        if not block.visual_style.strip():
+            errors.append(f"block {block.block_id!r} visual_style must not be empty")
+        if block.shell_target is not None and (
+            isinstance(block.shell_target, bool) or block.shell_target < 0
+        ):
+            errors.append(
+                f"block {block.block_id!r} shell_target={block.shell_target!r} "
+                "must be a non-negative integer"
+            )
+
     known_nodes = set(node_ids)
     node_position = {node.node_id: node.position for node in layout.walk_nodes}
     authored_walk_data = layout.schema_version >= 2

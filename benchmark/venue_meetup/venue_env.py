@@ -65,6 +65,9 @@ class VenueMeetupEnv:
         camera_mode: str = "direct",
         tick_interval: float = 0.05,
         tick_count: int = 1,
+        camera_settle_frames: int = 8,
+        camera_settle_interval: float = 0.03,
+        camera_pitch_deg: float = -20.0,
         speed: float = 1000.0,
         step_duration: float = 0.45,
         min_step_duration: float = 0.2,
@@ -115,6 +118,9 @@ class VenueMeetupEnv:
         self.camera_mode = camera_mode
         self.tick_interval = tick_interval
         self.tick_count = tick_count
+        self.camera_settle_frames = max(0, int(camera_settle_frames))
+        self.camera_settle_interval = max(0.0, float(camera_settle_interval))
+        self.camera_pitch_deg = float(camera_pitch_deg)
         self.speed = speed
         self.step_duration = step_duration
         self.min_step_duration = min_step_duration
@@ -534,15 +540,14 @@ class VenueMeetupEnv:
         state = self.get_agent_state(agent_id)
         location = self.communicator.unrealcv.get_location(state.actor_name)
         z = float(location[2])
-        cx, cy = venue.region.center
-        # Fan agents slightly around the meeting point so they do not stack.
-        index = self.agent_ids.index(agent_id)
+        # Fan agents along the frontage so they do not stack or move inward
+        # into a rotated building envelope.
         # Round the fan offset: math.cos(radians(90)) is 6.1e-17, not 0, so for a
         # venue centred on x=0 the target would be ~1.8e-14 - a value Python
         # renders in scientific notation ("1.8e-14"), which UnrealCV's set_location
         # parser cannot read, silently dropping the teleport. Rounding collapses
         # the float dust to a clean coordinate.
-        target_x, target_y = meeting_target(index, (cx, cy))
+        target_x, target_y = self._meeting_target(agent_id, venue)
 
         # Place the pawn by dropping it in from above with BOTH its AI controller
         # and its collision temporarily disabled, then restore them and let it
@@ -596,6 +601,7 @@ class VenueMeetupEnv:
         final = uc.get_location(actor)
         # Face the facade for the post-arrival ego frame, then restore walk speed.
         self._face_point(actor, state.humanoid, (venue.position[0], venue.position[1]))
+        self._settle_camera_after_turn()
         self.communicator.humanoid_set_speed(state.humanoid.id, self.speed)
         state.humanoid.position = Vector(float(final[0]), float(final[1]))
         if arrived:
@@ -609,9 +615,14 @@ class VenueMeetupEnv:
         }
 
     def _meeting_target(self, agent_id: str, venue: Venue) -> tuple[float, float]:
-        """Fan agents slightly around the meeting point so they do not stack."""
+        """Fan agents tangentially around the oriented venue frontage."""
 
-        return meeting_target(self.agent_ids.index(agent_id), venue.region.center)
+        return meeting_target(
+            self.agent_ids.index(agent_id),
+            venue.region.center,
+            frontage_yaw_deg=venue.yaw_deg,
+            agent_count=len(self.agent_ids),
+        )
 
     def _set_agent_walk_node_for_venue(self, agent_id: str, venue: Venue) -> None:
         """Advance the agent's tracked layout-graph node to the venue frontage."""
@@ -722,7 +733,7 @@ class VenueMeetupEnv:
         self._last_path[agent_id] = last_plan or [final_xy]
         arrived = arrived or venue.region.contains(final_xy)
         self._face_point(actor, state.humanoid, (venue.position[0], venue.position[1]))
-        self._tick()
+        self._settle_camera_after_turn()
         state.humanoid.position = Vector(final_xy[0], final_xy[1])
         if arrived:
             self._agent_walk_nodes[agent_id] = route.end_node_id
@@ -802,7 +813,7 @@ class VenueMeetupEnv:
         arrived = arrived or venue.region.contains(final_xy)
         # Face the facade for the post-arrival ego frame.
         self._face_point(actor, state.humanoid, (venue.position[0], venue.position[1]))
-        self._tick()
+        self._settle_camera_after_turn()
         state.humanoid.position = Vector(final_xy[0], final_xy[1])
         if arrived:
             result, reason = "NAVIGATE_OK", None
@@ -1033,6 +1044,8 @@ class VenueMeetupEnv:
         yaw_delta = -angle if direction == "right" else angle
         new_yaw = normalize_angle(yaw + yaw_delta)
         self.communicator.unrealcv.set_orientation((float(orientation[0]), new_yaw, float(orientation[2])), actor_name)
+        self._synchronize_camera_yaw(humanoid, new_yaw)
+        self._settle_camera_after_turn()
         humanoid.direction = new_yaw
         return {"result": f"TURN_AROUND angle={angle:.1f} direction={direction}", "yaw_deg": new_yaw}
 
@@ -1082,6 +1095,11 @@ class VenueMeetupEnv:
         if not precheck.success:
             outcome = InspectionOutcome(False, precheck.internal_record, precheck.public_record)
         else:
+            # The packaged humanoid controller keeps camera yaw separate from
+            # actor yaw. Synchronize them to the current heading only; this does
+            # not auto-face the requested venue and preserves the inspection
+            # contract's current-orientation visibility check.
+            self._synchronize_camera_yaw(state.humanoid, float(kin["yaw_deg"]))
             mask_frame = self.communicator.get_camera_observation(
                 state.humanoid.camera_id,
                 "object_mask",
@@ -1143,7 +1161,36 @@ class VenueMeetupEnv:
         yaw = math.degrees(math.atan2(dy, dx))
         orientation = self.communicator.unrealcv.get_orientation(actor_name)
         self.communicator.unrealcv.set_orientation((float(orientation[0]), yaw, float(orientation[2])), actor_name)
+        self._synchronize_camera_yaw(humanoid, yaw)
         humanoid.direction = yaw
+
+    def _synchronize_camera_yaw(self, humanoid: Humanoid, yaw_deg: float) -> None:
+        """Align the attached camera with the actor's existing logical heading."""
+
+        try:
+            self.communicator.unrealcv.set_camera_rotation(
+                humanoid.camera_id,
+                (
+                    float(getattr(self, "camera_pitch_deg", -20.0)),
+                    float(yaw_deg),
+                    0.0,
+                ),
+            )
+        except Exception:  # noqa: BLE001 - older test/package adapters may omit it.
+            pass
+
+    def _settle_camera_after_turn(self) -> None:
+        """Let the attached spring-arm camera catch up after a large yaw change."""
+
+        frames = max(0, int(getattr(self, "camera_settle_frames", 8)))
+        interval = max(
+            0.0,
+            float(getattr(self, "camera_settle_interval", 0.03)),
+        )
+        for _frame in range(frames):
+            self._tick()
+            if interval:
+                time.sleep(interval)
 
     def _count_mask_pixels(self, frame: np.ndarray, color_rgb: tuple[int, int, int]) -> int:
         """Count approximate venue-color pixels in an object-mask frame."""

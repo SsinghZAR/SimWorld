@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from benchmark.venue_meetup.building_catalog import asset_path
+from benchmark.venue_meetup.district_dressing import plan_district_actors
 from benchmark.venue_meetup.templates.station_quarter import build_fixed_scenario as build_station_scenario
 from benchmark.venue_meetup.scenario import (
     AgentSpec,
@@ -15,6 +16,7 @@ from benchmark.venue_meetup.scenario import (
     Region,
     Requirement,
     Scenario,
+    StaticBuilding,
     Venue,
     VenueProperties,
 )
@@ -238,6 +240,14 @@ def _tiny_scenario() -> Scenario:
             private_requirement_keys=["food_drink"],
         ),
     ]
+    building = StaticBuilding(
+        building_id="row_house",
+        asset_key="BP_Building_01_C",
+        asset_path="/Game/Fake/House.House_C",
+        position=(-100.0, 200.0, 0.0),
+        yaw_deg=45.0,
+        scale=(0.5, 0.5, 0.75),
+    )
     return Scenario(
         scenario_id="scene_builder_test",
         map_template_id="tiny",
@@ -249,6 +259,7 @@ def _tiny_scenario() -> Scenario:
         soft_weights={"quiet": 1.0},
         coarse_map_text="tiny map",
         max_steps=8,
+        buildings=[building],
     )
 
 
@@ -278,11 +289,20 @@ def test_static_scene_actor_names_path_pose_color_scale() -> None:
     by_name = {item["object_name"]: item for item in communicator.spawned_objects}
 
     assert set(by_name) == {
+        SceneBuilder.building_actor_name(scenario.buildings[0].building_id),
         SceneBuilder.venue_actor_name(venue.venue_id),
         SceneBuilder.prop_actor_name(cone.prop_id),
         SceneBuilder.prop_actor_name(blocker.prop_id),
         SceneBuilder.landmark_actor_name(landmark.landmark_id),
     }
+
+    building = scenario.buildings[0]
+    building_name = SceneBuilder.building_actor_name(building.building_id)
+    building_spawn = by_name[building_name]
+    assert building_spawn["model_path"] == building.asset_path
+    assert building_spawn["scale"] == building.scale
+    assert communicator.unrealcv.collisions[building_name] is True
+    assert communicator.unrealcv.movability[building_name] is False
 
     venue_spawn = by_name[SceneBuilder.venue_actor_name(venue.venue_id)]
     assert venue_spawn["model_path"] == venue.asset_path
@@ -316,8 +336,9 @@ def test_layout_backed_scene_spawns_inert_city_dressing_from_authored_geometry()
 
     dressing = communicator.unrealcv.visual_spawns
     names = [item["object_name"] for item in dressing]
+    planned = plan_district_actors(scenario)
     assert dressing
-    assert len(names) == 76  # 64 solid shells + 8 props + 4 trees
+    assert names == [record.actor_name for record in planned]
     assert len(names) == len(set(names))
     assert any(name.startswith("GEN_BP_DISTRICT_BUILDING_") for name in names)
     # Solid shells back the authored city geometry; decorative props and trees

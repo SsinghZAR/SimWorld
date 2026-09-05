@@ -200,11 +200,67 @@ def fixture_gaps(
     edge: Edge,
     gap_fixtures: Mapping[str, Mapping[str, object]],
     extra_gaps: Iterable[tuple[str, int, float, float]] = (),
+    *,
+    bbox_lookup: Callable[[str], tuple[float, float, float]] | None = None,
 ) -> tuple[tuple[float, float], ...]:
     layout = scenario.layout
     assert layout is not None
     fixture = gap_fixtures[layout.layout_id]
-    declared = fixture["gaps"][block.block_id][edge.index]  # type: ignore[index]
+    explicit = None if fixture.get("calculated") else fixture.get("gaps")
+    if explicit is not None:
+        declared = explicit[block.block_id][edge.index]  # type: ignore[index]
+    else:
+        if bbox_lookup is None:
+            raise ValueError("bbox_lookup is required for calculated gap fixtures")
+        end_gap_by_style = fixture.get("end_gap_by_style", {})
+        authored_end_gap = (
+            end_gap_by_style.get(block.visual_style, fixture.get("end_gap_cm", 2_500.0))
+            if isinstance(end_gap_by_style, Mapping)
+            else fixture.get("end_gap_cm", 2_500.0)
+        )
+        end_gap = min(edge.length, float(authored_end_gap))
+        frontage_gap = float(fixture.get("frontage_gap_cm", 1_000.0))
+        frontage_buffer = float(fixture.get("frontage_buffer_cm", 500.0))
+        frontage_cap = float(fixture.get("frontage_cap_cm", 2_500.0))
+        bridge_distance = float(fixture.get("bridge_distance_cm", 9_000.0))
+        intervals: list[tuple[float, float]] = [
+            (0.0, end_gap),
+            (max(0.0, edge.length - end_gap), edge.length),
+        ]
+        venue_by_slot = {venue.slot_id: venue for venue in scenario.venues}
+        for frontage in layout.frontages:
+            if frontage.block_id != block.block_id:
+                continue
+            if frontage_edge(block, frontage).index != edge.index:
+                continue
+            along, _normal = edge_projection(frontage.position[:2], edge)
+            tangent_half = 0.0
+            if frontage.venue_slot_id is not None:
+                venue = venue_by_slot.get(frontage.venue_slot_id)
+                if venue is not None:
+                    hx, hy = measured_half_extents(venue, bbox_lookup)
+                    tangent_half = abs(edge.tangent[0]) * hx + abs(edge.tangent[1]) * hy
+            gap_half = max(
+                frontage_gap,
+                min(frontage_cap, tangent_half + frontage_buffer),
+            )
+            intervals.append(
+                (
+                    max(0.0, along - gap_half),
+                    min(edge.length, along + gap_half),
+                )
+            )
+        for route in enabled_bridge_routes(layout):
+            for portal in (route[0], route[-1]):
+                along, normal = edge_projection(portal, edge)
+                if normal <= bridge_distance:
+                    intervals.append(
+                        (
+                            max(0.0, along - frontage_gap),
+                            min(edge.length, along + frontage_gap),
+                        )
+                    )
+        declared = merge_intervals(intervals)
     extras = (
         (left, right)
         for block_id, edge_index, left, right in extra_gaps
@@ -218,6 +274,7 @@ def shell_edge_metrics(
     gap_fixtures: Mapping[str, Mapping[str, object]],
     shell_records_fn: Callable[[object], Iterable[object]],
     *,
+    bbox_lookup: Callable[[str], tuple[float, float, float]],
     extra_gaps: Iterable[tuple[str, int, float, float]] = (),
 ) -> dict[str, object]:
     layout = scenario.layout
@@ -229,7 +286,15 @@ def shell_edge_metrics(
         shells = [record for record in records if record.footprint.block_id == block.block_id]
         block_eligible = block_covered = block_gap = 0.0
         for edge in edge_frames(block):
-            for left, right in interval_complement(edge.length, fixture_gaps(scenario, block, edge, gap_fixtures, extra_gaps)):
+            gaps = fixture_gaps(
+                scenario,
+                block,
+                edge,
+                gap_fixtures,
+                extra_gaps,
+                bbox_lookup=bbox_lookup,
+            )
+            for left, right in interval_complement(edge.length, gaps):
                 span_length = right - left
                 total_eligible += span_length
                 block_eligible += span_length

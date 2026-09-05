@@ -30,6 +30,16 @@ HIDDEN_SCHEMATIC_KEYS = frozenset(
     }
 )
 
+_BLOCK_STYLE_FILLS = {
+    "authored_high_street": "#ead7b7",
+    "authored_courtyard_block": "#e5d2b4",
+    "station_west": "#ead8cc",
+    "station_east": "#d5e4ec",
+    "canal_merchant": "#dfd1c3",
+    "civic_masonry": "#e7dbcc",
+    "transit_mixed": "#d4e0e8",
+    "mixed": "#e8e8e8",
+}
 
 def _world_to_image(point: tuple[float, float], *, size: int, extent: float) -> tuple[int, int]:
     """Convert Unreal 2D coordinates to image coordinates."""
@@ -179,10 +189,15 @@ def _render_layout_district(
         if len(block.footprint) < 3:
             continue
         points = [_world_to_image(point, size=size, extent=extent) for point in block.footprint]
-        draw.polygon(points, outline="dimgray", fill="#e8e8e8")
+        draw.polygon(
+            points,
+            outline="dimgray",
+            fill=_BLOCK_STYLE_FILLS.get(block.visual_style, "#e8e8e8"),
+        )
         cx = sum(p[0] for p in points) / len(points)
         cy = sum(p[1] for p in points) / len(points)
-        draw.text((cx - 28, cy - 6), block.block_id.replace("_", " "), fill="dimgray", font=small_font)
+        label = block.block_id.removeprefix("block_").replace("_", " ")
+        draw.text((cx - 28, cy - 6), label, fill="dimgray", font=small_font)
 
     # Street corridors with authored widths; bridges drawn distinctly.
     for street in layout.streets:
@@ -218,6 +233,8 @@ def _render_layout_district(
         p1 = _world_to_image(end.position, size=size, extent=extent)
         if edge.route_kind == "bridge":
             draw.line((p0[0], p0[1], p1[0], p1[1]), fill="#c45c26", width=5)
+        elif edge.route_kind == "alley":
+            draw.line((p0[0], p0[1], p1[0], p1[1]), fill="#8a5a2b", width=3)
         else:
             draw.line((p0[0], p0[1], p1[0], p1[1]), fill="#b0b0b0", width=1)
 
@@ -238,33 +255,82 @@ def _render_layout_district(
             else:
                 draw.regular_polygon((x, y, 5), n_sides=4, rotation=45, fill="white", outline="gray")
 
-    # Named frontages (public storefront labels only).
+    busy_street = layout.layout_id == "busy_street_playtest_v0"
+
+    # Frontage markers. Candidate identity is labelled once by the venue
+    # marker below; repeating the full frontage id makes dense maps illegible.
     for frontage in layout.frontages:
         x, y = _world_to_image((frontage.position[0], frontage.position[1]), size=size, extent=extent)
-        draw.rectangle((x - 10, y - 10, x + 10, y + 10), outline="#2e7d32", width=2)
-        label = (frontage.venue_slot_id or frontage.frontage_id).replace("_", " ")
-        draw.text((x - 40, y + 12), label, fill="#2e7d32", font=small_font)
+        half_size = 6 if busy_street else 10
+        draw.rectangle(
+            (x - half_size, y - half_size, x + half_size, y + half_size),
+            outline="#2e7d32",
+            width=2,
+        )
 
-    # Venue markers (type labels; never hidden traits).
-    for venue in scenario.venues:
+    # Venue markers (type labels; never hidden traits). The single-frontage
+    # playtest uses numbered markers plus a legend because twelve full names
+    # cannot remain legible along one horizontal block edge.
+    for venue_index, venue in enumerate(scenario.venues, start=1):
         x, y = _world_to_image((venue.position[0], venue.position[1]), size=size, extent=extent)
-        draw.ellipse((x - 18, y - 18, x + 18, y + 18), outline="darkgreen", width=3)
-        label = venue.venue_type.replace("_", " ")
-        draw.text((x - 36, y - 34), label, fill="darkgreen", font=small_font)
+        radius = 11 if busy_street else 18
+        draw.ellipse(
+            (x - radius, y - radius, x + radius, y + radius),
+            outline="darkgreen",
+            width=3,
+        )
+        label = f"V{venue_index}" if busy_street else venue.slot_id.replace("_", " ")
+        label_position = (x - 8, y + 14) if busy_street else (x - 42, y + 22)
+        draw.text(label_position, label, fill="darkgreen", font=small_font)
+
+    if busy_street:
+        legend_top = 50
+        row_height = 18
+        column_width = size // 2
+        draw.rectangle(
+            (14, legend_top - 7, size - 14, legend_top + 6 * row_height + 5),
+            fill="#f8f8f4",
+            outline="#b0b0a8",
+            width=1,
+        )
+        for venue_index, venue in enumerate(scenario.venues, start=1):
+            column = 0 if venue_index <= 6 else 1
+            row = (venue_index - 1) % 6
+            display_name = venue.visual_summary.partition(":")[0]
+            venue_type = venue.venue_type.replace("_", " ")
+            legend = f"V{venue_index}  {display_name} ({venue_type})"
+            draw.text(
+                (24 + column * column_width, legend_top + row * row_height),
+                legend,
+                fill="darkgreen",
+                font=small_font,
+            )
 
     for landmark in scenario.landmarks:
         x, y = _world_to_image((landmark.position[0], landmark.position[1]), size=size, extent=extent)
         draw.rectangle((x - 22, y - 22, x + 22, y + 22), outline="navy", width=3)
-        label = landmark.landmark_type.replace("_", " ")
+        label = landmark.slot_id.replace("_", " ")
         draw.text((x - 48, y + 26), label, fill="navy", font=small_font)
 
     for agent in scenario.agents:
         x, y = _world_to_image((agent.position[0], agent.position[1]), size=size, extent=extent)
         draw.polygon([(x, y - 18), (x - 14, y + 12), (x + 14, y + 12)], outline="black", fill="lightgray")
-        draw.text((x - 28, y + 18), agent.agent_id, fill="black", font=small_font)
+        agent_label_y = y - 42 if busy_street else y + 18
+        draw.text((x - 28, agent_label_y), agent.agent_id, fill="black", font=small_font)
 
     title = f"Venue Meetup coarse map ({layout.layout_id})"
     draw.text((20, 18), title, fill="black", font=font)
+    structure_note = (
+        "Axes: Market Street north | Cross Street centre | service alley south"
+        if layout.layout_id == "station_quarter_medium_v1"
+        else "Structure: outer avenue | merchant lane | canal promenade | two bridges"
+        if layout.layout_id == "riverside_market_large_v1"
+        else "Structure: four-sided street wall | N/E/S/W portals | courtyard loop"
+        if layout.layout_id == "busy_street_playtest_v0"
+        else ""
+    )
+    if structure_note:
+        draw.text((20, size - 62), structure_note, fill="#404040", font=small_font)
     draw.text(
         (20, size - 38),
         "Map hides: open/closed, accessibility, crowding, food/drink, blocked entrances.",

@@ -11,11 +11,14 @@ if TYPE_CHECKING:
     from benchmark.venue_meetup.layout import DistrictLayout
 
 VenueType = Literal[
+    "bar",
+    "bookshop",
     "cafe",
     "pub",
     "restaurant",
     "hotel_lobby",
     "shop",
+    "skyscraper_lobby",
     "station_entrance",
     "public_square",
 ]
@@ -94,6 +97,20 @@ class PropSpec:
     scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
     semantic: str = ""
     color_rgb: tuple[int, int, int] | None = None
+
+
+@dataclass(frozen=True)
+class StaticBuilding:
+    """A solid scene building that is not an inspectable venue or landmark."""
+
+    building_id: str
+    asset_key: str
+    asset_path: str
+    position: tuple[float, float, float]
+    yaw_deg: float
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    collision: bool = True
+    visual_summary: str = ""
 
 
 @dataclass(frozen=True)
@@ -184,6 +201,7 @@ class Scenario:
     coarse_map_path: str | None = None
     max_steps: int = 24
     layout: DistrictLayout | None = None
+    buildings: list[StaticBuilding] = field(default_factory=list)
 
     def venue_by_id(self, venue_id: str) -> Venue:
         """Return a venue by id."""
@@ -216,6 +234,8 @@ class Scenario:
                 venue.pop("mask_color_rgb", None)
             payload.pop("requirements", None)
             payload.pop("soft_weights", None)
+            for building in payload.get("buildings", []):
+                building.pop("asset_path", None)
         return payload
 
     def save_json(self, path: Path) -> None:
@@ -240,6 +260,7 @@ def scenario_from_dict(payload: dict[str, Any]) -> Scenario:
         venues.append(Venue(**venue))
 
     landmarks = [Landmark(**landmark) for landmark in payload.get("landmarks", [])]
+    buildings = [StaticBuilding(**building) for building in payload.get("buildings", [])]
     agents = [AgentSpec(**agent) for agent in payload.get("agents", [])]
     requirements = [Requirement(**requirement) for requirement in payload.get("requirements", [])]
     layout_payload = payload.get("layout")
@@ -257,6 +278,7 @@ def scenario_from_dict(payload: dict[str, Any]) -> Scenario:
         coarse_map_path=payload.get("coarse_map_path"),
         max_steps=int(payload.get("max_steps", 24)),
         layout=layout,
+        buildings=buildings,
     )
 
 

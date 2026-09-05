@@ -58,7 +58,13 @@ _BRIDGE_CLEARANCE_CM = 2_200.0
 # intervals here makes coverage independent of the tiler's private predicates.
 _GAP_FIXTURES = {
     "station_quarter_medium_v1": {
+        "calculated": True,
         "end_gap_cm": 2_500.0,
+        "end_gap_by_style": {"station_west": 1_200.0, "station_east": 1_200.0},
+        "frontage_gap_cm": 1_000.0,
+        "frontage_buffer_cm": 500.0,
+        "frontage_cap_cm": 2_500.0,
+        "bridge_distance_cm": 9_000.0,
         "frontages": {
             "block_nw": ("front_nw_market_cafe", "front_nw_cross_bistro"),
             "block_ne": ("front_ne_market_shop", "front_ne_cross_deli"),
@@ -66,104 +72,55 @@ _GAP_FIXTURES = {
             "block_se": ("front_se_cross_hall", "front_se_alley_market"),
         },
         "bridge_edges": (),
-        "gaps": {
-            "block_nw": {
-                0: ((0.0, 2_500.0), (7_000.0, 9_000.0), (12_500.0, 15_000.0)),
-                1: ((0.0, 2_500.0), (9_500.0, 12_000.0)),
-                2: ((0.0, 2_500.0), (8_000.0, 10_000.0), (12_500.0, 15_000.0)),
-                3: ((0.0, 2_500.0), (9_500.0, 12_000.0)),
-            },
-            "block_ne": {
-                0: ((0.0, 2_500.0), (6_000.0, 8_000.0), (12_500.0, 15_000.0)),
-                1: ((0.0, 2_500.0), (9_500.0, 12_000.0)),
-                2: ((0.0, 2_500.0), (4_973.207162891235, 7_026.792837108765), (12_500.0, 15_000.0)),
-                3: ((0.0, 2_500.0), (9_500.0, 12_000.0)),
-            },
-            "block_sw": {
-                0: ((0.0, 2_500.0), (4_694.999816894531, 7_305.000183105469), (12_500.0, 15_000.0)),
-                1: ((0.0, 2_500.0), (9_500.0, 12_000.0)),
-                2: ((0.0, 2_500.0), (6_000.0, 8_000.0), (12_500.0, 15_000.0)),
-                3: ((0.0, 2_500.0), (9_500.0, 12_000.0)),
-            },
-            "block_se": {
-                0: ((0.0, 2_500.0), (6_500.0, 11_500.0), (12_500.0, 15_000.0)),
-                1: ((0.0, 2_500.0), (9_500.0, 12_000.0)),
-                2: ((0.0, 2_500.0), (6_197.610107421875, 9_802.389892578125), (12_500.0, 15_000.0)),
-                3: ((0.0, 2_500.0), (9_500.0, 12_000.0)),
-            },
-        },
     },
     "riverside_market_large_v1": {
+        "calculated": True,
         "end_gap_cm": 2_500.0,
+        "end_gap_by_style": {
+            "canal_merchant": 800.0,
+            "civic_masonry": 800.0,
+            "transit_mixed": 800.0,
+        },
+        "frontage_gap_cm": 1_000.0,
+        "frontage_buffer_cm": 500.0,
+        "frontage_cap_cm": 2_500.0,
+        "bridge_distance_cm": 9_000.0,
         "frontages": {
-            "block_nw_civic": ("front_nw_civic_cafe", "front_nw_civic_shop"),
-            "block_w_market": ("front_w_market_bistro", "front_w_market_stall"),
-            "block_sw_residential": ("front_sw_resid_pub", "front_sw_resid_lobby"),
-            "block_ne_transit": ("front_ne_transit_shop", "front_ne_transit_deli"),
-            "block_e_waterfront": ("front_e_water_restaurant", "front_e_water_hall"),
-            "block_se_hotel": ("front_se_hotel_cafe", "front_se_hotel_shop"),
+            "block_nw_civic": ("front_nw_civic_cafe",),
+            "block_nw_canal": ("front_nw_civic_shop",),
+            "block_w_market": ("front_w_market_bistro",),
+            "block_w_quay": ("front_w_market_stall",),
+            "block_sw_residential": ("front_sw_resid_pub",),
+            "block_sw_canal": ("front_sw_resid_lobby",),
+            "block_ne_canal": ("front_ne_transit_deli",),
+            "block_ne_transit": ("front_ne_transit_shop",),
+            "block_e_quay": ("front_e_water_hall",),
+            "block_e_waterfront": ("front_e_water_restaurant",),
+            "block_se_canal": ("front_se_hotel_shop",),
+            "block_se_hotel": ("front_se_hotel_cafe",),
         },
         "bridge_edges": (
             ("bridge_primary_west", "bridge_primary_east"),
             ("bridge_secondary_west", "bridge_secondary_east"),
         ),
-        "gaps": {
-            "block_nw_civic": {
-                0: ((0.0, 2_500.0), (19_000.0, 21_000.0), (25_500.0, 28_000.0)),
-                1: ((0.0, 2_500.0), (17_500.0, 20_000.0)),
-                2: ((0.0, 2_500.0), (19_000.0, 21_000.0), (25_500.0, 28_000.0)),
-                3: ((0.0, 2_500.0), (17_500.0, 20_000.0)),
-            },
-            "block_w_market": {
-                0: ((0.0, 2_500.0), (25_500.0, 28_000.0)),
-                1: ((0.0, 2_500.0), (4_973.207162891235, 7_026.792837108765), (8_000.0, 10_000.0), (11_500.0, 14_000.0)),
-                2: ((0.0, 2_500.0), (17_000.0, 19_000.0), (25_500.0, 28_000.0)),
-                3: ((0.0, 2_500.0), (11_500.0, 14_000.0)),
-            },
-            "block_sw_residential": {
-                0: ((0.0, 2_500.0), (18_694.99981689453, 21_305.00018310547), (25_500.0, 28_000.0)),
-                1: ((0.0, 2_500.0), (6_000.0, 8_000.0), (17_500.0, 20_000.0)),
-                2: ((0.0, 2_500.0), (17_000.0, 19_000.0), (25_500.0, 28_000.0)),
-                3: ((0.0, 2_500.0), (17_500.0, 20_000.0)),
-            },
-            "block_ne_transit": {
-                0: ((0.0, 2_500.0), (7_000.0, 9_000.0), (25_500.0, 28_000.0)),
-                1: ((0.0, 2_500.0), (17_500.0, 20_000.0)),
-                2: ((0.0, 2_500.0), (6_973.207162891235, 9_026.792837108766), (25_500.0, 28_000.0)),
-                3: ((0.0, 2_500.0), (17_500.0, 20_000.0)),
-            },
-            "block_e_waterfront": {
-                0: ((0.0, 2_500.0), (25_500.0, 28_000.0)),
-                1: ((0.0, 2_500.0), (11_500.0, 14_000.0)),
-                2: ((0.0, 2_500.0), (9_000.0, 11_000.0), (25_500.0, 28_000.0)),
-                3: ((0.0, 2_500.0), (4_000.0, 6_000.0), (6_197.610107421875, 9_802.389892578125), (11_500.0, 14_000.0)),
-            },
-            "block_se_hotel": {
-                0: ((0.0, 2_500.0), (5_500.0, 10_500.0), (25_500.0, 28_000.0)),
-                1: ((0.0, 2_500.0), (17_500.0, 20_000.0)),
-                2: ((0.0, 2_500.0), (9_000.0, 11_000.0), (25_500.0, 28_000.0)),
-                3: ((0.0, 2_500.0), (12_000.0, 14_000.0), (17_500.0, 20_000.0)),
-            },
-        },
     },
 }
-
 _EXPECTED_LAYOUT_METRICS = {
     "station_quarter_medium_v1": {
-        "shells": 64,
-        "per_block": 16,
-        "minimum_scale": 0.18,
-        "eligible_cm": 114_731.63417441529,
-        "coverage": 0.6789118810521176,
-        "max_gap_cm": 831.359230070324,
+        "shells": 88,
+        "per_block": (22,),
+        "minimum_scale": 0.25310392234092693,
+        "eligible_cm": 143_531.6341744153,
+        "coverage": 0.7037886357019036,
+        "max_gap_cm": 996.7512216474715,
     },
     "riverside_market_large_v1": {
-        "shells": 144,
-        "per_block": 24,
+        "shells": 320,
+        "per_block": (24, 28),
         "minimum_scale": 0.18,
-        "eligible_cm": 394_678.04850019776,
-        "coverage": 0.5257885234079842,
-        "max_gap_cm": 2_034.4806912367458,
+        "eligible_cm": 778_278.0485001977,
+        "coverage": 0.5234457041427181,
+        "max_gap_cm": 3_328.139901449431,
     },
 }
 
@@ -260,8 +217,8 @@ def test_district_dressing_is_deterministic_and_inert() -> None:
 
 def test_district_actor_budget_preserves_medium_and_large_counts() -> None:
     for scenario, expected_total, expected_shells in (
-        (build_medium_scenario(7), 76, 64),
-        (build_large_scenario(31), 174, 144),
+        (build_medium_scenario(7), 100, 88),
+        (build_large_scenario(31), 350, 320),
     ):
         actors = plan_district_actors(scenario)
         assert len(actors) == expected_total
@@ -278,15 +235,19 @@ def test_shell_coverage_uses_only_eligible_edge_intervals() -> None:
         assert min(min(record.scale) for record in records) >= 0.18
         assert min(min(record.scale) for record in records) == pytest.approx(expected["minimum_scale"])
         metrics = shell_edge_metrics(
-            scenario, _GAP_FIXTURES, plan_shell_records
+            scenario,
+            _GAP_FIXTURES,
+            plan_shell_records,
+            bbox_lookup=building_catalog.building_bbox,
         )
         assert metrics["eligible_cm"] == pytest.approx(expected["eligible_cm"], rel=1e-8)
         assert metrics["coverage"] == pytest.approx(expected["coverage"], rel=1e-8)
         assert metrics["max_gap_cm"] == pytest.approx(expected["max_gap_cm"], rel=1e-8)
-        assert metrics["coverage"] >= (0.55 if expected["shells"] == 64 else 0.50)
-        assert metrics["max_gap_cm"] <= (2_000.0 if expected["shells"] == 64 else 3_500.0)
+        medium = layout.layout_id == "station_quarter_medium_v1"
+        assert metrics["coverage"] >= (0.70 if medium else 0.50)
+        assert metrics["max_gap_cm"] <= (1_000.0 if medium else 3_500.0)
         per_block = metrics["per_block"]
-        assert all(item[0] == expected["per_block"] for item in per_block.values())
+        assert {item[0] for item in per_block.values()} == set(expected["per_block"])
 
 
 def test_shell_footprints_match_measured_asset_envelopes() -> None:
@@ -303,10 +264,30 @@ def test_shell_footprints_match_measured_asset_envelopes() -> None:
             assert footprint.half_extents[1] == pytest.approx(expected[1], abs=1e-6)
 
 
+def test_major_landmark_silhouettes_are_reserved_and_vertically_emphasized() -> None:
+    reserved = {"BP_Building_20_C", "BP_Building_101_C", "BP_Building_123_C"}
+    for scenario in (build_medium_scenario(7), build_large_scenario(31)):
+        shell_assets = {record.asset_key for record in plan_shell_records(scenario)}
+        assert shell_assets.isdisjoint(reserved)
+        landmark_by_asset = {
+            landmark.asset_key: landmark
+            for landmark in scenario.landmarks
+            if landmark.asset_key in reserved
+        }
+        assert set(landmark_by_asset) == reserved
+        assert all(
+            landmark.scale[2] > max(landmark.scale[:2])
+            for landmark in landmark_by_asset.values()
+        )
+
+
 def test_undeclared_gap_changes_the_eligible_denominator_and_coverage() -> None:
     scenario = build_medium_scenario(7)
     baseline = shell_edge_metrics(
-        scenario, _GAP_FIXTURES, plan_shell_records
+        scenario,
+        _GAP_FIXTURES,
+        plan_shell_records,
+        bbox_lookup=building_catalog.building_bbox,
     )
     # This gap is deliberately not part of the explicit frontage/end/bridge
     # fixture.  A hidden exclusion must not silently disappear from metrics.
@@ -314,7 +295,8 @@ def test_undeclared_gap_changes_the_eligible_denominator_and_coverage() -> None:
         scenario,
         _GAP_FIXTURES,
         plan_shell_records,
-        extra_gaps=(("block_nw", 0, 9_500.0, 10_500.0),),
+        bbox_lookup=building_catalog.building_bbox,
+        extra_gaps=(("block_nw", 0, 3_000.0, 4_000.0),),
     )
     assert tampered["eligible_cm"] < baseline["eligible_cm"]
     assert tampered["coverage"] != pytest.approx(baseline["coverage"], rel=1e-8)
@@ -374,7 +356,8 @@ def test_live_proven_trees_are_sparse_and_inert() -> None:
             if "DISTRICT_TREE_" in str(record["object_name"])
         ]
         assert renderer.layout is not None
-        assert len(trees) == len(renderer.layout.blocks)
+        expected_trees = 4 if template == "medium" else 6
+        assert len(trees) == expected_trees
         assert all(
             any(asset in str(record["model_path"]) for asset in _DISTRICT_TREE_ASSETS)
             for record in trees
@@ -439,11 +422,23 @@ def test_declared_frontage_end_and_bridge_gap_fixtures_are_explicit() -> None:
             }
             assert actual_ids == expected_ids
             for edge in edge_frames(block):
-                gaps = fixture_gaps(scenario, block, edge, _GAP_FIXTURES)
+                gaps = fixture_gaps(
+                    scenario,
+                    block,
+                    edge,
+                    _GAP_FIXTURES,
+                    bbox_lookup=building_catalog.building_bbox,
+                )
                 assert gaps[0][0] == pytest.approx(0.0)
                 assert gaps[-1][1] == pytest.approx(edge.length)
-                assert gaps[0][1] >= fixture["end_gap_cm"] - 1e-6
-                assert gaps[-1][0] <= edge.length - fixture["end_gap_cm"] + 1e-6
+                expected_end_gap = min(
+                    edge.length,
+                    fixture.get("end_gap_by_style", {}).get(
+                        block.visual_style, fixture["end_gap_cm"]
+                    ),
+                )
+                assert gaps[0][1] >= expected_end_gap - 1e-6
+                assert gaps[-1][0] <= edge.length - expected_end_gap + 1e-6
                 for frontage in layout.frontages:
                     if frontage.block_id != block.block_id:
                         continue
@@ -471,7 +466,7 @@ def test_shells_have_conservative_cross_block_separation() -> None:
     scenario = build_large_scenario(31)
     assert scenario.layout is not None
     shells = plan_shell_records(scenario)
-    assert len(shells) == 144
+    assert len(shells) == 320
     for record in shells:
         footprint = record.footprint
         assert footprint is not None
@@ -558,12 +553,46 @@ def test_meeting_target_matches_legacy_rounding_for_agent_counts() -> None:
         assert meeting_target(index, center) == expected
 
 
+def test_meeting_target_two_agent_fan_tracks_frontage_tangent() -> None:
+    center = (100.0, 200.0)
+
+    assert meeting_target(
+        0,
+        center,
+        frontage_yaw_deg=90.0,
+        agent_count=2,
+    ) == (400.0, 200.0)
+    assert meeting_target(
+        1,
+        center,
+        frontage_yaw_deg=90.0,
+        agent_count=2,
+    ) == (-200.0, 200.0)
+    assert meeting_target(
+        0,
+        center,
+        frontage_yaw_deg=180.0,
+        agent_count=2,
+    ) == (100.0, 500.0)
+    assert meeting_target(
+        1,
+        center,
+        frontage_yaw_deg=180.0,
+        agent_count=2,
+    ) == (100.0, -100.0)
+
+
 def test_environment_meeting_target_uses_agent_order() -> None:
     scenario = build_medium_scenario(7)
     env = VenueMeetupEnv.__new__(VenueMeetupEnv)
     env.agent_ids = ["first", "middle", "last"]
     venue = scenario.venues[0]
-    assert env._meeting_target("last", venue) == (-11300.0, 15150.0)
+    assert env._meeting_target("last", venue) == meeting_target(
+        2,
+        venue.region.center,
+        frontage_yaw_deg=venue.yaw_deg,
+        agent_count=3,
+    )
 
 
 class _TeleportUnrealCV:
@@ -615,7 +644,7 @@ def test_teleport_navigation_places_the_shared_meeting_target(monkeypatch) -> No
     monkeypatch.setattr("benchmark.venue_meetup.venue_env.time.sleep", lambda _seconds: None)
 
     result = env._teleport_navigate("agent_2", venue)
-    expected = (-11300.0, 15150.0)
+    expected = env._meeting_target("agent_2", venue)
     assert unrealcv.set_locations[0][:2] == expected
     assert result["arrived"] is True
     assert result["location"] == (round(expected[0], 1), round(expected[1], 1))

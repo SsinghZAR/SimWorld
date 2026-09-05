@@ -10,7 +10,6 @@ centimetres (~400 m east-west footprint).
 from __future__ import annotations
 
 import math
-from dataclasses import replace
 
 from benchmark.venue_meetup.building_catalog import MASK_COLORS, asset_path, building_description
 from benchmark.venue_meetup.layout import (
@@ -52,7 +51,7 @@ SIDEWALK_WIDTH = 300.0
 MEET_RADIUS = 900.0
 AGENT_Z = 150.0
 CITY_BUILDING_SCALE = 0.25
-CITY_LANDMARK_SCALE = 0.20
+BLOCK_CHAMFER = 1500.0
 
 # Sidewalk centerlines offset from street centre toward the adjacent block.
 _MARKET_SW_Y = MARKET_Y - STREET_WIDTH / 2.0 - SIDEWALK_WIDTH / 2.0
@@ -88,6 +87,30 @@ def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 def _polyline_length(points: tuple[tuple[float, float], ...]) -> float:
     return sum(_dist(left, right) for left, right in zip(points, points[1:]))
+
+
+def _chamfered_rect(
+    left: float,
+    bottom: float,
+    right: float,
+    top: float,
+    *,
+    chamfer: float = BLOCK_CHAMFER,
+) -> tuple[tuple[float, float], ...]:
+    """Return an Eixample-like block with eight clipped street corners."""
+
+    if right - left <= 2.0 * chamfer or top - bottom <= 2.0 * chamfer:
+        raise ValueError("Chamfer must leave a positive block edge")
+    return (
+        (left + chamfer, bottom),
+        (right - chamfer, bottom),
+        (right, bottom + chamfer),
+        (right, top - chamfer),
+        (right - chamfer, top),
+        (left + chamfer, top),
+        (left, top - chamfer),
+        (left, bottom + chamfer),
+    )
 
 
 def _edge(
@@ -157,11 +180,15 @@ def build_district_layout() -> DistrictLayout:
     )
 
     intersections = (
-        Intersection("ix_clock_tower", (WEST_X, MARKET_Y), landmark_id="landmark_clock_tower"),
-        Intersection("ix_station_forecourt", (EAST_X, MARKET_Y), landmark_id="landmark_station_forecourt"),
-        Intersection("ix_cross_west", (WEST_X, CROSS_Y)),
+        Intersection("ix_market_west", (WEST_X, MARKET_Y)),
+        Intersection("ix_market_east", (EAST_X, MARKET_Y)),
+        Intersection("ix_clock_tower", (WEST_X, CROSS_Y), landmark_id="landmark_clock_tower"),
         Intersection("ix_cross_mid", (MID_X, CROSS_Y)),
-        Intersection("ix_cross_east", (EAST_X, CROSS_Y)),
+        Intersection(
+            "ix_station_forecourt",
+            (EAST_X, CROSS_Y),
+            landmark_id="landmark_station_forecourt",
+        ),
         Intersection("ix_hotel_corner", (WEST_X, ALLEY_Y), landmark_id="landmark_hotel_corner"),
         Intersection("ix_bus_stop", (EAST_X, ALLEY_Y), landmark_id="landmark_bus_stop"),
         Intersection("ix_market_mid", (MID_X, MARKET_Y), landmark_id="landmark_market_canopy"),
@@ -262,43 +289,31 @@ def build_district_layout() -> DistrictLayout:
     blocks = (
         Block(
             block_id="block_nw",
-            footprint=(
-                (-17000.0, 2000.0),
-                (-2000.0, 2000.0),
-                (-2000.0, 14000.0),
-                (-17000.0, 14000.0),
-            ),
+            footprint=_chamfered_rect(-19000.0, 1200.0, -1200.0, 14800.0),
             frontage_ids=("front_nw_market_cafe", "front_nw_cross_bistro"),
+            visual_style="station_west",
+            shell_target=22,
         ),
         Block(
             block_id="block_ne",
-            footprint=(
-                (2000.0, 2000.0),
-                (17000.0, 2000.0),
-                (17000.0, 14000.0),
-                (2000.0, 14000.0),
-            ),
+            footprint=_chamfered_rect(1200.0, 1200.0, 19000.0, 14800.0),
             frontage_ids=("front_ne_market_shop", "front_ne_cross_deli"),
+            visual_style="station_east",
+            shell_target=22,
         ),
         Block(
             block_id="block_sw",
-            footprint=(
-                (-17000.0, -14000.0),
-                (-2000.0, -14000.0),
-                (-2000.0, -2000.0),
-                (-17000.0, -2000.0),
-            ),
+            footprint=_chamfered_rect(-19000.0, -14800.0, -1200.0, -1200.0),
             frontage_ids=("front_sw_cross_pub", "front_sw_alley_lobby"),
+            visual_style="station_west",
+            shell_target=22,
         ),
         Block(
             block_id="block_se",
-            footprint=(
-                (2000.0, -14000.0),
-                (17000.0, -14000.0),
-                (17000.0, -2000.0),
-                (2000.0, -2000.0),
-            ),
+            footprint=_chamfered_rect(1200.0, -14800.0, 19000.0, -1200.0),
             frontage_ids=("front_se_cross_hall", "front_se_alley_market"),
+            visual_style="station_east",
+            shell_target=22,
         ),
     )
 
@@ -306,8 +321,11 @@ def build_district_layout() -> DistrictLayout:
     # approach is a distinct one-edge leaf; only its target access path enters
     # the meeting region, so routes to other venues can never cut through it.
     walk_nodes = (
-        WalkNode("spawn_clock_tower", (-17000.0, 14500.0), "spawn"),
-        WalkNode("spawn_station_forecourt", (17000.0, 14500.0), "spawn"),
+        # Interior decision-point spawns face along Cross Street. Four built
+        # block faces now surround each initial camera instead of an empty-map
+        # boundary occupying half the field of view.
+        WalkNode("spawn_clock_tower", (-14000.0, _CROSS_N_SW_Y), "spawn"),
+        WalkNode("spawn_station_forecourt", (14000.0, _CROSS_N_SW_Y), "spawn"),
         # Market Street south sidewalk (west -> east)
         WalkNode("swk_market_west", (_WEST_SW_X, _MARKET_SW_Y), "intersection"),
         WalkNode("swk_nw_cafe", (-11000.0, 15750.0), "sidewalk"),
@@ -345,9 +363,9 @@ def build_district_layout() -> DistrictLayout:
     nodes = {node.node_id: node for node in walk_nodes}
 
     edge_specs: tuple[tuple[str, str, str], ...] = (
-        # Spawns onto Market Street
-        ("spawn_clock_tower", "swk_market_west", "sidewalk"),
-        ("spawn_station_forecourt", "swk_market_east", "sidewalk"),
+        # Spawns onto the interior Cross Street axis.
+        ("spawn_clock_tower", "swk_nw_bistro", "sidewalk"),
+        ("spawn_station_forecourt", "swk_ne_deli", "sidewalk"),
         # Market Street sidewalk
         ("swk_market_west", "swk_market_mid", "sidewalk"),
         ("swk_market_mid", "swk_market_east", "sidewalk"),
@@ -400,7 +418,7 @@ def build_district_layout() -> DistrictLayout:
         frontages=frontages,
         walk_nodes=walk_nodes,
         walk_edges=walk_edges,
-        schema_version=2,
+        schema_version=3,
     )
 
 
@@ -659,10 +677,11 @@ def build_fixed_scenario(seed: int = 11) -> Scenario:
             landmark_type="clock_tower",
             asset_key="BP_Building_20_C",
             asset_path=asset_path("BP_Building_20_C"),
-            position=(WEST_X - 2500.0, MARKET_Y + 2500.0, 0.0),
-            yaw_deg=-45.0,
+            position=(-24000.0, CROSS_Y, 0.0),
+            yaw_deg=0.0,
             mask_color_rgb=_LANDMARK_MASKS[0],
             visual_summary=building_description("BP_Building_20_C"),
+            scale=(0.30, 0.30, 0.80),
         ),
         Landmark(
             landmark_id="landmark_station_forecourt",
@@ -670,21 +689,23 @@ def build_fixed_scenario(seed: int = 11) -> Scenario:
             landmark_type="commercial_tower",
             asset_key="BP_Building_101_C",
             asset_path=asset_path("BP_Building_101_C"),
-            position=(EAST_X + 2500.0, MARKET_Y + 2500.0, 0.0),
-            yaw_deg=45.0,
+            position=(24000.0, CROSS_Y, 0.0),
+            yaw_deg=180.0,
             mask_color_rgb=_LANDMARK_MASKS[1],
             visual_summary=building_description("BP_Building_101_C"),
+            scale=(0.31, 0.31, 0.82),
         ),
         Landmark(
             landmark_id="landmark_hotel_corner",
             slot_id="hotel_corner",
             landmark_type="hotel",
-            asset_key="BP_Building_87_C",
-            asset_path=asset_path("BP_Building_87_C"),
-            position=(WEST_X - 2500.0, ALLEY_Y - 2500.0, 0.0),
+            asset_key="BP_Building_95_C",
+            asset_path=asset_path("BP_Building_95_C"),
+            position=(WEST_X - 2500.0, ALLEY_Y - 5000.0, 0.0),
             yaw_deg=-135.0,
             mask_color_rgb=_LANDMARK_MASKS[2],
-            visual_summary=building_description("BP_Building_87_C"),
+            visual_summary=building_description("BP_Building_95_C"),
+            scale=(0.27, 0.27, 0.42),
         ),
         Landmark(
             landmark_id="landmark_bus_stop",
@@ -692,10 +713,11 @@ def build_fixed_scenario(seed: int = 11) -> Scenario:
             landmark_type="street_landmark",
             asset_key="BP_Building_44_C",
             asset_path=asset_path("BP_Building_44_C"),
-            position=(EAST_X + 2500.0, ALLEY_Y - 2500.0, 0.0),
+            position=(EAST_X + 2500.0, ALLEY_Y - 5000.0, 0.0),
             yaw_deg=135.0,
             mask_color_rgb=_LANDMARK_MASKS[3],
             visual_summary=building_description("BP_Building_44_C"),
+            scale=(0.27, 0.27, 0.44),
         ),
         Landmark(
             landmark_id="landmark_market_canopy",
@@ -703,10 +725,11 @@ def build_fixed_scenario(seed: int = 11) -> Scenario:
             landmark_type="venue_hall",
             asset_key="BP_Building_123_C",
             asset_path=asset_path("BP_Building_123_C"),
-            position=(MID_X, MARKET_Y + 3500.0, 0.0),
+            position=(MID_X, MARKET_Y + 5000.0, 0.0),
             yaw_deg=0.0,
             mask_color_rgb=_LANDMARK_MASKS[4],
             visual_summary=building_description("BP_Building_123_C"),
+            scale=(0.28, 0.28, 0.50),
         ),
     ]
 
@@ -717,7 +740,7 @@ def build_fixed_scenario(seed: int = 11) -> Scenario:
             agent_id="agent_0",
             spawn_slot="clock_tower_spawn",
             position=(spawn_clock[0], spawn_clock[1], AGENT_Z),
-            yaw_deg=-90.0,
+            yaw_deg=0.0,
             private_constraint="I need step-free access and cannot use stairs.",
             private_requirement_keys=["accessible"],
             zone_id="zone_west",
@@ -727,7 +750,7 @@ def build_fixed_scenario(seed: int = 11) -> Scenario:
             agent_id="agent_1",
             spawn_slot="station_forecourt_spawn",
             position=(spawn_station[0], spawn_station[1], AGENT_Z),
-            yaw_deg=-90.0,
+            yaw_deg=180.0,
             private_constraint="I strongly prefer food or drink and a quiet place.",
             private_requirement_keys=["food_drink", "quiet"],
             zone_id="zone_east",
@@ -736,19 +759,15 @@ def build_fixed_scenario(seed: int = 11) -> Scenario:
     ]
 
     coarse_map_text = (
-        "Coarse map: station-quarter district with Market Street on the north, a cross street through the middle, "
-        "and a service alley on the south; west and east avenues are the through streets. "
-        "Four named blocks (NW, NE, SW, SE) hold eight storefront venues - two per block - not arranged in a ring. "
-        "Landmarks: clock tower at the northwest Market/West corner, station forecourt at the northeast, "
-        "hotel corner southwest, bus stop southeast, and a market canopy on Market Street. "
-        "Named spawns: clock-tower plaza (west) and station forecourt (east). "
+        "Coarse map: a compact Cerdà-inspired station quarter. Four chamfered blocks form a legible 2x2 grid "
+        "around Cross Street and the central north-south passage; Market Street closes the north edge and the "
+        "service alley closes the south edge. Eight storefront venues occupy the continuous block fronts. "
+        "Cross Street is the main orientation axis: the clock tower terminates its west view and the station "
+        "tower terminates its east view. The glass market hall is due north; the hotel and bus-stop tower mark "
+        "the southwest and southeast corners. Both agents start inside Cross Street's built frontage, facing "
+        "toward the district centre rather than the empty-map boundary. "
         "Venue status, accessibility, crowding, food/drink, and entrance conditions are not on this map; inspect visually."
     )
-
-    landmarks = [
-        replace(landmark, scale=(CITY_LANDMARK_SCALE, CITY_LANDMARK_SCALE, CITY_LANDMARK_SCALE))
-        for landmark in landmarks
-    ]
 
     return Scenario(
         scenario_id=f"station_quarter_seed_{seed}",

@@ -30,6 +30,7 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+from benchmark.venue_meetup.building_catalog import building_bbox
 from benchmark.venue_meetup.layout import DistrictLayout, Frontage, WalkRouteKind
 
 if TYPE_CHECKING:
@@ -39,14 +40,29 @@ Point = tuple[float, float]
 WalkPlannerKind = Literal["layout_graph", "obstacle_astar"]
 
 
-def meeting_target(agent_index: int, center: Point, *, offset: float = 300.0) -> Point:
+def meeting_target(
+    agent_index: int,
+    center: Point,
+    *,
+    offset: float = 300.0,
+    frontage_yaw_deg: float | None = None,
+    agent_count: int | None = None,
+) -> Point:
     """Return the deterministic per-agent fan point around a meeting center.
 
-    The two NAVIGATE modes use the same rounded coordinates so teleport and walk
-    behavior agree exactly, including Python's tiny ``cos(pi / 2)`` residue.
+    When frontage orientation and group size are supplied, agents fan along the
+    storefront tangent. This keeps every pawn the same safe distance from a
+    rotated facade instead of placing one member inward into the building.
+    Omitting those arguments preserves the legacy quarter-turn fan. Both
+    NAVIGATE modes use the same rounded coordinates so teleport and walk agree.
     """
 
-    angle = math.radians(90.0 * agent_index)
+    if frontage_yaw_deg is None:
+        angle_deg = 90.0 * agent_index
+    else:
+        count = max(1, int(agent_count or 1))
+        angle_deg = float(frontage_yaw_deg) - 90.0 + 360.0 * agent_index / count
+    angle = math.radians(angle_deg)
     return round(center[0] + math.cos(angle) * offset, 2), round(center[1] + math.sin(angle) * offset, 2)
 
 
@@ -335,7 +351,28 @@ def building_obstacles(
         radius = max(depth / 2.0, min_radius) + clearance
         obstacles.append(Obstacle(center[0], center[1], radius))
     for landmark in scenario.landmarks:
-        obstacles.append(Obstacle(float(landmark.position[0]), float(landmark.position[1]), landmark_radius + clearance))
+        obstacles.append(
+            Obstacle(
+                float(landmark.position[0]),
+                float(landmark.position[1]),
+                landmark_radius + clearance,
+            )
+        )
+    for building in getattr(scenario, "buildings", ()):
+        raw_x, raw_y, _raw_z = building_bbox(building.asset_key)
+        half_x = raw_x * float(building.scale[0]) / 2.0
+        half_y = raw_y * float(building.scale[1]) / 2.0
+        radians = math.radians(float(building.yaw_deg))
+        cosine, sine = abs(math.cos(radians)), abs(math.sin(radians))
+        world_half_x = cosine * half_x + sine * half_y
+        world_half_y = sine * half_x + cosine * half_y
+        obstacles.append(
+            Obstacle(
+                float(building.position[0]),
+                float(building.position[1]),
+                math.hypot(world_half_x, world_half_y) + clearance,
+            )
+        )
     # Layout-backed district shells are authored visual geometry with measured
     # conservative AABBs.  Tile each shell with a deterministic disc chain so
     # obstacle-A* fallback cannot walk through a solid shell when a graph route
@@ -396,7 +433,14 @@ def _string_pull(points: list[Point], obstacles: list[Obstacle]) -> list[Point]:
     return result
 
 
-def _astar_grid(start: Point, goal: Point, obstacles: list[Obstacle], *, cell: float, bounds: tuple[float, float, float, float]) -> list[Point] | None:
+def _astar_grid(
+    start: Point,
+    goal: Point,
+    obstacles: list[Obstacle],
+    *,
+    cell: float,
+    bounds: tuple[float, float, float, float],
+) -> list[Point] | None:
     """8-connected grid A* between the cells nearest ``start`` and ``goal``."""
 
     min_x, min_y, max_x, max_y = bounds

@@ -228,7 +228,7 @@ def test_dense_shell_footprints_are_tiled_in_fallback_obstacles() -> None:
         shell_records = plan_shell_records(scenario)
         assert shell_records
         obstacles = building_obstacles(scenario, clearance=caller_clearance)
-        expected_shells = 64 if len(scenario.venues) == 8 else 144
+        expected_shells = 88 if len(scenario.venues) == 8 else 320
         prefix_count = len(scenario.venues) + len(scenario.landmarks)
         assert len(shell_records) == expected_shells
         shell_obstacles = obstacles[prefix_count:]

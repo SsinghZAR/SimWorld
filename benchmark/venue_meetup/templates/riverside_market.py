@@ -51,6 +51,11 @@ CROSS_Y = -8000.0
 CANAL_HALF_W = 2500.0
 WEST_PROMENADE_X = -CANAL_HALF_W - 1500.0  # -4000
 EAST_PROMENADE_X = CANAL_HALF_W + 1500.0  # 4000
+# Internal radial merchant lanes divide each 280 m superblock into two
+# walkable, Amsterdam-like blocks with a narrow facade rhythm.
+WEST_MERCHANT_LANE_X = -22000.0
+EAST_MERCHANT_LANE_X = 22000.0
+MERCHANT_LANE_WIDTH = 1000.0
 
 PRIMARY_BRIDGE_Y = 5000.0
 SECONDARY_BRIDGE_Y = -25000.0
@@ -61,7 +66,6 @@ SIDEWALK_WIDTH = 300.0
 MEET_RADIUS = 900.0
 AGENT_Z = 150.0
 CITY_BUILDING_SCALE = 0.25
-CITY_LANDMARK_SCALE = 0.20
 
 _WEST_AV_SW_X = WEST_X + STREET_WIDTH / 2.0 + SIDEWALK_WIDTH / 2.0
 _EAST_AV_SW_X = EAST_X - STREET_WIDTH / 2.0 - SIDEWALK_WIDTH / 2.0
@@ -164,6 +168,20 @@ def build_district_layout() -> DistrictLayout:
             sidewalk_width_cm=SIDEWALK_WIDTH,
         ),
         StreetSegment(
+            street_id="west_merchant_lane",
+            start=(WEST_MERCHANT_LANE_X, SOUTH_Y),
+            end=(WEST_MERCHANT_LANE_X, NORTH_Y),
+            width_cm=MERCHANT_LANE_WIDTH,
+            sidewalk_width_cm=SIDEWALK_WIDTH,
+        ),
+        StreetSegment(
+            street_id="east_merchant_lane",
+            start=(EAST_MERCHANT_LANE_X, SOUTH_Y),
+            end=(EAST_MERCHANT_LANE_X, NORTH_Y),
+            width_cm=MERCHANT_LANE_WIDTH,
+            sidewalk_width_cm=SIDEWALK_WIDTH,
+        ),
+        StreetSegment(
             street_id="north_street_west",
             start=(WEST_X, NORTH_Y),
             end=(WEST_PROMENADE_X, NORTH_Y),
@@ -236,15 +254,37 @@ def build_district_layout() -> DistrictLayout:
     )
 
     intersections = (
-        Intersection("ix_civic_plaza", (WEST_X, NORTH_Y), landmark_id="landmark_civic_tower"),
+        Intersection(
+            "ix_civic_plaza",
+            (WEST_MERCHANT_LANE_X, NORTH_Y),
+            landmark_id="landmark_civic_tower",
+        ),
         Intersection("ix_market_square", (WEST_PROMENADE_X, MARKET_Y), landmark_id="landmark_market_square"),
         Intersection("ix_main_bridge_west", (WEST_PROMENADE_X, PRIMARY_BRIDGE_Y), landmark_id="landmark_main_bridge"),
         Intersection("ix_main_bridge_east", (EAST_PROMENADE_X, PRIMARY_BRIDGE_Y), landmark_id="landmark_main_bridge"),
-        Intersection("ix_transit_entrance", (EAST_X, NORTH_Y), landmark_id="landmark_transit_entrance"),
+        Intersection(
+            "ix_transit_entrance",
+            (EAST_MERCHANT_LANE_X, NORTH_Y),
+            landmark_id="landmark_transit_entrance",
+        ),
         Intersection("ix_waterside_tower", (EAST_PROMENADE_X, MARKET_Y), landmark_id="landmark_waterside_tower"),
-        Intersection("ix_hospital", (WEST_X, SOUTH_Y), landmark_id="landmark_hospital"),
-        Intersection("ix_bus_stop", (EAST_X, SOUTH_Y), landmark_id="landmark_bus_stop"),
-        Intersection("ix_fountain", ((WEST_X + WEST_PROMENADE_X) / 2.0, MARKET_Y), landmark_id="landmark_fountain"),
+        Intersection(
+            "ix_hospital",
+            (WEST_MERCHANT_LANE_X, SOUTH_Y),
+            landmark_id="landmark_hospital",
+        ),
+        Intersection(
+            "ix_bus_stop",
+            (EAST_MERCHANT_LANE_X, SOUTH_Y),
+            landmark_id="landmark_bus_stop",
+        ),
+        Intersection(
+            "ix_fountain",
+            (WEST_MERCHANT_LANE_X, CROSS_Y),
+            landmark_id="landmark_fountain",
+        ),
+        Intersection("ix_w_lane_market", (WEST_MERCHANT_LANE_X, MARKET_Y)),
+        Intersection("ix_e_lane_market", (EAST_MERCHANT_LANE_X, MARKET_Y)),
         Intersection("ix_secondary_bridge_west", (WEST_PROMENADE_X, SECONDARY_BRIDGE_Y)),
         Intersection("ix_secondary_bridge_east", (EAST_PROMENADE_X, SECONDARY_BRIDGE_Y)),
     )
@@ -264,7 +304,7 @@ def build_district_layout() -> DistrictLayout:
         ),
         Frontage(
             frontage_id="front_nw_civic_shop",
-            block_id="block_nw_civic",
+            block_id="block_nw_canal",
             position=(-16000.0, 18000.0, 0.0),
             yaw_deg=-90.0,
             entrance_point=(-16000.0, 14000.0, 0.0),
@@ -286,7 +326,7 @@ def build_district_layout() -> DistrictLayout:
         ),
         Frontage(
             frontage_id="front_w_market_stall",
-            block_id="block_w_market",
+            block_id="block_w_quay",
             position=(-12000.0, 2000.0, 0.0),
             yaw_deg=0.0,
             entrance_point=(-8000.0, 2000.0, 0.0),
@@ -308,7 +348,7 @@ def build_district_layout() -> DistrictLayout:
         ),
         Frontage(
             frontage_id="front_sw_resid_lobby",
-            block_id="block_sw_residential",
+            block_id="block_sw_canal",
             position=(-16000.0, -26000.0, 0.0),
             yaw_deg=-90.0,
             entrance_point=(-16000.0, -30000.0, 0.0),
@@ -331,7 +371,7 @@ def build_district_layout() -> DistrictLayout:
         ),
         Frontage(
             frontage_id="front_ne_transit_deli",
-            block_id="block_ne_transit",
+            block_id="block_ne_canal",
             position=(16000.0, 18000.0, 0.0),
             yaw_deg=-90.0,
             entrance_point=(16000.0, 14000.0, 0.0),
@@ -353,7 +393,7 @@ def build_district_layout() -> DistrictLayout:
         ),
         Frontage(
             frontage_id="front_e_water_hall",
-            block_id="block_e_waterfront",
+            block_id="block_e_quay",
             position=(12000.0, 2000.0, 0.0),
             yaw_deg=180.0,
             entrance_point=(8000.0, 2000.0, 0.0),
@@ -375,7 +415,7 @@ def build_district_layout() -> DistrictLayout:
         ),
         Frontage(
             frontage_id="front_se_hotel_shop",
-            block_id="block_se_hotel",
+            block_id="block_se_canal",
             position=(16000.0, -26000.0, 0.0),
             yaw_deg=-90.0,
             entrance_point=(16000.0, -30000.0, 0.0),
@@ -390,68 +430,162 @@ def build_district_layout() -> DistrictLayout:
         Block(
             block_id="block_nw_civic",
             footprint=(
-                (-36000.0, 12000.0),
-                (-8000.0, 12000.0),
-                (-8000.0, 32000.0),
-                (-36000.0, 32000.0),
+                (-39000.0, 9000.0),
+                (-23000.0, 9000.0),
+                (-23000.0, 34000.0),
+                (-39000.0, 34000.0),
             ),
-            frontage_ids=("front_nw_civic_cafe", "front_nw_civic_shop"),
+            frontage_ids=("front_nw_civic_cafe",),
+            visual_style="civic_masonry",
+            shell_target=28,
+        ),
+        Block(
+            block_id="block_nw_canal",
+            footprint=(
+                (-21000.0, 9000.0),
+                (-5000.0, 9000.0),
+                (-5000.0, 34000.0),
+                (-21000.0, 34000.0),
+            ),
+            frontage_ids=("front_nw_civic_shop",),
+            visual_style="canal_merchant",
+            shell_target=28,
         ),
         Block(
             block_id="block_w_market",
             footprint=(
-                (-36000.0, -4000.0),
-                (-8000.0, -4000.0),
-                (-8000.0, 10000.0),
-                (-36000.0, 10000.0),
+                (-39000.0, -7000.0),
+                (-23000.0, -7000.0),
+                (-23000.0, 7000.0),
+                (-39000.0, 7000.0),
             ),
-            frontage_ids=("front_w_market_bistro", "front_w_market_stall"),
+            frontage_ids=("front_w_market_bistro",),
+            visual_style="civic_masonry",
+            shell_target=24,
+        ),
+        Block(
+            block_id="block_w_quay",
+            footprint=(
+                (-21000.0, -7000.0),
+                (-5000.0, -7000.0),
+                (-5000.0, 7000.0),
+                (-21000.0, 7000.0),
+            ),
+            frontage_ids=("front_w_market_stall",),
+            visual_style="canal_merchant",
+            shell_target=24,
         ),
         Block(
             block_id="block_sw_residential",
             footprint=(
-                (-36000.0, -32000.0),
-                (-8000.0, -32000.0),
-                (-8000.0, -12000.0),
-                (-36000.0, -12000.0),
+                (-39000.0, -34000.0),
+                (-23000.0, -34000.0),
+                (-23000.0, -9000.0),
+                (-39000.0, -9000.0),
             ),
-            frontage_ids=("front_sw_resid_pub", "front_sw_resid_lobby"),
+            frontage_ids=("front_sw_resid_pub",),
+            visual_style="civic_masonry",
+            shell_target=28,
+        ),
+        Block(
+            block_id="block_sw_canal",
+            footprint=(
+                (-21000.0, -34000.0),
+                (-5000.0, -34000.0),
+                (-5000.0, -9000.0),
+                (-21000.0, -9000.0),
+            ),
+            frontage_ids=("front_sw_resid_lobby",),
+            visual_style="canal_merchant",
+            shell_target=28,
+        ),
+        Block(
+            block_id="block_ne_canal",
+            footprint=(
+                (5000.0, 9000.0),
+                (21000.0, 9000.0),
+                (21000.0, 34000.0),
+                (5000.0, 34000.0),
+            ),
+            frontage_ids=("front_ne_transit_deli",),
+            visual_style="canal_merchant",
+            shell_target=28,
         ),
         Block(
             block_id="block_ne_transit",
             footprint=(
-                (8000.0, 12000.0),
-                (36000.0, 12000.0),
-                (36000.0, 32000.0),
-                (8000.0, 32000.0),
+                (23000.0, 9000.0),
+                (39000.0, 9000.0),
+                (39000.0, 34000.0),
+                (23000.0, 34000.0),
             ),
-            frontage_ids=("front_ne_transit_shop", "front_ne_transit_deli"),
+            frontage_ids=("front_ne_transit_shop",),
+            visual_style="transit_mixed",
+            shell_target=28,
+        ),
+        Block(
+            block_id="block_e_quay",
+            footprint=(
+                (5000.0, -7000.0),
+                (21000.0, -7000.0),
+                (21000.0, 7000.0),
+                (5000.0, 7000.0),
+            ),
+            frontage_ids=("front_e_water_hall",),
+            visual_style="canal_merchant",
+            shell_target=24,
         ),
         Block(
             block_id="block_e_waterfront",
             footprint=(
-                (8000.0, -4000.0),
-                (36000.0, -4000.0),
-                (36000.0, 10000.0),
-                (8000.0, 10000.0),
+                (23000.0, -7000.0),
+                (39000.0, -7000.0),
+                (39000.0, 7000.0),
+                (23000.0, 7000.0),
             ),
-            frontage_ids=("front_e_water_restaurant", "front_e_water_hall"),
+            frontage_ids=("front_e_water_restaurant",),
+            visual_style="transit_mixed",
+            shell_target=24,
+        ),
+        Block(
+            block_id="block_se_canal",
+            footprint=(
+                (5000.0, -34000.0),
+                (21000.0, -34000.0),
+                (21000.0, -9000.0),
+                (5000.0, -9000.0),
+            ),
+            frontage_ids=("front_se_hotel_shop",),
+            visual_style="canal_merchant",
+            shell_target=28,
         ),
         Block(
             block_id="block_se_hotel",
             footprint=(
-                (8000.0, -32000.0),
-                (36000.0, -32000.0),
-                (36000.0, -12000.0),
-                (8000.0, -12000.0),
+                (23000.0, -34000.0),
+                (39000.0, -34000.0),
+                (39000.0, -9000.0),
+                (23000.0, -9000.0),
             ),
-            frontage_ids=("front_se_hotel_cafe", "front_se_hotel_shop"),
+            frontage_ids=("front_se_hotel_cafe",),
+            visual_style="transit_mixed",
+            shell_target=28,
         ),
     )
 
     walk_nodes = (
-        WalkNode("spawn_civic_plaza", (-34000.0, 32000.0), "spawn"),
-        WalkNode("spawn_transit_forecourt", (34000.0, 32000.0), "spawn"),
+        # Interior market-axis spawns. Each sits at a four-block decision
+        # point with facades on both sides and faces toward the canal centre.
+        WalkNode(
+            "spawn_civic_plaza",
+            (WEST_MERCHANT_LANE_X, _MARKET_N_SW_Y),
+            "spawn",
+        ),
+        WalkNode(
+            "spawn_transit_forecourt",
+            (EAST_MERCHANT_LANE_X, _MARKET_N_SW_Y),
+            "spawn",
+        ),
         # West bank sidewalk lattice
         WalkNode("swk_w_north_west", (_WEST_AV_SW_X, _NORTH_SW_Y), "intersection"),
         WalkNode("swk_nw_cafe", (-28000.0, 34750.0), "sidewalk"),
@@ -471,6 +605,24 @@ def build_district_layout() -> DistrictLayout:
         WalkNode("swk_w_south_west", (_WEST_AV_SW_X, _SOUTH_SW_Y), "intersection"),
         WalkNode("swk_sw_lobby", (-16000.0, -34750.0), "sidewalk"),
         WalkNode("swk_w_south_prom", (_WEST_PROM_SW_X, _SOUTH_SW_Y), "intersection"),
+        # West merchant-lane spine (the market-north node is the spawn).
+        WalkNode("swk_w_lane_north", (WEST_MERCHANT_LANE_X, _NORTH_SW_Y), "intersection"),
+        WalkNode(
+            "swk_w_lane_market_s",
+            (WEST_MERCHANT_LANE_X, _MARKET_S_SW_Y),
+            "intersection",
+        ),
+        WalkNode(
+            "swk_w_lane_cross_n",
+            (WEST_MERCHANT_LANE_X, _CROSS_N_SW_Y),
+            "intersection",
+        ),
+        WalkNode(
+            "swk_w_lane_cross_s",
+            (WEST_MERCHANT_LANE_X, _CROSS_S_SW_Y),
+            "intersection",
+        ),
+        WalkNode("swk_w_lane_south", (WEST_MERCHANT_LANE_X, _SOUTH_SW_Y), "intersection"),
         # East bank sidewalk lattice
         WalkNode("swk_e_north_east", (_EAST_AV_SW_X, _NORTH_SW_Y), "intersection"),
         WalkNode("swk_ne_shop", (28000.0, 34750.0), "sidewalk"),
@@ -490,6 +642,24 @@ def build_district_layout() -> DistrictLayout:
         WalkNode("swk_e_south_east", (_EAST_AV_SW_X, _SOUTH_SW_Y), "intersection"),
         WalkNode("swk_se_shop", (16000.0, -34750.0), "sidewalk"),
         WalkNode("swk_e_south_prom", (_EAST_PROM_SW_X, _SOUTH_SW_Y), "intersection"),
+        # East merchant-lane spine (the market-north node is the spawn).
+        WalkNode("swk_e_lane_north", (EAST_MERCHANT_LANE_X, _NORTH_SW_Y), "intersection"),
+        WalkNode(
+            "swk_e_lane_market_s",
+            (EAST_MERCHANT_LANE_X, _MARKET_S_SW_Y),
+            "intersection",
+        ),
+        WalkNode(
+            "swk_e_lane_cross_n",
+            (EAST_MERCHANT_LANE_X, _CROSS_N_SW_Y),
+            "intersection",
+        ),
+        WalkNode(
+            "swk_e_lane_cross_s",
+            (EAST_MERCHANT_LANE_X, _CROSS_S_SW_Y),
+            "intersection",
+        ),
+        WalkNode("swk_e_lane_south", (EAST_MERCHANT_LANE_X, _SOUTH_SW_Y), "intersection"),
         # Bridge endpoints (only legal barrier crossings)
         WalkNode("bridge_primary_west", (WEST_PROMENADE_X, PRIMARY_BRIDGE_Y), "bridge"),
         WalkNode("bridge_primary_east", (EAST_PROMENADE_X, PRIMARY_BRIDGE_Y), "bridge"),
@@ -513,21 +683,34 @@ def build_district_layout() -> DistrictLayout:
     nodes = {node.node_id: node for node in walk_nodes}
 
     edge_specs: list[tuple[str, str, str]] = [
-        # Spawns
-        ("spawn_civic_plaza", "swk_w_north_west", "sidewalk"),
-        ("spawn_transit_forecourt", "swk_e_north_east", "sidewalk"),
-        # West north street
-        ("swk_w_north_west", "swk_w_north_prom", "sidewalk"),
+        # West horizontal streets cross the outer avenue, internal merchant
+        # lane, and canal promenade in that order.
+        ("swk_w_north_west", "swk_w_lane_north", "sidewalk"),
+        ("swk_w_lane_north", "swk_w_north_prom", "sidewalk"),
+        ("swk_w_market_n_west", "spawn_civic_plaza", "sidewalk"),
+        ("spawn_civic_plaza", "swk_w_market_n_prom", "sidewalk"),
+        ("swk_w_market_s_west", "swk_w_lane_market_s", "sidewalk"),
+        ("swk_w_lane_market_s", "swk_w_market_s_prom", "sidewalk"),
+        ("swk_w_cross_n_west", "swk_w_lane_cross_n", "sidewalk"),
+        ("swk_w_lane_cross_n", "swk_w_cross_n_prom", "sidewalk"),
+        ("swk_w_cross_s_west", "swk_w_lane_cross_s", "sidewalk"),
+        ("swk_w_lane_cross_s", "swk_w_cross_s_prom", "sidewalk"),
+        ("swk_w_south_west", "swk_w_lane_south", "sidewalk"),
+        ("swk_w_lane_south", "swk_w_south_prom", "sidewalk"),
         # West avenue N-S
         ("swk_w_north_west", "swk_w_market_n_west", "sidewalk"),
         ("swk_w_market_n_west", "swk_w_market_s_west", "crossing"),
         ("swk_w_market_s_west", "swk_w_cross_n_west", "sidewalk"),
         ("swk_w_cross_n_west", "swk_w_cross_s_west", "crossing"),
         ("swk_w_cross_s_west", "swk_w_south_west", "sidewalk"),
+        # West merchant lane N-S
+        ("swk_w_lane_north", "spawn_civic_plaza", "sidewalk"),
+        ("spawn_civic_plaza", "swk_w_lane_market_s", "crossing"),
+        ("swk_w_lane_market_s", "swk_w_lane_cross_n", "sidewalk"),
+        ("swk_w_lane_cross_n", "swk_w_lane_cross_s", "crossing"),
+        ("swk_w_lane_cross_s", "swk_w_lane_south", "sidewalk"),
         # West promenade N-S
-        # Do not run vertically through the north-civic building's collision
-        # envelope.  The public route to the market promenade uses the outer
-        # avenue and Market Street below instead.
+        ("swk_w_north_prom", "swk_w_market_n_prom", "sidewalk"),
         ("swk_w_market_n_prom", "swk_w_market_s_prom", "crossing"),
         ("swk_w_market_s_prom", "swk_w_stall", "sidewalk"),
         ("swk_w_market_s_prom", "bridge_primary_west", "sidewalk"),
@@ -535,22 +718,33 @@ def build_district_layout() -> DistrictLayout:
         ("swk_w_cross_n_prom", "swk_w_cross_s_prom", "crossing"),
         ("swk_w_cross_s_prom", "bridge_secondary_west", "sidewalk"),
         ("bridge_secondary_west", "swk_w_south_prom", "sidewalk"),
-        # West market street
-        ("swk_w_market_n_west", "swk_w_market_n_prom", "sidewalk"),
-        # West cross / south
-        ("swk_w_cross_s_west", "swk_w_cross_s_prom", "sidewalk"),
-        ("swk_w_south_west", "swk_w_south_prom", "sidewalk"),
-        # East north street
-        ("swk_e_north_east", "swk_e_north_prom", "sidewalk"),
+        # East horizontal streets mirror the west-bank structure.
+        ("swk_e_north_east", "swk_e_lane_north", "sidewalk"),
+        ("swk_e_lane_north", "swk_e_north_prom", "sidewalk"),
+        ("swk_e_market_n_east", "spawn_transit_forecourt", "sidewalk"),
+        ("spawn_transit_forecourt", "swk_e_market_n_prom", "sidewalk"),
+        ("swk_e_market_s_east", "swk_e_lane_market_s", "sidewalk"),
+        ("swk_e_lane_market_s", "swk_e_market_s_prom", "sidewalk"),
+        ("swk_e_cross_n_east", "swk_e_lane_cross_n", "sidewalk"),
+        ("swk_e_lane_cross_n", "swk_e_cross_n_prom", "sidewalk"),
+        ("swk_e_cross_s_east", "swk_e_lane_cross_s", "sidewalk"),
+        ("swk_e_lane_cross_s", "swk_e_cross_s_prom", "sidewalk"),
+        ("swk_e_south_east", "swk_e_lane_south", "sidewalk"),
+        ("swk_e_lane_south", "swk_e_south_prom", "sidewalk"),
         # East avenue N-S
         ("swk_e_north_east", "swk_e_market_n_east", "sidewalk"),
         ("swk_e_market_n_east", "swk_e_market_s_east", "crossing"),
         ("swk_e_market_s_east", "swk_e_cross_n_east", "sidewalk"),
         ("swk_e_cross_n_east", "swk_e_cross_s_east", "crossing"),
         ("swk_e_cross_s_east", "swk_e_south_east", "sidewalk"),
+        # East merchant lane N-S
+        ("swk_e_lane_north", "spawn_transit_forecourt", "sidewalk"),
+        ("spawn_transit_forecourt", "swk_e_lane_market_s", "crossing"),
+        ("swk_e_lane_market_s", "swk_e_lane_cross_n", "sidewalk"),
+        ("swk_e_lane_cross_n", "swk_e_lane_cross_s", "crossing"),
+        ("swk_e_lane_cross_s", "swk_e_lane_south", "sidewalk"),
         # East promenade N-S
-        # Symmetric east-bank route: use the transit-side outer avenue rather
-        # than cutting through the large northern transit building.
+        ("swk_e_north_prom", "swk_e_market_n_prom", "sidewalk"),
         ("swk_e_market_n_prom", "swk_e_market_s_prom", "crossing"),
         ("swk_e_market_s_prom", "swk_e_hall", "sidewalk"),
         ("swk_e_market_s_prom", "bridge_primary_east", "sidewalk"),
@@ -558,15 +752,10 @@ def build_district_layout() -> DistrictLayout:
         ("swk_e_cross_n_prom", "swk_e_cross_s_prom", "crossing"),
         ("swk_e_cross_s_prom", "bridge_secondary_east", "sidewalk"),
         ("bridge_secondary_east", "swk_e_south_prom", "sidewalk"),
-        # East market street
-        ("swk_e_market_n_east", "swk_e_market_n_prom", "sidewalk"),
-        # East cross / south
-        ("swk_e_cross_s_east", "swk_e_cross_s_prom", "sidewalk"),
-        ("swk_e_south_east", "swk_e_south_prom", "sidewalk"),
         # One public edge into each venue approach leaf.
         ("swk_w_north_west", "swk_nw_cafe", "sidewalk"),
         ("swk_nw_cafe", "approach_nw_cafe", "sidewalk"),
-        ("swk_w_market_n_west", "swk_nw_shop", "sidewalk"),
+        ("spawn_civic_plaza", "swk_nw_shop", "sidewalk"),
         ("swk_nw_shop", "approach_nw_shop", "sidewalk"),
         ("swk_w_market_s_west", "swk_w_bistro", "sidewalk"),
         ("swk_w_bistro", "approach_w_bistro", "sidewalk"),
@@ -574,11 +763,11 @@ def build_district_layout() -> DistrictLayout:
         ("swk_w_stall", "approach_w_stall", "sidewalk"),
         ("swk_w_cross_s_west", "swk_sw_pub", "sidewalk"),
         ("swk_sw_pub", "approach_sw_pub", "sidewalk"),
-        ("swk_w_south_west", "swk_sw_lobby", "sidewalk"),
+        ("swk_w_lane_south", "swk_sw_lobby", "sidewalk"),
         ("swk_sw_lobby", "approach_sw_lobby", "sidewalk"),
         ("swk_e_north_east", "swk_ne_shop", "sidewalk"),
         ("swk_ne_shop", "approach_ne_shop", "sidewalk"),
-        ("swk_e_market_n_east", "swk_ne_deli", "sidewalk"),
+        ("spawn_transit_forecourt", "swk_ne_deli", "sidewalk"),
         ("swk_ne_deli", "approach_ne_deli", "sidewalk"),
         ("swk_e_market_s_east", "swk_e_restaurant", "sidewalk"),
         ("swk_e_restaurant", "approach_e_restaurant", "sidewalk"),
@@ -586,7 +775,7 @@ def build_district_layout() -> DistrictLayout:
         ("swk_e_hall", "approach_e_hall", "sidewalk"),
         ("swk_e_cross_s_east", "swk_se_cafe", "sidewalk"),
         ("swk_se_cafe", "approach_se_cafe", "sidewalk"),
-        ("swk_e_south_east", "swk_se_shop", "sidewalk"),
+        ("swk_e_lane_south", "swk_se_shop", "sidewalk"),
         ("swk_se_shop", "approach_se_shop", "sidewalk"),
     ]
     walk_edges = [_edge(nodes, start, end, route_kind=kind) for start, end, kind in edge_specs]
@@ -624,7 +813,7 @@ def build_district_layout() -> DistrictLayout:
         frontages=frontages,
         walk_nodes=walk_nodes,
         walk_edges=tuple(walk_edges),
-        schema_version=2,
+        schema_version=3,
     )
 
 
@@ -981,12 +1170,13 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             landmark_id="landmark_main_bridge",
             slot_id="main_bridge",
             landmark_type="street_landmark",
-            asset_key="BP_Building_101_C",
-            asset_path=asset_path("BP_Building_101_C"),
-            position=(MID_X, PRIMARY_BRIDGE_Y + 3500.0, 0.0),
+            asset_key="BP_Building_99_C",
+            asset_path=asset_path("BP_Building_99_C"),
+            position=(MID_X, PRIMARY_BRIDGE_Y + 5500.0, 0.0),
             yaw_deg=0.0,
             mask_color_rgb=_LANDMARK_MASKS[0],
-            visual_summary=building_description("BP_Building_101_C"),
+            visual_summary=building_description("BP_Building_99_C"),
+            scale=(0.24, 0.24, 0.36),
         ),
         Landmark(
             landmark_id="landmark_market_square",
@@ -994,10 +1184,11 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             landmark_type="venue_hall",
             asset_key="BP_Building_123_C",
             asset_path=asset_path("BP_Building_123_C"),
-            position=(-18000.0, MARKET_Y + 4000.0, 0.0),
+            position=(-15000.0, 21000.0, 0.0),
             yaw_deg=0.0,
             mask_color_rgb=_LANDMARK_MASKS[1],
             visual_summary=building_description("BP_Building_123_C"),
+            scale=(0.22, 0.22, 0.40),
         ),
         Landmark(
             landmark_id="landmark_transit_entrance",
@@ -1005,10 +1196,11 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             landmark_type="commercial_tower",
             asset_key="BP_Building_20_C",
             asset_path=asset_path("BP_Building_20_C"),
-            position=(EAST_X + 2500.0, NORTH_Y + 2500.0, 0.0),
-            yaw_deg=45.0,
+            position=(EAST_MERCHANT_LANE_X, NORTH_Y + 4000.0, 0.0),
+            yaw_deg=180.0,
             mask_color_rgb=_LANDMARK_MASKS[2],
             visual_summary=building_description("BP_Building_20_C"),
+            scale=(0.30, 0.30, 0.54),
         ),
         Landmark(
             landmark_id="landmark_civic_tower",
@@ -1016,10 +1208,11 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             landmark_type="clock_tower",
             asset_key="BP_Building_101_C",
             asset_path=asset_path("BP_Building_101_C"),
-            position=(WEST_X - 2500.0, NORTH_Y + 2500.0, 0.0),
-            yaw_deg=-45.0,
+            position=(WEST_MERCHANT_LANE_X, NORTH_Y + 4000.0, 0.0),
+            yaw_deg=0.0,
             mask_color_rgb=_LANDMARK_MASKS[3],
             visual_summary=building_description("BP_Building_101_C"),
+            scale=(0.31, 0.31, 0.56),
         ),
         Landmark(
             landmark_id="landmark_waterside_tower",
@@ -1031,6 +1224,7 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             yaw_deg=-90.0,
             mask_color_rgb=_LANDMARK_MASKS[4],
             visual_summary=building_description("BP_Building_44_C"),
+            scale=(0.30, 0.30, 0.52),
         ),
         Landmark(
             landmark_id="landmark_fountain",
@@ -1038,10 +1232,11 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             landmark_type="street_landmark",
             asset_key="BP_Building_99_C",
             asset_path=asset_path("BP_Building_99_C"),
-            position=(-22000.0, MARKET_Y - 500.0, 0.0),
+            position=(-33000.0, 2000.0, 0.0),
             yaw_deg=0.0,
             mask_color_rgb=_LANDMARK_MASKS[5],
             visual_summary=building_description("BP_Building_99_C"),
+            scale=(0.18, 0.18, 0.24),
         ),
         Landmark(
             landmark_id="landmark_hospital",
@@ -1049,10 +1244,11 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             landmark_type="hospital",
             asset_key="BP_Building_87_C",
             asset_path=asset_path("BP_Building_87_C"),
-            position=(WEST_X - 2500.0, SOUTH_Y - 2500.0, 0.0),
-            yaw_deg=-135.0,
+            position=(WEST_MERCHANT_LANE_X, SOUTH_Y - 5000.0, 0.0),
+            yaw_deg=0.0,
             mask_color_rgb=_LANDMARK_MASKS[6],
             visual_summary=building_description("BP_Building_87_C"),
+            scale=(0.30, 0.30, 0.42),
         ),
         Landmark(
             landmark_id="landmark_bus_stop",
@@ -1060,10 +1256,11 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             landmark_type="street_landmark",
             asset_key="BP_Building_95_C",
             asset_path=asset_path("BP_Building_95_C"),
-            position=(EAST_X + 2500.0, SOUTH_Y - 2500.0, 0.0),
-            yaw_deg=135.0,
+            position=(EAST_MERCHANT_LANE_X, SOUTH_Y - 5000.0, 0.0),
+            yaw_deg=180.0,
             mask_color_rgb=_LANDMARK_MASKS[7],
             visual_summary=building_description("BP_Building_95_C"),
+            scale=(0.26, 0.26, 0.44),
         ),
     ]
 
@@ -1074,7 +1271,7 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             agent_id="agent_0",
             spawn_slot="civic_plaza_spawn",
             position=(spawn_civic[0], spawn_civic[1], AGENT_Z),
-            yaw_deg=-90.0,
+            yaw_deg=0.0,
             private_constraint="I need step-free access and cannot use stairs.",
             private_requirement_keys=["accessible"],
             zone_id="zone_west",
@@ -1084,7 +1281,7 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
             agent_id="agent_1",
             spawn_slot="transit_forecourt_spawn",
             position=(spawn_transit[0], spawn_transit[1], AGENT_Z),
-            yaw_deg=-90.0,
+            yaw_deg=180.0,
             private_constraint="I strongly prefer food or drink and a quiet place.",
             private_requirement_keys=["food_drink", "quiet"],
             zone_id="zone_east",
@@ -1093,20 +1290,16 @@ def build_fixed_scenario(seed: int = 31) -> Scenario:
     ]
 
     coarse_map_text = (
-        "Coarse map: riverside market district with a vertical canal/rail barrier down the middle. "
-        "West/north bank holds civic and market blocks around a market square; east/south bank holds "
-        "transit, waterfront, and hotel blocks. Two legal crossings only: a short primary bridge near "
-        "the market and a longer secondary bridge to the south. "
-        "Landmarks: civic tower, market square, main bridge, transit entrance, waterside tower, "
-        "fountain, hospital, and bus stop. "
-        "Named spawns: civic plaza (west) and transit forecourt (east). "
+        "Coarse map: an Amsterdam-inspired canal market district. The central canal runs north-south "
+        "between two promenade streets. On each bank, an outer avenue, an internal merchant lane, and "
+        "the canal promenade divide six narrow blocks, producing twelve blocks in a clear 2x6 rhythm. "
+        "Only the market bridge and the longer south bridge cross the canal. The west merchant lane is "
+        "terminated by the civic clock tower to the north and hospital to the south; the east lane is "
+        "terminated by the transit tower and hotel marker. The glass market hall sits northwest of the "
+        "main bridge, while the waterside tower marks its east approach. Both agents start at interior "
+        "merchant-lane/Market Street decisions with built frontages in every horizontal direction. "
         "Venue status, accessibility, crowding, food/drink, and entrance conditions are not on this map; inspect visually."
     )
-
-    landmarks = [
-        replace(landmark, scale=(CITY_LANDMARK_SCALE, CITY_LANDMARK_SCALE, CITY_LANDMARK_SCALE))
-        for landmark in landmarks
-    ]
 
     return Scenario(
         scenario_id=f"riverside_market_seed_{seed}",

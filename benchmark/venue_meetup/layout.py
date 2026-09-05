@@ -60,11 +60,19 @@ class Intersection:
 
 @dataclass(frozen=True)
 class Block:
-    """City block footprint with attached frontage ids."""
+    """City block footprint with attached frontage ids and visual character.
+
+    visual_style and shell_target are renderer hints rather than navigation
+    semantics. Keeping them on the authored block lets a template describe a
+    coherent facade rhythm without teaching the generic district renderer
+    about template ids or block-name conventions.
+    """
 
     block_id: str
     footprint: Polygon2D
     frontage_ids: tuple[str, ...] = ()
+    visual_style: str = "mixed"
+    shell_target: int | None = None
 
 
 @dataclass(frozen=True)
@@ -377,6 +385,12 @@ def district_layout_from_dict(payload: Mapping[str, Any]) -> DistrictLayout:
             block_id=str(item["block_id"]),
             footprint=_as_polygon2d(item["footprint"]),
             frontage_ids=tuple(str(fid) for fid in item.get("frontage_ids", ())),
+            visual_style=str(item.get("visual_style", "mixed")),
+            shell_target=(
+                int(item["shell_target"])
+                if item.get("shell_target") is not None
+                else None
+            ),
         )
         for item in payload.get("blocks", ())
     )

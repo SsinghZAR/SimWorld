@@ -43,22 +43,34 @@ def test_template_id_max_steps_and_agent_walk_nodes() -> None:
         assert node.kind == "spawn"
 
 
-def test_twelve_venues_six_blocks_and_district_span() -> None:
+def test_twelve_venues_twelve_narrow_blocks_and_district_span() -> None:
     scenario = build_fixed_scenario(seed=31)
     layout = scenario.layout
     assert layout is not None
     assert len(scenario.venues) == 12
     assert len({venue.venue_id for venue in scenario.venues}) == 12
     assert len({venue.position for venue in scenario.venues}) == 12
-    assert len(layout.blocks) >= 6
+    assert len(layout.blocks) == 12
     assert {block.block_id for block in layout.blocks} == {
         "block_nw_civic",
+        "block_nw_canal",
         "block_w_market",
+        "block_w_quay",
         "block_sw_residential",
+        "block_sw_canal",
+        "block_ne_canal",
         "block_ne_transit",
+        "block_e_quay",
         "block_e_waterfront",
+        "block_se_canal",
         "block_se_hotel",
     }
+    assert {block.shell_target for block in layout.blocks} == {24, 28}
+    assert {
+        street.street_id
+        for street in layout.streets
+        if "merchant_lane" in street.street_id
+    } == {"west_merchant_lane", "east_merchant_lane"}
     span_cm = EAST_X - WEST_X
     assert span_cm >= 70000.0
     west_venues = [venue for venue in scenario.venues if venue.zone_id == "zone_west"]
@@ -66,6 +78,19 @@ def test_twelve_venues_six_blocks_and_district_span() -> None:
     assert len(west_venues) == 6
     assert len(east_venues) == 6
     assert 6 <= len(scenario.landmarks) <= 8
+
+
+def test_spawns_are_inside_the_merchant_street_canyons() -> None:
+    scenario = build_fixed_scenario(seed=31)
+    layout = scenario.layout
+    assert layout is not None
+    agents = {agent.agent_id: agent for agent in scenario.agents}
+    assert agents["agent_0"].position[:2] == (-22000.0, 8850.0)
+    assert agents["agent_0"].yaw_deg == 0.0
+    assert agents["agent_1"].position[:2] == (22000.0, 8850.0)
+    assert agents["agent_1"].yaw_deg == 180.0
+    assert layout.node_by_id("spawn_civic_plaza").position == agents["agent_0"].position[:2]
+    assert layout.node_by_id("spawn_transit_forecourt").position == agents["agent_1"].position[:2]
 
 
 def test_venues_derive_pose_and_region_from_frontages() -> None:

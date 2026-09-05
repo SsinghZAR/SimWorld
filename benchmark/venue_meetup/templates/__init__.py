@@ -1,6 +1,7 @@
 """Built-in venue-meetup templates."""
 
 from .canal_bridge import build_fixed_scenario as build_canal_bridge_scenario
+from .busy_street_playtest import build_fixed_scenario as build_busy_street_playtest_scenario
 from .central_square import build_fixed_scenario as build_central_square_scenario
 from .riverside_market import build_fixed_scenario as build_riverside_market_scenario
 from .station_quarter import build_fixed_scenario as build_station_quarter_scenario
@@ -10,6 +11,7 @@ TEMPLATE_BUILDERS = {
     "central_square_v0": build_central_square_scenario,
     "station_street_v0": build_station_street_scenario,
     "canal_bridge_v0": build_canal_bridge_scenario,
+    "busy_street_playtest_v0": build_busy_street_playtest_scenario,
     "station_quarter_medium_v1": build_station_quarter_scenario,
     "riverside_market_large_v1": build_riverside_market_scenario,
 }
@@ -17,6 +19,7 @@ TEMPLATE_BUILDERS = {
 __all__ = [
     "TEMPLATE_BUILDERS",
     "build_canal_bridge_scenario",
+    "build_busy_street_playtest_scenario",
     "build_central_square_scenario",
     "build_riverside_market_scenario",
     "build_station_quarter_scenario",

@@ -43,9 +43,8 @@ SPAWN_RING: tuple[tuple[float, float, float, float], ...] = (
 class HiddenProfileSpec:
     """Two-agent hidden-profile information design for a template size.
 
-    Current limitation: ``num_agents`` must be 2. Venue counts of 4, 8, and 12
-    are supported (``central_square_v0``, ``station_quarter_medium_v1``,
-    ``riverside_market_large_v1``) as long as each agent zone has at least
+    Current limitation: ``num_agents`` must be 2. Template venue counts are
+    size-agnostic as long as each agent zone has at least
     ``min_venues_per_zone`` venues.
 
     Role budget after zone assignment and optimum-side choice:

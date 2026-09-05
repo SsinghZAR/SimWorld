@@ -236,6 +236,18 @@ def plan_shell_records(scenario: Scenario) -> tuple[DistrictActorRecord, ...]:
     records: list[DistrictActorRecord] = []
     for block_index, block in enumerate(layout.blocks):
         frontages = by_block.get(block.block_id, ())
+        block_target = (
+            int(block.shell_target)
+            if block.shell_target is not None
+            else target_count
+        )
+        if block_target < 0:
+            raise ValueError(
+                f"Block {block.block_id!r} shell_target must be non-negative: "
+                f"{block.shell_target!r}"
+            )
+        if block_target == 0:
+            continue
         placements = _tile_block(
             block,
             frontages=frontages,
@@ -248,13 +260,13 @@ def plan_shell_records(scenario: Scenario) -> tuple[DistrictActorRecord, ...]:
             occupied_placements=spawned_placements,
             occupied_positions=(),
             protected_bounds=protected_bounds,
-            target_count=target_count,
+            target_count=block_target,
             block_index=block_index,
         )
         placements = _augment_shell_shortfall(
             block,
             placements,
-            minimum_count=target_count,
+            minimum_count=block_target,
             frontages=frontages,
             venue_by_slot=venue_by_slot,
             walk_node_positions=nodes,
@@ -305,7 +317,11 @@ def plan_prop_records(
     layout_id = layout.layout_id.lower()
     large = "large" in layout_id or len(layout.blocks) >= 6
     medium = "medium" in layout_id or len(layout.blocks) >= 4
-    limit = 4 if large else 2 if medium else 1
+    # Keep street furniture proportional to district area rather than block
+    # count. The canal redesign doubles the number of real blocks; retaining
+    # four props and one tree per block would add visual clutter and inflate
+    # live reset times without improving navigation cues.
+    limit = 2 if large or medium else 1
     assets = _DISTRICT_PROP_ASSETS if large else (
         "BP_Table_C", "BP_Hydrant_C", "BP_Trash_bin_a_C", "RoadCone_C"
     ) if medium else ("BP_Table_C", "BP_Hydrant_C")
@@ -326,9 +342,13 @@ def plan_prop_records(
         for block in layout.blocks
     }
     records: list[DistrictActorRecord] = []
-    # One scaled tree per authored block gives the camera a readable depth
-    # cue without changing the route graph or introducing dynamic actors.
-    for block_index, block in enumerate(layout.blocks):
+    # The large map uses paired narrow blocks, so one tree per pair preserves
+    # the original six-tree budget. The medium map keeps one per block.
+    dressing_blocks = tuple(
+        block for block in layout.blocks if block.shell_target != 0
+    )
+    tree_blocks = dressing_blocks[::2] if large else dressing_blocks
+    for block_index, block in enumerate(tree_blocks):
         tree_occupied = [*shell_positions_by_block.get(block.block_id, ()), *(
             (record.position[0], record.position[1])
             for record in records
@@ -369,7 +389,7 @@ def plan_prop_records(
             )
         )
         occupied.append(point)
-    for block in layout.blocks:
+    for block in dressing_blocks:
         candidates = prop_candidates(
             block,
             by_block.get(block.block_id, ()),

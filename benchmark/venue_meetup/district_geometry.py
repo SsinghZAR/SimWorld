@@ -21,6 +21,13 @@ _ROUTE_CLEARANCE_CM = 1_600.0
 _BRIDGE_CLEARANCE_CM = 2_200.0
 _ANCHOR_CLEARANCE_CM = 1_200.0
 _SHELL_EDGE_END_GAP_CM = 2_500.0
+_SHELL_STYLE_END_GAPS_CM = {
+    "station_west": 1_200.0,
+    "station_east": 1_200.0,
+    "canal_merchant": 800.0,
+    "civic_masonry": 800.0,
+    "transit_mixed": 800.0,
+}
 _SHELL_FRONTAGE_GAP_CM = 1_000.0
 _SHELL_FRONTAGE_BUFFER_CM = 500.0
 _SHELL_EDGE_SETBACK_CM = 1_200.0
@@ -29,6 +36,16 @@ _SHELL_EDGE_SETBACK_CM = 1_200.0
 # corner envelope occupies the nominal setback.  The larger values remain well
 # within the 12--20 m parcel depths used by the district templates.
 _SHELL_SETBACK_OPTIONS_CM = (1_200.0, 1_800.0, 2_400.0, 3_000.0, 3_800.0, 4_800.0)
+_SHELL_STYLE_SETBACKS_CM = {
+    # Authored block boundaries already include the carriageway and sidewalk.
+    # These smaller parcel-side setbacks create a 26--32 m street canyon while
+    # the measured route/node checks below remain authoritative.
+    "station_west": (400.0, 700.0, 1_000.0, 1_400.0, 2_000.0, 3_000.0),
+    "station_east": (400.0, 700.0, 1_000.0, 1_400.0, 2_000.0, 3_000.0),
+    "canal_merchant": (400.0, 700.0, 1_000.0, 1_500.0, 2_200.0, 3_000.0),
+    "civic_masonry": (500.0, 800.0, 1_200.0, 1_800.0, 2_500.0, 3_200.0),
+    "transit_mixed": (500.0, 800.0, 1_200.0, 1_800.0, 2_500.0, 3_200.0),
+}
 _SHELL_COLLISION_MARGIN_CM = 450.0
 _SHELL_SEAM_GAP_CM = 300.0
 _SHELL_ROUTE_CLEARANCE_CM = 400.0
@@ -61,19 +78,64 @@ _SHELL_SCALES = {
     "BP_Building_123_C": 0.18,
 }
 
+# The three strongest silhouette assets (20/101/123) and the hospital/museum
+# assets (87/99) are intentionally absent. They are reserved for authored
+# landmarks so a clock tower or market hall cannot disappear into a row of
+# identical background shells.
 _SHELL_RHYTHM = (
-    "BP_Building_123_C",
-    "BP_Building_99_C",
-    "BP_Building_87_C",
-    "BP_Building_95_C",
-    "BP_Building_101_C",
-    "BP_Building_20_C",
-    "BP_Building_44_C",
-    "BP_Building_25_C",
-    "BP_Building_24_C",
-    "BP_Building_06_C",
     "BP_Building_05_C",
+    "BP_Building_06_C",
+    "BP_Building_24_C",
+    "BP_Building_25_C",
+    "BP_Building_44_C",
+    "BP_Building_95_C",
 )
+
+_SHELL_PALETTES = {
+    "mixed": _SHELL_RHYTHM,
+    # Warm awning/brick rhythm on the civic side of the station grid.
+    "station_west": (
+        "BP_Building_05_C",
+        "BP_Building_24_C",
+        "BP_Building_06_C",
+        "BP_Building_25_C",
+    ),
+    # Cooler shopfronts and taller mixed-use shells toward the station.
+    "station_east": (
+        "BP_Building_06_C",
+        "BP_Building_25_C",
+        "BP_Building_24_C",
+        "BP_Building_05_C",
+    ),
+    # Narrow, vertically emphasized merchant-house rhythm beside the canal.
+    "canal_merchant": (
+        "BP_Building_95_C",
+        "BP_Building_05_C",
+        "BP_Building_06_C",
+        "BP_Building_25_C",
+    ),
+    "civic_masonry": (
+        "BP_Building_95_C",
+        "BP_Building_44_C",
+        "BP_Building_05_C",
+        "BP_Building_24_C",
+    ),
+    "transit_mixed": (
+        "BP_Building_44_C",
+        "BP_Building_25_C",
+        "BP_Building_24_C",
+        "BP_Building_06_C",
+    ),
+}
+
+_SHELL_HEIGHT_FACTORS = {
+    "mixed": 1.0,
+    "station_west": 1.50,
+    "station_east": 1.75,
+    "canal_merchant": 1.38,
+    "civic_masonry": 1.15,
+    "transit_mixed": 1.42,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,8 +450,11 @@ def _merge_intervals(intervals):
 
 
 def _edge_gap_intervals(block, edge, frontages, *, venue_by_slot=None, bridge_polylines=()):
-    gaps = [(0.0, min(edge.length, _SHELL_EDGE_END_GAP_CM)),
-            (max(0.0, edge.length - _SHELL_EDGE_END_GAP_CM), edge.length)]
+    end_gap = _SHELL_STYLE_END_GAPS_CM.get(
+        block.visual_style, _SHELL_EDGE_END_GAP_CM
+    )
+    gaps = [(0.0, min(edge.length, end_gap)),
+            (max(0.0, edge.length - end_gap), edge.length)]
     edges = _edge_frames(block)
     for frontage in frontages:
         if _frontage_edge(block, frontage, edges).index != edge.index:
@@ -457,17 +522,37 @@ def shell_yaw(block: Block, position, *, frontages=()):
                key=lambda item: item[0])[1]
 
 
-def _shell_asset_order(block_index, edge_index, slot_index):
-    start = (block_index * 5 + edge_index * 3 + slot_index * 2) % len(_SHELL_RHYTHM)
-    return _SHELL_RHYTHM[start:] + _SHELL_RHYTHM[:start]
+def _shell_palette(visual_style: str) -> tuple[str, ...]:
+    return _SHELL_PALETTES.get(visual_style, _SHELL_RHYTHM)
 
 
-def _make_shell_placement(block, edge, point, *, asset_key, scale_factor=1.0):
+def _shell_setback_options(visual_style: str) -> tuple[float, ...]:
+    return _SHELL_STYLE_SETBACKS_CM.get(visual_style, _SHELL_SETBACK_OPTIONS_CM)
+
+
+def _shell_asset_order(block_index, edge_index, slot_index, visual_style="mixed"):
+    palette = _shell_palette(visual_style)
+    start = (block_index * 5 + edge_index * 3 + slot_index * 2) % len(palette)
+    return palette[start:] + palette[:start]
+
+
+def _make_shell_placement(
+    block,
+    edge,
+    point,
+    *,
+    asset_key,
+    scale_factor=1.0,
+    height_factor=1.0,
+):
     factor = float(scale_factor)
     if not math.isfinite(factor):
         raise ValueError(f"Shell scale factor must be finite: {scale_factor!r}")
+    vertical = float(height_factor)
+    if not math.isfinite(vertical) or vertical <= 0.0:
+        raise ValueError(f"Shell height factor must be finite and positive: {height_factor!r}")
     base_scale = max(_SHELL_MIN_SCALE, _SHELL_SCALES[asset_key] * factor)
-    scale = (base_scale, base_scale, base_scale)
+    scale = (base_scale, base_scale, max(_SHELL_MIN_SCALE, base_scale * vertical))
     yaw = math.degrees(math.atan2(edge.outward[1], edge.outward[0]))
     half = _oriented_half_extents(asset_key, scale, yaw)
     tangent_half, normal_half = _footprint_extents_on_edge(half, edge)
@@ -582,7 +667,9 @@ def _tile_block(block, *, frontages, venue_by_slot, venue_positions, walk_node_p
                 # committing.  A wide shell can fail at a corner while a
                 # narrower known-safe shell fits the same eligible span.
                 asset_options = []
-                for asset in _shell_asset_order(block_index, edge.index, local_slot):
+                for asset in _shell_asset_order(
+                    block_index, edge.index, local_slot, block.visual_style
+                ):
                     scale = _SHELL_SCALES[asset]
                     half = _oriented_half_extents(asset, (scale,) * 3, yaw)
                     tangent_half, _ = _footprint_extents_on_edge(half, edge)
@@ -592,7 +679,9 @@ def _tile_block(block, *, frontages, venue_by_slot, venue_positions, walk_node_p
                 # interval) still receive a real, bbox-measured shell when
                 # possible; scale only as much as the span requires.
                 if not asset_options:
-                    for asset in _shell_asset_order(block_index, edge.index, local_slot):
+                    for asset in _shell_asset_order(
+                        block_index, edge.index, local_slot, block.visual_style
+                    ):
                         base = _SHELL_SCALES[asset]
                         half = _oriented_half_extents(asset, (base,) * 3, yaw)
                         tangent_half, _ = _footprint_extents_on_edge(half, edge)
@@ -619,10 +708,14 @@ def _tile_block(block, *, frontages, venue_by_slot, venue_positions, walk_node_p
                         # Probe deeper parcel-side insets when the nominal
                         # setback intersects an actual graph route or a
                         # neighbouring shell AABB.
-                        for setback in _SHELL_SETBACK_OPTIONS_CM:
+                        for setback in _shell_setback_options(block.visual_style):
                             option = _make_shell_placement(
                                 block, edge, _edge_point(edge, shifted, normal_half, setback),
-                                asset_key=asset, scale_factor=factor,
+                                asset_key=asset,
+                                scale_factor=factor,
+                                height_factor=_SHELL_HEIGHT_FACTORS.get(
+                                    block.visual_style, 1.0
+                                ),
                             )
                             if _edge_gap_envelope_clear(option, edge, gaps[edge.index]) and _placement_clear(
                                 option, block=block, anchors=protected_anchors, nodes=walk_node_positions,
@@ -652,7 +745,10 @@ def _augment_shell_shortfall(block, placements, *, minimum_count, frontages, ven
     gaps = {e.index: _edge_gap_intervals(block, e, frontages, venue_by_slot=venue_by_slot,
                                           bridge_polylines=bridge_polylines) for e in edges}
     additions = []
-    narrow_assets = sorted(_SHELL_RHYTHM, key=lambda asset: (_SHELL_SCALES[asset], asset))
+    narrow_assets = sorted(
+        _shell_palette(block.visual_style),
+        key=lambda asset: (_SHELL_SCALES[asset], asset),
+    )
     for edge in edges:
         for left, right in _complement_intervals(edge.length, gaps[edge.index]):
             cursor = left + 250.0
@@ -680,10 +776,15 @@ def _augment_shell_shortfall(block, placements, *, minimum_count, frontages, ven
                         half = _oriented_half_extents(asset, (_SHELL_SCALES[asset] * factor,) * 3, yaw)
                         _, normal_half = _footprint_extents_on_edge(half, edge)
                         boundary = (edge.start[0] + edge.tangent[0] * cursor, edge.start[1] + edge.tangent[1] * cursor)
+                        setback = _shell_setback_options(block.visual_style)[0]
                         candidate = _make_shell_placement(block, edge,
-                            (boundary[0] - edge.outward[0] * (normal_half + _SHELL_EDGE_SETBACK_CM),
-                             boundary[1] - edge.outward[1] * (normal_half + _SHELL_EDGE_SETBACK_CM)),
-                            asset_key=asset, scale_factor=factor)
+                            (boundary[0] - edge.outward[0] * (normal_half + setback),
+                             boundary[1] - edge.outward[1] * (normal_half + setback)),
+                            asset_key=asset,
+                            scale_factor=factor,
+                            height_factor=_SHELL_HEIGHT_FACTORS.get(
+                                block.visual_style, 1.0
+                            ))
                         if _edge_gap_envelope_clear(candidate, edge, gaps[edge.index]) and _placement_clear(
                             candidate, block=block, anchors=protected_anchors,
                             nodes=walk_node_positions, routes=route_polylines,
@@ -714,7 +815,10 @@ __all__ = [
     "DistrictShellFootprint", "_ShellPlacement", "frontages_by_block", "route_polylines",
     "bridge_gap_polylines", "protected_anchors", "clear", "inside_block", "shell_yaw",
     "shell_positions", "_make_shell_placement", "_tile_block", "_augment_shell_shortfall",
-    "_SHELL_SCALES", "_SHELL_RHYTHM", "_SHELL_EDGE_END_GAP_CM",
+    "_SHELL_SCALES", "_SHELL_RHYTHM", "_SHELL_PALETTES",
+    "_SHELL_HEIGHT_FACTORS", "_SHELL_STYLE_SETBACKS_CM",
+    "_SHELL_STYLE_END_GAPS_CM",
+    "_SHELL_EDGE_END_GAP_CM",
     "_SHELL_FRONTAGE_GAP_CM", "_SHELL_FRONTAGE_BUFFER_CM", "_SHELL_EDGE_SETBACK_CM",
     "_SHELL_COLLISION_MARGIN_CM", "_SHELL_SEAM_GAP_CM", "_SHELL_TARGET_MEDIUM",
     "_SHELL_TARGET_LARGE",

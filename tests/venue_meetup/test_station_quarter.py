@@ -63,6 +63,23 @@ def test_eight_distinct_venues_and_four_city_blocks() -> None:
     }
 
 
+def test_chamfered_grid_and_interior_facing_spawns() -> None:
+    scenario = build_fixed_scenario(seed=21)
+    layout = scenario.layout
+    assert layout is not None
+    assert all(len(block.footprint) == 8 for block in layout.blocks)
+    assert {block.visual_style for block in layout.blocks} == {
+        "station_west",
+        "station_east",
+    }
+    assert {block.shell_target for block in layout.blocks} == {22}
+    agents = {agent.agent_id: agent for agent in scenario.agents}
+    assert agents["agent_0"].position[:2] == (-14000.0, 850.0)
+    assert agents["agent_0"].yaw_deg == 0.0
+    assert agents["agent_1"].position[:2] == (14000.0, 850.0)
+    assert agents["agent_1"].yaw_deg == 180.0
+
+
 def test_region_centers_match_named_frontages() -> None:
     scenario = build_fixed_scenario(seed=21)
     layout = scenario.layout

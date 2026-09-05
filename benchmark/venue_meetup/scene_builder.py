@@ -98,6 +98,20 @@ class SceneBuilder:
 
         DistrictSceneRenderer(self.communicator, self.scenario).spawn()
 
+        for building in self.scenario.buildings:
+            actor_name = self.building_actor_name(building.building_id)
+            self.communicator.spawn_object(
+                actor_name,
+                building.asset_path,
+                building.position,
+                (0.0, building.yaw_deg, 0.0),
+                scale=building.scale,
+            )
+            self.communicator.unrealcv.set_collision(
+                actor_name, building.collision
+            )
+            self.communicator.unrealcv.set_movable(actor_name, False)
+
         for venue in self.scenario.venues:
             actor_name = self.venue_actor_name(venue.venue_id)
             self.communicator.spawn_object(
@@ -110,7 +124,12 @@ class SceneBuilder:
             self.communicator.unrealcv.set_color(actor_name, venue.mask_color_rgb)
             for prop in venue.props:
                 prop_name = self.prop_actor_name(prop.prop_id)
-                self.communicator.spawn_object(prop_name, asset_path(prop.asset_key), prop.position, (0.0, prop.yaw_deg, 0.0))
+                self.communicator.spawn_object(
+                    prop_name,
+                    asset_path(prop.asset_key),
+                    prop.position,
+                    (0.0, prop.yaw_deg, 0.0),
+                )
                 self.communicator.unrealcv.set_scale(prop.scale, prop_name)
                 if prop.color_rgb is not None:
                     self.communicator.unrealcv.set_color(prop_name, prop.color_rgb)
@@ -148,7 +167,11 @@ class SceneBuilder:
             actor_name = self.communicator.get_humanoid_name(humanoid.id)
             self.communicator.unrealcv.set_orientation((0.0, agent.yaw_deg, 0.0), actor_name)
             self.communicator.humanoid_set_speed(humanoid.id, self.speed)
-            agent_states[agent.agent_id] = AgentState(agent_id=agent.agent_id, humanoid=humanoid, actor_name=actor_name)
+            agent_states[agent.agent_id] = AgentState(
+                agent_id=agent.agent_id,
+                humanoid=humanoid,
+                actor_name=actor_name,
+            )
 
         # Configure cameras only after every humanoid exists.  Spawning a later
         # humanoid can reset earlier camera defaults, so this final deterministic
@@ -187,6 +210,12 @@ class SceneBuilder:
         """
 
         return f"GEN_BP_VENUE_{venue_id}"
+
+    @staticmethod
+    def building_actor_name(building_id: str) -> str:
+        """Return a deterministic actor name for non-interactive buildings."""
+
+        return f"GEN_BP_BUILDING_{building_id}"
 
     @staticmethod
     def landmark_actor_name(landmark_id: str) -> str:
