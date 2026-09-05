@@ -155,6 +155,7 @@ class VenueMeetupEnv:
         # spawn and advanced only after successful graph/teleport navigation.
         self._obstacles: list[Obstacle] | None = None
         self._last_path: dict[str, list[tuple[float, float]]] = {}
+        self._step_movement_paths: dict[str, list[tuple[float, float]]] = {}
         self._agent_walk_nodes: dict[str, str | None] = {
             agent.agent_id: agent.walk_node_id for agent in scenario.agents
         }
@@ -285,6 +286,10 @@ class VenueMeetupEnv:
             parsed_turns.setdefault(agent_id, VenueAgentTurn())
 
         positions_before = self._positions()
+        self._step_movement_paths = {
+            agent_id: [(float(position[0]), float(position[1]))]
+            for agent_id, position in positions_before.items()
+        }
         inboxes = {agent_id: list(self.bus.inboxes[agent_id]) for agent_id in self.agent_ids}
         if not self.no_communication:
             messages = messages_from_turns(parsed_turns, step=self.step_index)
@@ -343,6 +348,8 @@ class VenueMeetupEnv:
         observations = self._build_observations(inboxes=inboxes)
         done = self._converged() or self.step_index >= self.scenario.max_steps
         final_positions = self._positions()
+        for agent_id, position in final_positions.items():
+            self._record_movement_point(agent_id, position)
         scores = episode_score(
             self.scenario,
             final_positions,
@@ -362,6 +369,7 @@ class VenueMeetupEnv:
                 getattr(self, "last_inspections_internal", getattr(self, "last_inspections", {}))
             ),
             "positions_internal": final_positions,
+            "movement_paths_internal": deepcopy(self._step_movement_paths),
             "scores": scores,
             "success": self._converged(),
         }
@@ -588,6 +596,7 @@ class VenueMeetupEnv:
         arrived = False
         for _ in range(self.navigate_max_tries):
             ax, ay = _teleport(target_x, target_y)
+            self._record_movement_point(agent_id, (ax, ay))
             if venue.region.contains((ax, ay)):
                 arrived = True
                 break
@@ -839,6 +848,18 @@ class VenueMeetupEnv:
         location = self.communicator.unrealcv.get_location(actor_name)
         return float(location[0]), float(location[1])
 
+    def _record_movement_point(self, agent_id: str, point: tuple[float, float]) -> None:
+        """Append a measured point to this step's evaluator-only movement trace."""
+
+        normalized = (float(point[0]), float(point[1]))
+        movement_paths = getattr(self, "_step_movement_paths", None)
+        if movement_paths is None:
+            movement_paths = {}
+            self._step_movement_paths = movement_paths
+        trace = movement_paths.setdefault(agent_id, [])
+        if not trace or math.dist(trace[-1], normalized) > 0.01:
+            trace.append(normalized)
+
     def _walk_route(
         self,
         agent_id: str,
@@ -934,6 +955,7 @@ class VenueMeetupEnv:
         for _ in range(self.walk_max_bursts):
             location = uc.get_location(actor)
             position = (float(location[0]), float(location[1]))
+            self._record_movement_point(agent_id, position)
             if last_venue is not None and last_venue.region.contains(position):
                 return seg_moved, True
             distance = math.hypot(waypoint[0] - position[0], waypoint[1] - position[1])
@@ -948,6 +970,7 @@ class VenueMeetupEnv:
             self.communicator.humanoid_stop(state.humanoid.id)
             self._tick()
             after = uc.get_location(actor)
+            self._record_movement_point(agent_id, (float(after[0]), float(after[1])))
             moved = math.hypot(float(after[0]) - position[0], float(after[1]) - position[1])
             seg_moved += moved
             intended = min(distance, self.speed * duration)
@@ -1002,6 +1025,7 @@ class VenueMeetupEnv:
         state = self.get_agent_state(agent_id)
         location = self.communicator.unrealcv.get_location(state.actor_name)
         end = (float(location[0]), float(location[1]))
+        self._record_movement_point(agent_id, end)
         moved = math.hypot(end[0] - ctx["start"][0], end[1] - ctx["start"][1])
         intended = self.speed * ctx["duration"]
         blocked = intended > 1.0 and moved < self.block_ratio * intended

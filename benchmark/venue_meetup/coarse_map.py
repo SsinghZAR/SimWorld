@@ -55,6 +55,16 @@ def _world_to_image(point: tuple[float, float], *, size: int, extent: float) -> 
     return x, y
 
 
+def world_to_map_pixel(point: tuple[float, float], *, size: int, extent: float) -> tuple[int, int]:
+    """Project one Unreal world point onto a rendered coarse map.
+
+    This public wrapper keeps post-processing overlays aligned with the exact
+    projection used by :func:`render_coarse_map` without duplicating map math.
+    """
+
+    return _world_to_image(point, size=size, extent=extent)
+
+
 def _layout_extent_coords(layout: DistrictLayout) -> list[float]:
     """Collect absolute coordinates from authored layout geometry."""
 
@@ -97,6 +107,12 @@ def _auto_extent(scenario: Scenario) -> float:
     if scenario.layout is not None:
         coords += _layout_extent_coords(scenario.layout)
     return max(coords) * 1.15 or 1200.0
+
+
+def coarse_map_extent(scenario: Scenario) -> float:
+    """Return the half-extent used by the scenario's automatic coarse map."""
+
+    return _auto_extent(scenario)
 
 
 def _load_fonts() -> tuple[Any, Any]:

@@ -523,6 +523,20 @@ def run_case(
 
         write_json(case_dir / "trajectory.json", trajectory)
         write_jsonl(case_dir / "model_responses.jsonl", model_records)
+        from benchmark.venue_meetup.trajectory_minimap import \
+            render_trajectory_minimap
+
+        trajectory_artifacts: dict[str, Path] = {}
+        trajectory_render_error: str | None = None
+        try:
+            trajectory_artifacts = render_trajectory_minimap(case_dir)
+        except Exception as exc:  # noqa: BLE001 - preserve an expensive completed episode.
+            trajectory_render_error = f"{type(exc).__name__}: {exc}"
+            print(
+                f"Warning: trajectory minimap rendering failed: {trajectory_render_error}",
+                file=sys.stderr,
+                flush=True,
+            )
         if args.save_video:
             for agent_id, frames in videos.items():
                 save_video(frames, case_dir / f"{agent_id}.mp4", playback_fps)
@@ -548,6 +562,11 @@ def run_case(
             "scores": scores,
             "social_metrics": social,
             "args": sanitize_run_args(args),
+            "artifact_errors": (
+                {"trajectory_minimap": trajectory_render_error}
+                if trajectory_render_error
+                else {}
+            ),
             "artifacts": {
                 "trajectory": str(case_dir / "trajectory.json"),
                 "model_responses": str(case_dir / "model_responses.jsonl"),
@@ -555,6 +574,7 @@ def run_case(
                 "social_metrics": str(case_dir / "social_metrics.json"),
                 "scenario_hidden": str(case_dir / "scenario_hidden.json"),
                 "coarse_map": scenario.coarse_map_path,
+                **{name: str(path) for name, path in trajectory_artifacts.items()},
             },
         }
         write_json(case_dir / "metadata.json", metadata)

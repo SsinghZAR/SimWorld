@@ -494,6 +494,10 @@ def test_no_communication_env_step_suppresses_delivery(monkeypatch):
     assert all(not inbox for inbox in env.bus.inboxes.values())
     assert info["comms"]["transcript"] == []
     assert info["comms"]["inboxes"] == {agent_id: [] for agent_id in agent_ids}
+    assert info["movement_paths_internal"] == {
+        agent_id: [(0.0, 0.0)] for agent_id in agent_ids
+    }
+    assert all("movement_paths_internal" not in observation for observation in observations.values())
 
 
 class TestFrameEnhancementCompatibility:

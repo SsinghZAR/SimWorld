@@ -26,6 +26,8 @@ from typing import Any
 
 import numpy as np
 
+from benchmark.venue_meetup.trajectory_minimap import render_trajectory_minimap
+
 try:
     import cv2
 except ModuleNotFoundError as exc:  # pragma: no cover - cv2 ships with the eval extras.
@@ -320,7 +322,7 @@ def _legend(img: np.ndarray, title: str, subtitle: str) -> None:
 
 
 def render(run_dir: Path, *, size: int = 1024, fps: float = 2.0) -> dict[str, Path]:
-    """Render ``topdown.png`` and ``topdown.mp4`` for a finished run case dir."""
+    """Render diagnostic top-down and public-minimap views of a finished case."""
 
     scenario = json.loads((run_dir / "scenario_hidden.json").read_text(encoding="utf-8"))
     trajectory = json.loads((run_dir / "trajectory.json").read_text(encoding="utf-8"))
@@ -362,7 +364,8 @@ def render(run_dir: Path, *, size: int = 1024, fps: float = 2.0) -> dict[str, Pa
         writer.write(final)
     writer.release()
 
-    return {"png": png_path, "mp4": mp4_path}
+    minimap_outputs = render_trajectory_minimap(run_dir, fps=fps)
+    return {"png": png_path, "mp4": mp4_path, **minimap_outputs}
 
 
 def main() -> None:
@@ -379,7 +382,8 @@ def main() -> None:
 
     if args.map_only or args.template_seed is not None:
         if args.template_seed is not None:
-            from benchmark.venue_meetup.templates.central_square import build_fixed_scenario
+            from benchmark.venue_meetup.templates.central_square import \
+                build_fixed_scenario
 
             scenario = build_fixed_scenario(args.template_seed).compact()
             default_out = Path(f"central_square_seed{args.template_seed}_map.png")

@@ -275,11 +275,13 @@ not put it in a command or commit it) and select the MiniMax-compatible policy:
 .\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
   --hidden-profile --info-partition spatial --policy minimax `
   --provider minimax --model MiniMax-M3 `
-  --template-id station_quarter_medium_v1 --seeds 7 --num-agents 2 `
+  --template-id rosebank_grid_3x3_v0 --seeds 7 --num-agents 2 `
   --ablation main --output-dir runs\venue_meetup\minimax_reference
 ```
 
-Use `--template-id riverside_market_large_v1` to exercise the larger layout.
+This is the focused two-agent POC setting: nine city blocks and four candidate
+venues. Use `--template-id riverside_market_large_v1` to exercise the larger
+legacy layout.
 `--small-eval` selects the 3x3, 5x5, and 7x7 scale family. It supports
 `--hidden-profile` when `--num-agents 2`; the two-agent limit remains explicit.
 
@@ -309,6 +311,8 @@ A live policy run adds:
 ```text
   <template_id>/<scenario_id>/<condition>/
     trajectory.json
+    trajectory_minimap.png      # final paths over the public coarse map
+    trajectory_minimap.mp4      # paths revealed turn by turn
     social_metrics.json
     model_responses.jsonl
     agent_*.mp4                 # only with --save-video
@@ -320,7 +324,13 @@ sanitized CLI arguments. Per-case metadata records the condition and prompt
 information; its sanitized `args.walk` flag identifies walk versus teleport
 mode (there is no separate case-level navigation key). Secrets are removed.
 `scenario_public.json` omits hidden properties; `scenario_hidden.json` is for
-evaluator use. Render a top-down trajectory (or just the authored map) with:
+evaluator use. Movement coordinates are recorded only under evaluator-facing
+`info.movement_paths_internal`; they are not added to either agent's observation.
+Physical movement is a solid line and abstracted `NAVIGATE` teleport movement
+is dashed. The numbered dots identify the turn on which movement completed.
+The minimap PNG and MP4 are generated automatically after every live episode.
+Regenerate them together with the separate collision-diagnostic top-down view
+(or render just the authored map) with:
 
 ```powershell
 .\.venv\Scripts\python.exe -m benchmark.venue_meetup.render_trajectory `

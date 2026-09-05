@@ -232,8 +232,12 @@ runs/venue_meetup/<run-name>/<template>/<scenario>/<ablation>/
 ```
 
 Important files are `run_manifest.json`, `summary.json`, `metadata.json`,
-`trajectory.json`, `social_metrics.json`, and (when requested) per-agent MP4
-files. Add `--save-video` to an evaluation command to record cameras. Use
+`trajectory.json`, `trajectory_minimap.png`, `trajectory_minimap.mp4`,
+`social_metrics.json`, and (when requested) per-agent MP4 files. The trajectory
+minimap artifacts are generated automatically after each live episode from
+evaluator-only measured movement traces; solid paths are physical movement and
+dashed paths are abstracted teleports. Add `--save-video` to an evaluation
+command to record cameras. Use
 `--cinematic` only when intentionally collecting a slower, denser walking clip.
 
 Render a top-down trajectory after a run with:
