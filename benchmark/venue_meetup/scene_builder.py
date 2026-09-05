@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from itertools import permutations
+from typing import Any, Mapping, Sequence
 
 from benchmark.venue_meetup.building_catalog import asset_path
 from benchmark.venue_meetup.district_scene import DistrictSceneRenderer
@@ -31,6 +32,15 @@ def direction_from_yaw(yaw: float) -> Vector:
     """Build a unit Vector from a yaw angle."""
 
     return Vector(math.cos(math.radians(yaw)), math.sin(math.radians(yaw))).normalize()
+
+
+def _xy(value: Any) -> tuple[float, float]:
+    """Normalize a numeric sequence or UnrealCV coordinate string."""
+
+    if isinstance(value, bytes):
+        value = value.decode("utf-8")
+    coordinates = value.split() if isinstance(value, str) else value
+    return float(coordinates[0]), float(coordinates[1])
 
 
 class SceneBuilder:
@@ -173,6 +183,8 @@ class SceneBuilder:
                 actor_name=actor_name,
             )
 
+        self._match_cameras_to_agents(agent_states)
+
         # Configure cameras only after every humanoid exists.  Spawning a later
         # humanoid can reset earlier camera defaults, so this final deterministic
         # pass makes the requested resolution authoritative for all agents.
@@ -182,6 +194,42 @@ class SceneBuilder:
                 self.resolution,
             )
         return agent_states
+
+    def _match_cameras_to_agents(
+        self,
+        agent_states: Mapping[str, AgentState],
+    ) -> None:
+        """Match sensor IDs to pawns when UE registers cameras out of order."""
+
+        states = tuple(agent_states.values())
+        if len(states) < 2:
+            return
+        camera_ids = tuple(state.humanoid.camera_id for state in states)
+        try:
+            actor_positions = tuple(
+                _xy(self.communicator.unrealcv.get_location(state.actor_name))
+                for state in states
+            )
+            camera_positions = {
+                camera_id: _xy(
+                    self.communicator.unrealcv.get_camera_location(camera_id)
+                )
+                for camera_id in camera_ids
+            }
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            # Some offline adapters and older packages do not expose camera
+            # poses. Their existing sequential IDs remain the best fallback.
+            return
+
+        assignment = min(
+            permutations(camera_ids),
+            key=lambda candidate: sum(
+                math.dist(actor_position, camera_positions[camera_id])
+                for actor_position, camera_id in zip(actor_positions, candidate)
+            ),
+        )
+        for state, camera_id in zip(states, assignment):
+            state.humanoid.camera_id = camera_id
 
     def settle(self, agent_states: Mapping[str, AgentState], agent_ids: Sequence[str]) -> None:
         """Let freshly spawned agents drop to the ground and come to rest."""

@@ -82,6 +82,7 @@ class CityBlockPlan:
     portal_width_cm: float
     facade_fill_ratio: float
     setback_cm: float
+    module_cycle: int
     runs: tuple[CityBlockRun, ...]
     portals: tuple[CityBlockPortal, ...]
 
@@ -177,6 +178,7 @@ def plan_city_block(
     portal_width_cm: float = DEFAULT_PORTAL_WIDTH_CM,
     facade_fill_ratio: float = DEFAULT_FACADE_FILL_RATIO,
     setback_cm: float = DEFAULT_SETBACK_CM,
+    module_cycle: int = 0,
 ) -> CityBlockPlan:
     """Pack all 24 facades around a square wall with four centred portals."""
 
@@ -194,6 +196,12 @@ def plan_city_block(
         raise ValueError("portal_width_cm must be positive and smaller than the block")
     if not 0.0 < facade_fill_ratio <= 1.0 or setback_cm < 0.0:
         raise ValueError("Facade fill must be in (0, 1] and setback non-negative")
+    if (
+        isinstance(module_cycle, bool)
+        or not isinstance(module_cycle, int)
+        or module_cycle < 0
+    ):
+        raise ValueError("module_cycle must be a non-negative integer")
 
     half = float(side_length_cm) / 2.0
     portal_half = float(portal_width_cm) / 2.0
@@ -211,8 +219,14 @@ def plan_city_block(
     )
 
     runs: list[CityBlockRun] = []
-    for segment, module_indices in zip(local_segments, _RUN_MODULES):
+    module_offset = module_cycle * len(BUSY_STREET_MODULES)
+    run_shift = (module_cycle * 3) % len(_RUN_MODULES)
+    run_modules = _RUN_MODULES[run_shift:] + _RUN_MODULES[:run_shift]
+    for segment, base_module_indices in zip(local_segments, run_modules):
         run_id, side, local_start, local_end, outward = segment
+        module_indices = tuple(
+            module_offset + index for index in base_module_indices
+        )
         start = _translated(center, local_start)
         end = _translated(center, local_end)
         buildings = plan_busy_street_modules(
@@ -240,7 +254,7 @@ def plan_city_block(
         building.placement.index
         for run in packed_runs
         for building in run.buildings
-    ) != list(range(len(BUSY_STREET_MODULES))):
+    ) != list(range(module_offset, module_offset + len(BUSY_STREET_MODULES))):
         raise RuntimeError("City-block run specification must use every module once")
 
     boundary_positions: dict[BlockSide, Point2D] = {
@@ -273,6 +287,7 @@ def plan_city_block(
         portal_width_cm=float(portal_width_cm),
         facade_fill_ratio=float(facade_fill_ratio),
         setback_cm=float(setback_cm),
+        module_cycle=module_cycle,
         runs=packed_runs,
         portals=portals,
     )

@@ -14,6 +14,9 @@ Meetup benchmark repeatable without rediscovering the machine setup.
   Python-authored districts. Their routes, blocks, venues, and landmarks are
   described in the benchmark; `district_scene.py` renders building shells into
   the runtime scene.
+- `busy_street_playtest_v0` is the dense single-block visual primitive;
+  `connected_blocks_playtest_v0` joins three varied copies through two
+  collision-aware pedestrian alleys and exposes 36 unique venue identities.
 - `runs/` holds generated evaluation artifacts and is intentionally ignored by
   Git.
 
@@ -132,6 +135,30 @@ All following commands are run from `D:\side_projects\SimWorld`.
    to exercise the larger city-block layout. Begin with `nav_smoke`; it has a
    128-turn default budget for full episodes and is slower than the medium map.
 
+For the compact connected-block playtest, regenerate the overview, alley, route,
+mask, and coarse-map evidence with:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.preview_connected_blocks
+```
+
+Then validate an end-to-end physical route and one venue identity per block:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --template-id connected_blocks_playtest_v0 --seeds 17 --num-agents 2 `
+  --policy nav_smoke --walk --max-steps 1 --speed 1000 `
+  --resolution 640x360 --output-dir runs\venue_meetup `
+  --run-name connected_blocks_alley_walk
+
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.smoke_busy_street `
+  --template-id connected_blocks_playtest_v0 `
+  --venue-id venue_green_awning_bistro `
+  --venue-id venue_green_awning_bistro_2 `
+  --venue-id venue_green_awning_bistro_3 `
+  --output runs\venue_meetup\connected_blocks_three_venue_smoke.json
+```
+
 For a VLM run, use `--policy minimax` and configure provider credentials in the
 environment. Never pass secrets on the command line or commit them.
 
@@ -174,12 +201,16 @@ Add `--map-only` to inspect just the authored layout.
   building shells.
 - The `GEN_BP_` actor prefix is required so scene reset removes all generated
   actors. Preserve that naming convention.
+- The packaged humanoid blueprint may register multiple FusionCam sensors in
+  reverse spawn order. `SceneBuilder` matches cameras to pawns by live spatial
+  proximity after spawning; do not restore an index-only camera assumption.
 
 ## Current implementation status
 
-The latest city-block renderer change is local commit `4af103b` (`Render
-authored venue districts as city blocks`). Verify the current branch and
-working tree before making further edits:
+The current playtest stack includes the four-entry dense block, three-block
+alley district, unique interactive venues, graph-backed walking, and repeatable
+live visual evidence. Verify the current branch and working tree before making
+further edits:
 
 ```powershell
 git status --short

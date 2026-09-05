@@ -137,6 +137,11 @@ def build_city_block_layout(
     venue_buildings = tuple(
         building for building in plan.buildings if building.venue_id is not None
     )
+    center_x, center_y = plan.center
+
+    def world(local_x: float, local_y: float) -> tuple[float, float]:
+        return center_x + local_x, center_y + local_y
+
     geometries = {
         building.placement.index: frontage_geometry(plan, building)
         for building in venue_buildings
@@ -179,10 +184,10 @@ def build_city_block_layout(
 
     outer = plan.half_extent_cm + OUTER_WALK_OFFSET_CM
     corner_positions = {
-        "outer_north_west": (-outer, outer),
-        "outer_north_east": (outer, outer),
-        "outer_south_east": (outer, -outer),
-        "outer_south_west": (-outer, -outer),
+        "outer_north_west": world(-outer, outer),
+        "outer_north_east": world(outer, outer),
+        "outer_south_east": world(outer, -outer),
+        "outer_south_west": world(-outer, -outer),
     }
     for node_id, position in corner_positions.items():
         nodes[node_id] = WalkNode(node_id, position, "intersection")
@@ -209,10 +214,10 @@ def build_city_block_layout(
         side_ring_nodes[portal.side].append(outer_id)
 
     courtyard_positions = {
-        "courtyard_north": (0.0, COURTYARD_RING_OFFSET_CM),
-        "courtyard_east": (COURTYARD_RING_OFFSET_CM, 0.0),
-        "courtyard_south": (0.0, -COURTYARD_RING_OFFSET_CM),
-        "courtyard_west": (-COURTYARD_RING_OFFSET_CM, 0.0),
+        "courtyard_north": world(0.0, COURTYARD_RING_OFFSET_CM),
+        "courtyard_east": world(COURTYARD_RING_OFFSET_CM, 0.0),
+        "courtyard_south": world(0.0, -COURTYARD_RING_OFFSET_CM),
+        "courtyard_west": world(-COURTYARD_RING_OFFSET_CM, 0.0),
     }
     for node_id, position in courtyard_positions.items():
         nodes[node_id] = WalkNode(node_id, position, "sidewalk")
@@ -283,29 +288,29 @@ def build_city_block_layout(
         streets=(
             StreetSegment(
                 "north_avenue",
-                (-street_extent, street_extent),
-                (street_extent, street_extent),
+                world(-street_extent, street_extent),
+                world(street_extent, street_extent),
                 STREET_WIDTH_CM,
                 SIDEWALK_WIDTH_CM,
             ),
             StreetSegment(
                 "east_avenue",
-                (street_extent, street_extent),
-                (street_extent, -street_extent),
+                world(street_extent, street_extent),
+                world(street_extent, -street_extent),
                 STREET_WIDTH_CM,
                 SIDEWALK_WIDTH_CM,
             ),
             StreetSegment(
                 "south_avenue",
-                (street_extent, -street_extent),
-                (-street_extent, -street_extent),
+                world(street_extent, -street_extent),
+                world(-street_extent, -street_extent),
                 STREET_WIDTH_CM,
                 SIDEWALK_WIDTH_CM,
             ),
             StreetSegment(
                 "west_avenue",
-                (-street_extent, -street_extent),
-                (-street_extent, street_extent),
+                world(-street_extent, -street_extent),
+                world(-street_extent, street_extent),
                 STREET_WIDTH_CM,
                 SIDEWALK_WIDTH_CM,
             ),
@@ -318,10 +323,10 @@ def build_city_block_layout(
             Block(
                 block_id="block_courtyard",
                 footprint=(
-                    (-plan.half_extent_cm, -plan.half_extent_cm),
-                    (plan.half_extent_cm, -plan.half_extent_cm),
-                    (plan.half_extent_cm, plan.half_extent_cm),
-                    (-plan.half_extent_cm, plan.half_extent_cm),
+                    world(-plan.half_extent_cm, -plan.half_extent_cm),
+                    world(plan.half_extent_cm, -plan.half_extent_cm),
+                    world(plan.half_extent_cm, plan.half_extent_cm),
+                    world(-plan.half_extent_cm, plan.half_extent_cm),
                 ),
                 frontage_ids=tuple(
                     frontage.frontage_id for frontage in frontages

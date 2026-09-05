@@ -86,6 +86,7 @@ action log. A live walk smoke is not a social-evaluation score.
 | `station_quarter_medium_v1` | Cerdà-inspired station grid, 8 venues across 4 chamfered blocks | 64 |
 | `riverside_market_large_v1` | Canal market, 12 venues across 12 narrow blocks and 2 bridges | 128 |
 | `busy_street_playtest_v0` | Compact 24-facade city block with 4 entries, a courtyard loop, and 12 uniquely inspectable venues | 96 |
+| `connected_blocks_playtest_v0` | Three dense 24-facade blocks joined by 2 portal-aligned pedestrian alleys | 192 |
 
 `busy_street_playtest_v0` is the fast visual/interaction sandbox. Six measured
 facades line each side of one dense block, with centred north, east, south, and
@@ -94,6 +95,12 @@ Its six restaurants each have a unique identity, entrance, meeting region, mask
 colour, and public visual summary. It also adds the `bookshop`, `bar`, and
 `skyscraper_lobby` venue types; the remaining residences are solid scene
 buildings rather than venue candidates.
+
+`connected_blocks_playtest_v0` composes three copies of that proven block
+primitive into West Market, Central Arcade, and East Tower blocks. The facing
+east/west portals share explicit alley edges, giving both agents a continuous
+collision-aware route through two connectors and three courtyard/perimeter
+graphs. Venue ids and object-mask colors remain unique across all 36 candidates.
 
 The geometry and landmark rationale, including the municipal and heritage
 references behind each layout, is documented in

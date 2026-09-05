@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from itertools import product
 from typing import Literal
 
 from benchmark.venue_meetup.street_wall import (
@@ -192,7 +193,7 @@ BUSY_STREET_HEIGHT_FACTORS = {
     "BP_Building_126_C": 1.35,
 }
 
-BUSY_STREET_VENUE_MASKS = (
+_PRIMARY_VENUE_MASKS = (
     (230, 55, 70),
     (45, 170, 220),
     (245, 145, 35),
@@ -206,6 +207,39 @@ BUSY_STREET_VENUE_MASKS = (
     (155, 205, 55),
     (190, 60, 220),
 )
+
+
+def _build_venue_mask_palette(target_count: int = 48) -> tuple[tuple[int, int, int], ...]:
+    """Extend the hand-authored colors without RGB/BGR matcher aliases."""
+
+    colors = list(_PRIMARY_VENUE_MASKS)
+
+    def aliases(left: tuple[int, int, int], right: tuple[int, int, int]) -> bool:
+        direct = max(abs(left[i] - right[i]) for i in range(3)) <= 16
+        reversed_channels = max(
+            abs(left[i] - right[2 - i]) for i in range(3)
+        ) <= 16
+        return direct or reversed_channels
+
+    candidates = sorted(
+        (
+            color
+            for color in product((15, 70, 125, 180, 235), repeat=3)
+            if max(color) - min(color) >= 110
+        ),
+        key=lambda color: (sum(color), color),
+    )
+    for candidate in candidates:
+        if not any(aliases(candidate, existing) for existing in colors):
+            colors.append(candidate)
+            if len(colors) == target_count:
+                break
+    if len(colors) < target_count:
+        raise RuntimeError(f"Unable to build {target_count} distinct mask colors")
+    return tuple(colors)
+
+
+BUSY_STREET_VENUE_MASKS = _build_venue_mask_palette()
 
 BUSY_STREET_PROP_SCALES = {
     "BP_Table_C": (0.78, 0.78, 0.78),

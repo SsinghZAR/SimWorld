@@ -846,7 +846,12 @@ class VenueMeetupEnv:
         location = self.communicator.unrealcv.get_location(actor_name)
         return float(location[0]), float(location[1])
 
-    def _walk_route(self, agent_id: str, waypoints: list[tuple[float, float]], venue: Venue) -> tuple[float, bool, tuple[float, float] | None]:
+    def _walk_route(
+        self,
+        agent_id: str,
+        waypoints: list[tuple[float, float]],
+        venue: Venue,
+    ) -> tuple[float, bool, tuple[float, float] | None]:
         """Walk a full waypoint list; on a stall, return the discovered block point.
 
         Returns ``(distance_moved, completed, blocked_point)``. ``blocked_point``
@@ -860,20 +865,49 @@ class VenueMeetupEnv:
         moved_total = 0.0
         for index, waypoint in enumerate(waypoints):
             is_last = index == len(waypoints) - 1
-            seg_moved, reached = self._walk_segment(agent_id, waypoint, last_venue=venue if is_last else None)
+            seg_moved, reached = self._walk_segment(
+                agent_id,
+                waypoint,
+                last_venue=venue if is_last else None,
+            )
             moved_total += seg_moved
             if not reached:
                 position = self._actor_xy(actor)
-                distance = math.hypot(waypoint[0] - position[0], waypoint[1] - position[1])
+                distance = math.hypot(
+                    waypoint[0] - position[0],
+                    waypoint[1] - position[1],
+                )
                 if distance > 1.0:
-                    ux, uy = (waypoint[0] - position[0]) / distance, (waypoint[1] - position[1]) / distance
-                    blocked_point = (position[0] + ux * self.walk_discovery_ahead, position[1] + uy * self.walk_discovery_ahead)
+                    ux = (waypoint[0] - position[0]) / distance
+                    uy = (waypoint[1] - position[1]) / distance
+                    blocked_point = (
+                        position[0] + ux * self.walk_discovery_ahead,
+                        position[1] + uy * self.walk_discovery_ahead,
+                    )
                 else:
                     blocked_point = position
                 return moved_total, False, blocked_point
         return moved_total, True, None
 
-    def _walk_segment(self, agent_id: str, waypoint: tuple[float, float], *, last_venue: Venue | None) -> tuple[float, bool]:
+    @staticmethod
+    def _contained_arrival_radius(
+        target: tuple[float, float],
+        venue: Venue,
+        configured_radius: float,
+    ) -> float:
+        """Bound target tolerance so accepted positions remain in the venue."""
+
+        target_offset = math.dist(target, venue.region.center)
+        interior_margin = venue.region.radius - target_offset
+        return max(0.0, min(float(configured_radius), interior_margin))
+
+    def _walk_segment(
+        self,
+        agent_id: str,
+        waypoint: tuple[float, float],
+        *,
+        last_venue: Venue | None,
+    ) -> tuple[float, bool]:
         """Walk toward one waypoint in engine StepForward bursts.
 
         Returns ``(distance_moved, reached)``. ``reached`` is False if the pawn
@@ -886,7 +920,15 @@ class VenueMeetupEnv:
         actor = state.actor_name
         uc = self.communicator.unrealcv
         if last_venue is not None:
-            arrive_radius = self.walk_arrive_radius
+            # The configured tolerance must fit wholly inside the scoring
+            # region around this particular fan target. Otherwise a walker can
+            # stop near the venue, report PARTIAL, and retry a completed graph
+            # route from its stale origin node.
+            arrive_radius = self._contained_arrival_radius(
+                waypoint,
+                last_venue,
+                self.walk_arrive_radius,
+            )
         else:
             # A controller cannot reliably stop inside a radius smaller than
             # half of its shortest physical stride.  Without this bound,

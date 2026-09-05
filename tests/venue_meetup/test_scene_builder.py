@@ -33,11 +33,13 @@ class FakeUnrealCV:
         self,
         *,
         objects: list[str] | None = None,
+        camera_locations: dict[int, tuple[float, float, float]] | None = None,
         fail_get_objects: bool = False,
         fail_set_orientation: bool = False,
         log: list[tuple[Any, ...]] | None = None,
     ) -> None:
         self.objects = list(objects) if objects is not None else ["DirectionalLight_0"]
+        self.camera_locations = dict(camera_locations or {})
         self.fail_get_objects = fail_get_objects
         self.fail_set_orientation = fail_set_orientation
         self.log = log if log is not None else []
@@ -98,6 +100,12 @@ class FakeUnrealCV:
         self.camera_resolution_history.append((camera_id, resolution))
         self.camera_resolutions[camera_id] = resolution
 
+    def get_location(self, actor_name: str) -> Any:
+        return self.locations[actor_name]
+
+    def get_camera_location(self, camera_id: int) -> tuple[float, float, float]:
+        return self.camera_locations[camera_id]
+
     def tick(self) -> None:
         self.log.append(("tick",))
         self.ticks += 1
@@ -152,7 +160,9 @@ class FakeCommunicator:
         }
         self.spawned_agents.append(record)
         self.log.append(("spawn_agent", agent.id, name, position, model_path, type))
-        self.humanoid_id_to_name[agent.id] = f"GEN_BP_Humanoid_{agent.id}"
+        actor_name = f"GEN_BP_Humanoid_{agent.id}"
+        self.humanoid_id_to_name[agent.id] = actor_name
+        self.unrealcv.locations[actor_name] = position
 
     def get_humanoid_name(self, humanoid_id: int) -> str:
         if humanoid_id not in self.humanoid_id_to_name:
@@ -395,6 +405,29 @@ def test_spawn_agents_builds_state_orientation_speed_and_camera(monkeypatch: pyt
     assert [record["position"] for record in communicator.spawned_agents] == [
         scenario.agents[0].position,
         scenario.agents[1].position,
+    ]
+
+
+def test_spawn_agents_matches_reversed_engine_camera_order() -> None:
+    scenario = _tiny_scenario()
+    first, second = scenario.agents
+    unrealcv = FakeUnrealCV(
+        camera_locations={
+            1: second.position,
+            2: first.position,
+        }
+    )
+    communicator = FakeCommunicator(unrealcv)
+    Humanoid._id_counter = 0
+    Humanoid._camera_id_counter = 1
+
+    agent_states = _builder(communicator, scenario).spawn_agents()
+
+    assert agent_states[first.agent_id].humanoid.camera_id == 2
+    assert agent_states[second.agent_id].humanoid.camera_id == 1
+    assert communicator.unrealcv.camera_resolution_history == [
+        (2, (640, 360)),
+        (1, (640, 360)),
     ]
 
 

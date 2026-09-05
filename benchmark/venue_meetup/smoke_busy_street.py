@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn
-from benchmark.venue_meetup.templates.busy_street_playtest import build_fixed_scenario
+from benchmark.venue_meetup.templates import TEMPLATE_BUILDERS
 from benchmark.venue_meetup.venue_env import VenueMeetupEnv
 from simworld.communicator.communicator import Communicator
 from simworld.communicator.unrealcv import UnrealCV
@@ -19,14 +19,24 @@ DEFAULT_VENUE_TYPES = (
     "bar",
     "skyscraper_lobby",
 )
+PLAYTEST_TEMPLATES = (
+    "busy_street_playtest_v0",
+    "connected_blocks_playtest_v0",
+)
 
 
 def run_smoke(args: argparse.Namespace) -> dict[str, object]:
     """Navigate one agent to one venue of each requested type and inspect it."""
 
-    scenario = build_fixed_scenario(args.seed)
+    scenario = TEMPLATE_BUILDERS[args.template_id](args.seed)
     targets = list(scenario.venues) if args.all_venues else []
-    if not args.all_venues:
+    if not args.all_venues and args.venue_id:
+        for venue_id in args.venue_id:
+            try:
+                targets.append(scenario.venue_by_id(venue_id))
+            except KeyError as exc:
+                raise ValueError(f"Unknown playtest venue id: {venue_id}") from exc
+    elif not args.all_venues:
         for venue_type in args.venue_type:
             target = next(
                 (venue for venue in scenario.venues if venue.venue_type == venue_type),
@@ -95,6 +105,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, object]:
             else "failed"
         ),
         "scenario_id": scenario.scenario_id,
+        "map_template_id": scenario.map_template_id,
         "results": results,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -104,12 +115,17 @@ def run_smoke(args: argparse.Namespace) -> dict[str, object]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Live NAVIGATE + INSPECT smoke for busy-street venue types",
+        description="Live NAVIGATE + INSPECT smoke for city-block playtest venues",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--ip", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--seed", type=int, default=17)
+    parser.add_argument(
+        "--template-id",
+        choices=PLAYTEST_TEMPLATES,
+        default="busy_street_playtest_v0",
+    )
     parser.add_argument("--resolution", default="640x360")
     parser.add_argument("--frame-gamma", type=float, default=0.35)
     parser.add_argument(
@@ -117,6 +133,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         choices=DEFAULT_VENUE_TYPES,
         help="Venue type to check; repeat for multiple types",
+    )
+    parser.add_argument(
+        "--venue-id",
+        action="append",
+        help="Exact venue id to check; repeat for venues on different blocks",
     )
     parser.add_argument(
         "--all-venues",
@@ -134,7 +155,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     args.resolution = tuple(int(part) for part in args.resolution.lower().split("x"))
-    args.venue_type = tuple(args.venue_type or DEFAULT_VENUE_TYPES)
+    args.venue_type = tuple(
+        args.venue_type or (() if args.venue_id else DEFAULT_VENUE_TYPES)
+    )
     report = run_smoke(args)
     print(json.dumps(report, indent=2))
     return 0 if report["status"] == "ok" else 1

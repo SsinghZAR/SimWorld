@@ -256,12 +256,14 @@ def _render_layout_district(
                 draw.regular_polygon((x, y, 5), n_sides=4, rotation=45, fill="white", outline="gray")
 
     busy_street = layout.layout_id == "busy_street_playtest_v0"
+    connected_blocks = layout.layout_id == "connected_blocks_playtest_v0"
+    dense_facades = busy_street or connected_blocks
 
     # Frontage markers. Candidate identity is labelled once by the venue
     # marker below; repeating the full frontage id makes dense maps illegible.
     for frontage in layout.frontages:
         x, y = _world_to_image((frontage.position[0], frontage.position[1]), size=size, extent=extent)
-        half_size = 6 if busy_street else 10
+        half_size = 4 if connected_blocks else 6 if busy_street else 10
         draw.rectangle(
             (x - half_size, y - half_size, x + half_size, y + half_size),
             outline="#2e7d32",
@@ -273,14 +275,26 @@ def _render_layout_district(
     # cannot remain legible along one horizontal block edge.
     for venue_index, venue in enumerate(scenario.venues, start=1):
         x, y = _world_to_image((venue.position[0], venue.position[1]), size=size, extent=extent)
-        radius = 11 if busy_street else 18
+        radius = 7 if connected_blocks else 11 if busy_street else 18
         draw.ellipse(
             (x - radius, y - radius, x + radius, y + radius),
             outline="darkgreen",
             width=3,
         )
-        label = f"V{venue_index}" if busy_street else venue.slot_id.replace("_", " ")
-        label_position = (x - 8, y + 14) if busy_street else (x - 42, y + 22)
+        if busy_street:
+            label = f"V{venue_index}"
+        elif connected_blocks:
+            block_prefix = ("W", "C", "E")[(venue_index - 1) // 12]
+            label = f"{block_prefix}{(venue_index - 1) % 12 + 1}"
+        else:
+            label = venue.slot_id.replace("_", " ")
+        label_position = (
+            (x - 7, y + 9)
+            if connected_blocks
+            else (x - 8, y + 14)
+            if busy_street
+            else (x - 42, y + 22)
+        )
         draw.text(label_position, label, fill="darkgreen", font=small_font)
 
     if busy_street:
@@ -305,6 +319,25 @@ def _render_layout_district(
                 fill="darkgreen",
                 font=small_font,
             )
+    elif connected_blocks:
+        draw.rectangle(
+            (14, 42, size - 14, 88),
+            fill="#f8f8f4",
+            outline="#b0b0a8",
+            width=1,
+        )
+        draw.text(
+            (24, 49),
+            "W1-W12 West Market | C1-C12 Central Arcade | E1-E12 East Tower",
+            fill="darkgreen",
+            font=small_font,
+        )
+        draw.text(
+            (24, 68),
+            "Brown routes are public alleys; green circles are candidate venues.",
+            fill="#6f4523",
+            font=small_font,
+        )
 
     for landmark in scenario.landmarks:
         x, y = _world_to_image((landmark.position[0], landmark.position[1]), size=size, extent=extent)
@@ -315,7 +348,7 @@ def _render_layout_district(
     for agent in scenario.agents:
         x, y = _world_to_image((agent.position[0], agent.position[1]), size=size, extent=extent)
         draw.polygon([(x, y - 18), (x - 14, y + 12), (x + 14, y + 12)], outline="black", fill="lightgray")
-        agent_label_y = y - 42 if busy_street else y + 18
+        agent_label_y = y - 30 if dense_facades else y + 18
         draw.text((x - 28, agent_label_y), agent.agent_id, fill="black", font=small_font)
 
     title = f"Venue Meetup coarse map ({layout.layout_id})"
@@ -327,6 +360,8 @@ def _render_layout_district(
         if layout.layout_id == "riverside_market_large_v1"
         else "Structure: four-sided street wall | N/E/S/W portals | courtyard loop"
         if layout.layout_id == "busy_street_playtest_v0"
+        else "Structure: West Market -- alley -- Central Arcade -- alley -- East Tower"
+        if layout.layout_id == "connected_blocks_playtest_v0"
         else ""
     )
     if structure_note:
