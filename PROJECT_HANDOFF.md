@@ -237,8 +237,15 @@ Important files are `run_manifest.json`, `summary.json`, `metadata.json`,
 minimap artifacts are generated automatically after each live episode from
 evaluator-only measured movement traces; solid paths are physical movement and
 dashed paths are abstracted teleports. Add `--save-video` to an evaluation
-command to record cameras. Use
-`--cinematic` only when intentionally collecting a slower, denser walking clip.
+command to record cameras. Use `--cinematic` only when intentionally collecting
+a slower, denser walking clip.
+
+Agent observations include a deterministic shop-closing clock. The default is
+`18:00` with one simulated minute per synchronized action turn; the episode
+start is derived from `max_steps`, and the deadline coincides with the normal
+turn limit. Use `--shops-close-at` and `--action-minutes` only for explicit
+timing variants. Initial/final clock states are retained in case metadata and
+per-turn states are retained in the trajectory and minimap replay.
 
 Render a top-down trajectory after a run with:
 

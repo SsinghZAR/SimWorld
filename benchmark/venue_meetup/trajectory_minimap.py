@@ -194,13 +194,29 @@ def _draw_history(
     return image
 
 
-def _title_and_legend(image: Any, *, steps: int, upto_turn: int | None) -> None:
+def _title_and_legend(
+    image: Any,
+    *,
+    steps: int,
+    upto_turn: int | None,
+    clock_state: dict[str, Any] | None = None,
+) -> None:
     """Add post-run context and a compact two-agent legend."""
 
     width = int(image.shape[1])
     cv2.rectangle(image, (0, 0), (width, 39), (255, 255, 255), -1)
-    label = f"Movement minimap - turn {upto_turn + 1}/{steps}" if upto_turn is not None else f"Movement minimap - {steps} turns"
-    _text(image, label, (18, 25), scale=0.62, color=(20, 20, 20), thickness=1)
+    completed = upto_turn + 1 if upto_turn is not None else steps
+    if clock_state:
+        total_turns = completed + int(clock_state.get("turns_remaining", 0))
+        label = (
+            f"Movement minimap | turn {completed}/{total_turns} | "
+            f"{clock_state.get('current_time')} | {clock_state.get('minutes_remaining')} min to close"
+        )
+        scale = 0.48
+    else:
+        label = f"Movement minimap - turn {completed}/{steps}"
+        scale = 0.62
+    _text(image, label, (18, 25), scale=scale, color=(20, 20, 20), thickness=1)
 
     left = max(12, width - 228)
     cv2.rectangle(image, (left, 116), (width - 12, 185), (248, 248, 248), -1)
@@ -247,7 +263,17 @@ def render_trajectory_minimap(
 
     histories = movement_history(scenario_payload, trajectory)
     final = _draw_history(base, histories=histories, scenario=scenario, upto_turn=None)
-    _title_and_legend(final, steps=len(trajectory), upto_turn=None)
+    final_clock = (
+        trajectory[-1].get("info", {}).get("closing_clock")
+        if trajectory
+        else None
+    )
+    _title_and_legend(
+        final,
+        steps=len(trajectory),
+        upto_turn=None,
+        clock_state=final_clock,
+    )
     png_path = run_dir / "trajectory_minimap.png"
     if not cv2.imwrite(str(png_path), final):
         raise RuntimeError(f"Could not write trajectory minimap {png_path}")
@@ -264,7 +290,13 @@ def render_trajectory_minimap(
     try:
         for turn_index in range(len(trajectory)):
             frame = _draw_history(base, histories=histories, scenario=scenario, upto_turn=turn_index)
-            _title_and_legend(frame, steps=len(trajectory), upto_turn=turn_index)
+            clock_state = trajectory[turn_index].get("info", {}).get("closing_clock")
+            _title_and_legend(
+                frame,
+                steps=len(trajectory),
+                upto_turn=turn_index,
+                clock_state=clock_state,
+            )
             writer.write(frame)
         for _ in range(max(1, int(fps * 2))):
             writer.write(final)

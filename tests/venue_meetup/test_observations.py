@@ -325,7 +325,7 @@ class TestBuildObservations:
     def test_observation_keys_present(self):
         obs = self._call()
         required_keys = {
-            "agent_id", "step", "max_steps", "role", "objective",
+            "agent_id", "step", "max_steps", "closing_clock", "role", "objective",
             "private_constraint", "zone_id", "info_partition",
             "coarse_map_text", "coarse_map_path", "self_pose",
             "candidate_venues", "known_venue_evidence", "landmarks",
@@ -348,6 +348,11 @@ class TestBuildObservations:
         for agent_obs in obs.values():
             assert agent_obs["step"] == 5
             assert agent_obs["max_steps"] == 10
+            assert agent_obs["closing_clock"]["current_time"] == "17:55"
+            assert agent_obs["closing_clock"]["shops_close_at"] == "18:00"
+            assert agent_obs["closing_clock"]["minutes_remaining"] == 5
+            assert agent_obs["closing_clock"]["turns_remaining"] == 5
+            assert agent_obs["closing_clock"]["action_cost_minutes"] == 1
 
     def test_private_constraints_separate(self):
         obs = self._call(shared_constraints=False)
@@ -497,6 +502,8 @@ def test_no_communication_env_step_suppresses_delivery(monkeypatch):
     assert info["movement_paths_internal"] == {
         agent_id: [(0.0, 0.0)] for agent_id in agent_ids
     }
+    assert info["closing_clock"]["current_time"] == "17:51"
+    assert info["closing_clock"]["minutes_remaining"] == 9
     assert all("movement_paths_internal" not in observation for observation in observations.values())
 
 

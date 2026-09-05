@@ -22,6 +22,9 @@ from benchmark.venue_meetup.actions import (InspectionOutcome,
                                             dispatch_single_action,
                                             precheck_inspection,
                                             resolve_inspect_target)
+from benchmark.venue_meetup.closing_clock import (DEFAULT_ACTION_MINUTES,
+                                                  DEFAULT_SHOPS_CLOSE_AT,
+                                                  ClosingClock)
 from benchmark.venue_meetup.navigation import (Obstacle, building_obstacles,
                                                meeting_target, path_length,
                                                plan_layout_route, plan_path,
@@ -95,6 +98,8 @@ class VenueMeetupEnv:
         shared_constraints: bool = False,
         info_partition: str = "none",
         router: CommsRouter | None = None,
+        shops_close_at: str = DEFAULT_SHOPS_CLOSE_AT,
+        action_minutes: int = DEFAULT_ACTION_MINUTES,
     ):
         self.communicator = communicator
         self.scenario = scenario
@@ -176,6 +181,11 @@ class VenueMeetupEnv:
         self.agent_ids = scenario.agent_ids()
         self.agent_states: dict[str, AgentState] = {}
         self.bus = MessageBus(self.agent_ids, router=router or BroadcastRouter())
+        self.closing_clock = ClosingClock(
+            max_turns=scenario.max_steps,
+            shops_close_at=shops_close_at,
+            action_minutes=action_minutes,
+        )
         self.step_index = 0
         self.spawned = False
         # Keep evaluator and agent-facing action/inspection records separate.
@@ -346,7 +356,11 @@ class VenueMeetupEnv:
             for agent_id, result in deepcopy(executed_actions).items()
         }
         observations = self._build_observations(inboxes=inboxes)
-        done = self._converged() or self.step_index >= self.scenario.max_steps
+        closing_clock = self._episode_clock()
+        clock_state = closing_clock.snapshot(self.step_index)
+        deadline_reached = closing_clock.expired(self.step_index)
+        converged = self._converged()
+        done = converged or deadline_reached
         final_positions = self._positions()
         for agent_id, position in final_positions.items():
             self._record_movement_point(agent_id, position)
@@ -355,7 +369,7 @@ class VenueMeetupEnv:
             final_positions,
             inspected_venues=self.inspected_venues,
             message_count=len(self.bus.transcript),
-            timed_out=self.step_index >= self.scenario.max_steps and not self._converged(),
+            timed_out=deadline_reached and not converged,
         )
         rewards = {agent_id: scores["episode_score"] for agent_id in self.agent_ids}
         info = {
@@ -370,8 +384,9 @@ class VenueMeetupEnv:
             ),
             "positions_internal": final_positions,
             "movement_paths_internal": deepcopy(self._step_movement_paths),
+            "closing_clock": clock_state,
             "scores": scores,
-            "success": self._converged(),
+            "success": converged,
         }
         return observations, rewards, done, info
 
@@ -478,8 +493,18 @@ class VenueMeetupEnv:
             shared_constraints=self.shared_constraints,
             info_partition=self.info_partition,
             navigate_mode=self.navigate_mode,
+            closing_clock=self._episode_clock().snapshot(self.step_index),
             venue_facts_fn=self._venue_facts,
         )
+
+    def _episode_clock(self) -> ClosingClock:
+        """Return the configured clock, lazily supporting lightweight test envs."""
+
+        clock = getattr(self, "closing_clock", None)
+        if clock is None:
+            clock = ClosingClock(max_turns=self.scenario.max_steps)
+            self.closing_clock = clock
+        return clock
 
     def execute_action(self, agent_id: str, action: VenueAgentTurn) -> dict[str, Any]:
         """Execute one benchmark action."""

@@ -27,6 +27,9 @@ from benchmark.venue_meetup.ablations import (ConditionSpec,
                                               minimal_ablation_names,
                                               poc_condition_names,
                                               resolve_condition)
+from benchmark.venue_meetup.closing_clock import (DEFAULT_ACTION_MINUTES,
+                                                  DEFAULT_SHOPS_CLOSE_AT,
+                                                  ClosingClock)
 from benchmark.venue_meetup.coarse_map import with_rendered_coarse_map
 from benchmark.venue_meetup.generator import (evaluation_matrix,
                                               generate_scenario)
@@ -426,6 +429,11 @@ def run_case(
     )
     scenario = with_rendered_coarse_map(scenario, case_dir)
     scenario = replace(scenario, max_steps=getattr(args, "max_steps", None) or scenario.max_steps)
+    closing_clock = ClosingClock(
+        max_turns=scenario.max_steps,
+        shops_close_at=getattr(args, "shops_close_at", DEFAULT_SHOPS_CLOSE_AT),
+        action_minutes=getattr(args, "action_minutes", DEFAULT_ACTION_MINUTES),
+    )
     write_json(case_dir / "scenario_hidden.json", scenario.compact(include_hidden=True))
     write_json(case_dir / "scenario_public.json", scenario.compact(include_hidden=False))
 
@@ -442,6 +450,10 @@ def run_case(
             "condition_id": condition.condition_id,
             "condition": condition.compact(),
             "prompt_mode": condition.prompt_mode,
+            "closing_clock": {
+                "initial": closing_clock.snapshot(0),
+                "final": closing_clock.snapshot(0),
+            },
             "scores": episode_score(scenario, fake_positions),
             "args": sanitize_run_args(args),
             "artifacts": {"scenario_hidden": str(case_dir / "scenario_hidden.json"), "coarse_map": scenario.coarse_map_path},
@@ -483,6 +495,8 @@ def run_case(
         record_motion=args.save_video,
         motion_fps=motion_fps,
         navigate_mode="walk" if args.walk else "teleport",
+        shops_close_at=closing_clock.shops_close_at,
+        action_minutes=closing_clock.action_minutes,
         **stride_kwargs,
         **condition.env_kwargs(),
     )
@@ -557,6 +571,13 @@ def run_case(
             "condition_id": condition.condition_id,
             "condition": condition.compact(),
             "prompt_mode": condition.prompt_mode,
+            "closing_clock": {
+                "initial": closing_clock.snapshot(0),
+                "final": final_info.get(
+                    "closing_clock",
+                    closing_clock.snapshot(len(trajectory)),
+                ),
+            },
             "success": final_info.get("success", False),
             "steps_run": len(trajectory),
             "scores": scores,
@@ -616,6 +637,17 @@ def build_parser() -> argparse.ArgumentParser:
     condition_cli_names = list(dict.fromkeys(all_condition_names() + minimal_ablation_names()))
     parser.add_argument("--ablation", choices=condition_cli_names, default="main")
     parser.add_argument("--max-steps", type=int)
+    parser.add_argument(
+        "--shops-close-at",
+        default=DEFAULT_SHOPS_CLOSE_AT,
+        help="Simulated 24-hour closing time shown to agents (HH:MM).",
+    )
+    parser.add_argument(
+        "--action-minutes",
+        type=int,
+        default=DEFAULT_ACTION_MINUTES,
+        help="Fixed simulated minutes consumed by every synchronized action turn.",
+    )
     parser.add_argument(
         "--walk",
         action="store_true",

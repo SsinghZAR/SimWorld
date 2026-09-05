@@ -29,8 +29,22 @@ def test_minimal_is_default_and_does_not_scaffold_strategy() -> None:
     assert "known_venue_evidence" in prompt
     assert "known_venue_facts" not in prompt
     assert "only choice=4 (communicate) sends" in prompt.lower()
+    assert "closing_clock" in prompt
+    assert "every action consumes the fixed time" in prompt.lower()
     for forbidden in ("disclose your private need", "useful to teammates", "pool observations", "coordinate before convergence"):
         assert forbidden not in prompt
+
+
+def test_closing_clock_cli_defaults_and_overrides() -> None:
+    defaults = build_parser().parse_args([])
+    assert defaults.shops_close_at == "18:00"
+    assert defaults.action_minutes == 1
+
+    custom = build_parser().parse_args(
+        ["--shops-close-at", "17:30", "--action-minutes", "5"]
+    )
+    assert custom.shops_close_at == "17:30"
+    assert custom.action_minutes == 5
 
 
 def test_cooperative_addendum_and_full_information_note() -> None:

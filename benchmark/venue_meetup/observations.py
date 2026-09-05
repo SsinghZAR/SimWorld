@@ -11,6 +11,7 @@ import math
 from copy import deepcopy
 from typing import Any, Callable, Mapping, Protocol
 
+from benchmark.venue_meetup.closing_clock import ClosingClock
 from benchmark.venue_meetup.inspection_evidence import \
     build_inspection_evidence
 from benchmark.venue_meetup.scenario import Scenario, Venue
@@ -285,6 +286,7 @@ def build_observations(
     shared_constraints: bool = False,
     info_partition: str = "none",
     navigate_mode: str = "teleport",
+    closing_clock: Mapping[str, Any] | None = None,
     venue_facts_fn: Callable[[Venue], dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Assemble per-agent observation dicts from pre-collected state.
@@ -305,6 +307,11 @@ def build_observations(
     revealed_facts = revealed_facts or {}
     revealed_evidence = revealed_evidence or {}
     last_actions = last_actions or {}
+    clock_state = (
+        deepcopy(closing_clock)
+        if closing_clock is not None
+        else ClosingClock(scenario.max_steps).snapshot(step_index)
+    )
     # ``last_inspections`` is the old parameter name.  New callers must pass
     # the explicitly public store; retaining the fallback keeps offline tools
     # that assemble observations directly source-compatible.
@@ -354,8 +361,9 @@ def build_observations(
             "agent_id": agent.agent_id,
             "step": step_index,
             "max_steps": scenario.max_steps,
+            "closing_clock": deepcopy(clock_state),
             "role": "visitor",
-            "objective": "Find the best feasible venue for everyone and physically meet there.",
+            "objective": "Find the best feasible venue for everyone and physically meet there before the shops close.",
             "private_constraint": private_constraint,
             "zone_id": agent_zone.get(agent.agent_id),
             "info_partition": info_partition,

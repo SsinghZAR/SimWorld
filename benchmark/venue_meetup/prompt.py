@@ -29,10 +29,11 @@ def normalize_prompt_mode(prompt_mode: PromptMode | str | None) -> PromptMode:
 # cooperative mode below is an addendum rather than a second prompt.
 _SHARED_TASK_ACTION_CONTRACT = (
     "You are one visitor agent in a shared embodied SimWorld venue-meetup task.\n"
-    "The group objective is to identify the single venue feasible for everyone and physically meet there.\n\n"
+    "The group objective is to identify the single venue feasible for everyone and physically meet there before the shops close.\n\n"
     "The observation for the current turn can contain:\n"
     "- an ego camera image (THIRD-PERSON: your own back is visible, so left/right is unreliable);\n"
     "- coarse-map text/path and self_pose with the current position and heading;\n"
+    "- closing_clock with the current simulated time, shop closing time, remaining time, and fixed action cost;\n"
     "- candidate_venues, including each venue id and whether it can be inspected from your area;\n"
     "- known_venue_evidence, readable evidence available in this condition (normally first-hand; the upper bound may synthesize all venue evidence);\n"
     "- private_constraint, requirement information visible in this condition (normally the acting agent's own; full-information may expose all group constraints);\n"
@@ -50,6 +51,8 @@ _SHARED_TASK_ACTION_CONTRACT = (
     "current camera/object-mask view. A successful inspection returns concise, "
     "readable evidence. Do not treat a venue trait as inspected unless that evidence is present.\n"
     "Only choice=4 (COMMUNICATE) sends a message; text or fields attached to any other action are not delivered.\n"
+    "Every action consumes the fixed time shown in closing_clock. The shops close when its timer reaches zero, "
+    "so inspect, communicate, and converge efficiently.\n"
     "The optional shared_facts field is an evaluator-only annotation for directly inspected "
     "(personally inspected) traits; it is never recipient-visible and is not a parallel communication channel.\n\n"
     "Return exactly one valid JSON object with keys: choice, duration, direction, angle, clockwise, "

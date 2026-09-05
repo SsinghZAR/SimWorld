@@ -5,6 +5,11 @@ UE-grounded multi-agent benchmark for **social information sharing**: agents mus
 pool private observations to meet at a unique group-feasible venue. Locomotion is
 a controlled variable; the dependent variables are communicative.
 
+Every agent observation also includes a deterministic shop-closing clock. By
+default shops close at 18:00 and each synchronized action turn consumes one
+simulated minute, making inspection, communication, and movement share the same
+finite time budget. The initial time is derived from the episode turn cap.
+
 Package path: ``benchmark/venue_meetup/``. See also the in-tree
 ``benchmark/venue_meetup/README.md``.
 

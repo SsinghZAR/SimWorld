@@ -26,7 +26,7 @@ separately from social scores.
 
 | Layer | What an agent can see | What remains evaluator-only |
 | --- | --- | --- |
-| Public navigation | Candidate identity summaries (`venue_id`, type, slot, visual summary), coarse map, landmarks, roster, pose, and action feedback | Venue properties, regions, asset paths, mask colours, and internal diagnostics |
+| Public navigation | Candidate identity summaries (`venue_id`, type, slot, visual summary), coarse map, closing clock, landmarks, roster, pose, and action feedback | Venue properties, regions, asset paths, mask colours, and internal diagnostics |
 | First-hand evidence | A successful `INSPECT` adds deterministic, ordered, readable sentences to `known_venue_evidence` and the latest inspect result | The canonical trait dictionary used to generate those sentences |
 | Hidden truth and constraints | In `main`, only the acting agent's own private constraint is shown | Canonical decision facts, the partner's constraint, soft weights, and the optimum; `full_information` intentionally exposes the facts and all group constraints as an upper bound |
 | Communication | Only `COMMUNICATE` (`choice=4`) delivers optional text to other agents | `shared_facts` claims are evaluator annotations, never a recipient-visible side channel |
@@ -81,6 +81,20 @@ Agents act synchronously once per turn:
 `NAVIGATE` defaults to teleport mode. Add `--walk` to physically traverse the
 layout graph, with route, bridge, stall, replan, and distance diagnostics in the
 action log. A live walk smoke is not a social-evaluation score.
+
+### Shop-closing clock
+
+Every episode has a deterministic shared clock. Shops close at `18:00` by
+default, and each synchronized turn consumes one simulated minute regardless of
+which action each agent selects. Agents see `current_time`, `shops_close_at`,
+`minutes_remaining`, `turns_remaining`, `action_cost_minutes`, and an
+open/closing-soon/closed status in every observation. The episode start is
+derived from its turn budget, so a 100-turn run starts at `16:20` and reaches
+closing exactly after turn 100. Convergence still terminates the episode early.
+
+Use `--shops-close-at HH:MM` and `--action-minutes N` for controlled timing
+variants. Because agents act concurrently, a shared turn advances the clock
+once; it does not charge once per agent.
 
 ## Templates
 
@@ -325,8 +339,9 @@ A live policy run adds:
 The run manifest records the resolved `condition`/`condition_id`, `prompt_mode`,
 `info_partition`, and `navigation_mode`, along with template/scenario/seed and
 sanitized CLI arguments. Per-case metadata records the condition and prompt
-information; its sanitized `args.walk` flag identifies walk versus teleport
-mode (there is no separate case-level navigation key). Secrets are removed.
+information plus initial/final closing-clock states; its sanitized `args.walk`
+flag identifies walk versus teleport mode (there is no separate case-level
+navigation key). Secrets are removed.
 `scenario_public.json` omits hidden properties; `scenario_hidden.json` is for
 evaluator use. Movement coordinates are recorded only under evaluator-facing
 `info.movement_paths_internal`; they are not added to either agent's observation.
