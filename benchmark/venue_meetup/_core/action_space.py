@@ -77,6 +77,7 @@ class VenueAgentTurn(BaseModel):
     angle: float | None = None
     clockwise: bool | None = None
     target_venue_id: str | None = None
+    target_interactable_id: str | None = None
     target_description: str | None = None
     message: str | None = None
     shared_facts: list[SharedFactClaim] = Field(default_factory=list)
@@ -117,6 +118,7 @@ class VenueAgentTurn(BaseModel):
             angle=payload.get("angle"),
             clockwise=payload.get("clockwise"),
             target_venue_id=target_venue_id,
+            target_interactable_id=str(payload.get("target_interactable_id") or "").strip() or None,
             target_description=target_description,
             message=message.strip() if isinstance(message, str) and message.strip() else None,
             shared_facts=parse_shared_facts(payload.get("shared_facts")),
@@ -160,6 +162,10 @@ class VenueAgentTurn(BaseModel):
                     "target_description": {
                         "type": ["string", "null"],
                         "description": "Short currently visible target description for INSPECT when unsure of id; the agent must be close enough for readable evidence.",
+                    },
+                    "target_interactable_id": {
+                        "type": ["string", "null"],
+                        "description": "Required for targeted INSPECT: exact interaction_id from nearby_interactables. Never a whole-venue inspection in the targeted protocol.",
                     },
                     "message": {
                         "type": ["string", "null"],
@@ -237,6 +243,7 @@ def sanitize_turn(turn: VenueAgentTurn, *, relative_angle: float = 0.0) -> Venue
         return VenueAgentTurn(
             choice=VenueAction.INSPECT.value,
             target_venue_id=turn.target_venue_id,
+            target_interactable_id=turn.target_interactable_id,
             target_description=turn.target_description,
             message=turn.message,
             shared_facts=shared_facts,

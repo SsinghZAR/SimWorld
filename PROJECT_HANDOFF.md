@@ -1,5 +1,27 @@
 # SimWorld / Venue Meetup — Project Handoff
 
+## Targeted protocol update (2026-09-06)
+
+The CLI now defaults to `--protocol targeted`: four individual information
+sources, varied one/two private hard needs per agent, and independent multi-tick
+actions on a shared 30-second clock. Default 17:30–18:00 is independent of the
+decision safety cap. Travel costs 40 m/tick. No intermediate rewards/scores are
+sent to policies. See the first section of `benchmark/venue_meetup/README.md`
+and `benchmark/venue_meetup/targeted_plan.md` for exact semantics and tests.
+
+Append `--protocol legacy` to historical commands below when reproducing old
+full-inspection/fixed-turn results. The targeted scripted policy is observation-
+only; the old `nav_smoke` policy remains a navigation diagnostic. `smoke_targeted`
+checks the individual source masks and saves screenshots under `runs/`.
+
+Final 2026-09-06 verification: 390 tests passed; all 32 individual 5x5 source
+masks passed; scripted walk scored 1.0 in 41 ticks; final MiniMax-M3 walk scored
+1.0 in 36 ticks (17:48, 12 minutes remaining), with 38 valid model responses.
+The final case is under `runs/venue_meetup/targeted_v1_minimax_walk_seed7_final/`.
+It includes `chat_log.md`, timestamped movement PNG/MP4, per-source screenshots,
+model responses and terminal scores. The 30-minute budget is still a calibration
+setting, not a proven difficulty tier.
+
 This is the operational entry point for future agents working in
 `D:\side_projects\SimWorld`. It makes the local Unreal backend and the Venue
 Meetup benchmark repeatable without rediscovering the machine setup.

@@ -12,9 +12,11 @@ try:
 except ModuleNotFoundError as exc:  # pragma: no cover - cv2 ships with eval extras.
     raise RuntimeError("OpenCV (cv2) is required to render trajectory minimaps.") from exc
 
-from benchmark.venue_meetup.coarse_map import (coarse_map_extent,
-                                               render_coarse_map,
-                                               world_to_map_pixel)
+from benchmark.venue_meetup.coarse_map import (
+    coarse_map_extent,
+    render_coarse_map,
+    world_to_map_pixel,
+)
 from benchmark.venue_meetup.scenario import Scenario, scenario_from_dict
 
 AGENT_BGR: tuple[tuple[int, int, int], ...] = (
@@ -93,7 +95,7 @@ def movement_history(
             action = actions.get(agent_id) if isinstance(actions.get(agent_id), dict) else {}
             turn = turns.get(agent_id) if isinstance(turns.get(agent_id), dict) else {}
             choice = turn.get("choice", (action.get("turn") or {}).get("choice"))
-            navigate_mode = action.get("mode")
+            navigate_mode = action.get("mode", info.get("navigation_mode"))
             if choice == 5 and navigate_mode != "walk":
                 movement_kind = "teleport"
             else:
@@ -121,6 +123,9 @@ def _text(
 ) -> None:
     """Draw outlined text that remains legible over the map."""
 
+    (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
+    origin = (max(4, min(origin[0], image.shape[1] - text_width - 4)),
+              max(text_height + 3, min(origin[1], image.shape[0] - 5)))
     cv2.putText(image, label, origin, cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thickness + 2, cv2.LINE_AA)
     cv2.putText(image, label, origin, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
 
@@ -208,8 +213,9 @@ def _title_and_legend(
     completed = upto_turn + 1 if upto_turn is not None else steps
     if clock_state:
         total_turns = completed + int(clock_state.get("turns_remaining", 0))
+        unit = "tick" if "tick_seconds" in clock_state else "turn"
         label = (
-            f"Movement minimap | turn {completed}/{total_turns} | "
+            f"Movement minimap | {unit} {completed}/{total_turns} | "
             f"{clock_state.get('current_time')} | {clock_state.get('minutes_remaining')} min to close"
         )
         scale = 0.48
@@ -227,7 +233,24 @@ def _title_and_legend(
         _text(image, agent_id, (left + 46, y + 4), scale=0.4, color=AGENT_BGR[index])
     _dashed_line(image, (left + 117, 136), (left + 155, 136), (70, 70, 70), thickness=2, dash_px=7)
     _text(image, "teleport", (left + 161, 140), scale=0.34, color=(70, 70, 70))
-    _text(image, "numbers = movement turn", (left + 10, 178), scale=0.34, color=(80, 80, 80))
+    unit_label = "numbers = elapsed ticks" if clock_state and "tick_seconds" in clock_state else "numbers = movement turn"
+    _text(image, unit_label, (left + 10, 178), scale=0.34, color=(80, 80, 80))
+
+
+def _activity_overlay(image: Any, info: dict[str, Any]) -> None:
+    """Evaluator-only replay labels; never part of an agent observation."""
+
+    activities = info.get("activities_internal")
+    if not activities:
+        return
+    names = {0: "WAIT", 1: "STEP", 2: "TURN", 3: "INSPECT", 4: "COMMUNICATE", 5: "NAVIGATE"}
+    cv2.rectangle(image, (0, 39), (image.shape[1], 83), (250, 250, 250), -1)
+    for index, (agent, state) in enumerate(sorted(activities.items())):
+        if state.get("status") == "busy":
+            description = f"{names.get(state.get('choice'), 'ACTION')} - {state['ticks_remaining']} ticks left"
+        else:
+            description = info.get("actions", {}).get(agent, {}).get("result", "ready")
+        _text(image, f"{agent}: {description}", (18, 56 + index * 19), scale=.4, color=AGENT_BGR[index])
 
 
 def _coarse_map_path(run_dir: Path, scenario: Scenario) -> Path:
@@ -275,6 +298,8 @@ def render_trajectory_minimap(
         clock_state=final_clock,
     )
     png_path = run_dir / "trajectory_minimap.png"
+    if trajectory:
+        _activity_overlay(final, trajectory[-1].get("info", {}))
     if not cv2.imwrite(str(png_path), final):
         raise RuntimeError(f"Could not write trajectory minimap {png_path}")
 
@@ -297,6 +322,7 @@ def render_trajectory_minimap(
                 upto_turn=turn_index,
                 clock_state=clock_state,
             )
+            _activity_overlay(frame, trajectory[turn_index].get("info", {}))
             writer.write(frame)
         for _ in range(max(1, int(fps * 2))):
             writer.write(final)

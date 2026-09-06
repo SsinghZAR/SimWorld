@@ -1,5 +1,74 @@
 # Venue Meetup
 
+## Current protocol: targeted, independently timed actions
+
+The CLI now defaults to `--protocol targeted`. Use `--protocol legacy` explicitly
+to reproduce the original full-venue inspection and fixed-turn clock. Low-level
+`VenueMeetupEnv` remains the legacy adapter; `TargetedVenueEnv` owns the new
+protocol without changing archived scenario generation.
+
+The targeted protocol supports exactly two agents. Each receives one or two
+explicit hard requirements sampled from accessibility, food/drink, shelter,
+quietness, low crowding, and capacity for two. Requirements are distinct across
+partners. Seeded profiles preserve exactly one feasible venue, a locally
+attractive decoy, and partner-zone traps. This is structural local ambiguity,
+not a proof that an agent cannot guess correctly without communication.
+
+Each venue has four physical, individually masked information panels:
+
+| Source | Evidence | Ticks |
+| --- | --- | --- |
+| `hours` | Open state and posted common closing time | 1 |
+| `access` | Step-free access and unobstructed approach | 2 |
+| `services` | Food/drink availability | 2 |
+| `meeting_area` | Capacity, shelter, quietness, crowding | 3 |
+
+Use `choice=3` with `target_interactable_id` from `nearby_interactables`.
+Visibility is checked against that individual source (20 mask pixels), not the
+entire building; it must be within 12 m and the acting agent must be inside the
+venue's meeting region and permitted zone. Sources never reveal unrelated facts.
+Partial evidence merges into private memory, with source/tick provenance. The
+panels are prototype geometry assembled from supported packaged props; camera
+labels identify their roles without revealing hidden answers. Staff interactions,
+custom sign assets, dietary attributes and prices are not implemented yet.
+
+One tick is 30 simulated seconds. Default start is 17:30 and closing is 18:00.
+`--starts-at` and `--shops-close-at` set an explicit independent deadline;
+`--max-steps` is only a decision-round safety cap in this protocol. Travel costs
+one tick per 40 m of planned walkable route, rounded up. Physical walking advances
+along route chunks each tick. The teleport control waits the same travel budget
+before abstracted placement. Communication (512 characters), wait, and fine
+movement cost one tick each. Busy agents cannot act or cancel, and receive no
+model calls. Evidence and messages appear only when the corresponding action
+completes. Model/API latency and rendering speed do not affect simulated time.
+
+Time is the only action cost. The environment returns an empty reward mapping
+and exposes no intermediate scores, efficiency feedback, or strategic hints.
+Final venue-quality/arrival scoring is evaluator-only, with no separate time
+deduction. Any completed co-location ends the episode, but `success` requires
+all hard requirements to hold. Otherwise closing ends it. Completion exactly
+at closing is accepted; unfinished actions cannot receive early results or
+arrival credit. Safety-cap/backend failures are incomplete runs, not task failures.
+
+Run the new two-agent 5x5 condition:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmark.venue_meetup.run_venue_eval `
+  --protocol targeted --template-id rosebank_grid_5x5_v0 --hidden-profile `
+  --num-agents 2 --seeds 7 --policy minimax --walk --max-steps 100 `
+  --speed 1000 --resolution 640x360 --run-name targeted_minimax_seed7
+```
+
+Replace `minimax` with `scripted` for the information-constrained baseline.
+`smoke_targeted` performs evaluator-only teleport placements to verify all source
+masks and save venue screenshots; it is not a social evaluation. Live runs save
+per-tick progress, action-start/completion records, source screenshots, transcript,
+and movement replay with clock and busy-state labels. Timing costs and the model
+system prompt share the same configuration. The default budget is a first
+calibration setting, not a validated difficulty tier. See `targeted_plan.md`.
+
+## Legacy/reference background
+
 Venue Meetup is a two-agent, UE-grounded benchmark for social information
 sharing. Each hidden-profile episode has one group-feasible venue. Agents must
 inspect what they can reach, communicate useful information, and converge on

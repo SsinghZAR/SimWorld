@@ -74,6 +74,50 @@ def build_system_prompt(prompt_mode: PromptMode | str = "minimal") -> str:
     return _SHARED_TASK_ACTION_CONTRACT
 
 
+def build_targeted_system_prompt(timing_config: dict[str, Any], prompt_mode: PromptMode | str = "minimal") -> str:
+    """Mechanics-only contract generated from the same configuration as execution."""
+
+    from benchmark.venue_meetup._core.comms import DEFAULT_MAX_CONTENT_CHARS
+    from benchmark.venue_meetup.interactions import action_durations
+
+    contract = (
+        "You are one of two visitors in the embodied SimWorld venue-meetup task. "
+        "Meet your teammate at the single venue satisfying both visitors' hard requirements by closing. "
+        "Your private_constraint states your own hard requirements. Open and unobstructed access are also required. "
+        "There are no intermediate rewards, scores, action-specific point penalties, or strategic feedback. "
+        "Time spent is the only action cost; evaluation occurs only at the end.\n"
+        "The shared simulated clock is independent of model latency and rendering speed. "
+        "Each agent can perform one action at a time. Busy agents cannot move, inspect, communicate, "
+        "cancel, or start another action; the other visitor acts independently. "
+        "Inspection evidence and messages become available only when the corresponding action finishes. "
+        "Messages arriving while busy remain in your inbox for your next decision. "
+        "Completion exactly at closing is accepted. Unfinished actions do not complete after closing. "
+        "The episode ends when both available visitors are at one venue, or at the deadline.\n"
+        "Actions: 0=WAIT; 1=STEP_FORWARD (duration in engine seconds, direction 0 forward/1 backward); "
+        "2=TURN_AROUND (angle, clockwise); 3=INSPECT (target_interactable_id); "
+        "4=COMMUNICATE (message); 5=NAVIGATE (target_venue_id). "
+        "Only choice=4 delivers a message. Other choices cannot also communicate. "
+        f"Messages are limited to {DEFAULT_MAX_CONTENT_CHARS} characters.\n"
+        "NAVIGATE follows a walkable route; its duration estimate appears in navigation.targets. "
+        "INSPECT requires a nearby, permitted, currently visible information point from nearby_interactables. "
+        "Specify its exact interaction_id in target_interactable_id. Whole-building inspection is not available. "
+        "Each source reveals only its own information; unchecked information is unknown, not false. "
+        "Information panels describe venue conditions; their appearance does not encode the answer. "
+        "Repeated checks give the same evidence. Evidence accumulates in known_venue_evidence and inspection_history. "
+        "The ego image is third-person: your own back is visible. self_pose and navigation describe your heading.\n"
+        "Partner requirements and evidence are private unless communicated (except the labelled full-information control). "
+        "group_chat contains delivered messages. own_activity concerns only you. "
+        "shared_facts is optional evaluator-only annotation of directly inspected traits and is never delivered. "
+        "Return exactly one JSON object using choice, target_venue_id, target_interactable_id, "
+        "duration, direction, angle, clockwise, message, shared_facts, reasoning as needed. No markdown.\n"
+        f"Timing configuration: {json.dumps(timing_config, sort_keys=True)}\n"
+        f"Action durations in ticks: {json.dumps(action_durations(), sort_keys=True)}"
+    )
+    if normalize_prompt_mode(prompt_mode) == "cooperative":
+        contract += "\n" + _COOPERATIVE_ADDENDUM
+    return contract
+
+
 # Backward-compatible name used by existing callers and archived runs.
 VENUE_MEETUP_SYSTEM_PROMPT = build_system_prompt("minimal")
 

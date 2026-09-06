@@ -12,7 +12,13 @@ except ModuleNotFoundError:  # pragma: no cover - exercised when only dry-run to
     cv2 = None
 
 from benchmark.venue_meetup._core.action_space import VenueAction, VenueAgentTurn
-from benchmark.venue_meetup.prompt import PromptMode, build_agent_prompt, build_system_prompt, normalize_prompt_mode
+from benchmark.venue_meetup.prompt import (
+    PromptMode,
+    build_agent_prompt,
+    build_system_prompt,
+    build_targeted_system_prompt,
+    normalize_prompt_mode,
+)
 from simworld.llm.a2a_llm import A2ALLM
 
 
@@ -71,9 +77,13 @@ class VenueMeetupPolicy:
         """Generate one agent turn plus a log record."""
 
         prompt = build_agent_prompt(observation, prompt_mode=self.prompt_mode)
+        system_prompt = (
+            build_targeted_system_prompt(observation["timing_config"], self.prompt_mode)
+            if observation.get("protocol") == "targeted_v1" else self.system_prompt
+        )
         started = time.perf_counter()
         response, model_elapsed = self.llm.generate_instructions(
-            self.system_prompt,
+            system_prompt,
             prompt,
             images=[frame_for_model(observation["ego_view"], self.vision_max_width)],
             max_tokens=self.max_tokens,
@@ -89,6 +99,7 @@ class VenueMeetupPolicy:
             "provider": self.provider,
             "model": self.model_name,
             "prompt": prompt,
+            "system_prompt": system_prompt,
             "raw_response": response,
             "parsed_turn": turn.compact(),
             "reasoning": self.reasoning,
@@ -106,6 +117,8 @@ class VenueMeetupPolicy:
     ) -> tuple[dict[str, VenueAgentTurn], list[dict[str, Any]]]:
         """Generate turns for all agents concurrently."""
 
+        if not observations:
+            return {}, []
         max_workers = max_workers or len(observations)
         turns: dict[str, VenueAgentTurn] = {}
         records: list[dict[str, Any]] = []

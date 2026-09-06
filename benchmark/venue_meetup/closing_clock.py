@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
+
+
+class EpisodeClock(Protocol):
+    """Clock contract shared by legacy turn budgets and timed episodes."""
+
+    def snapshot(self, completed_ticks: int) -> dict[str, Any]: ...
+
+    def expired(self, completed_ticks: int) -> bool: ...
 
 DEFAULT_SHOPS_CLOSE_AT = "18:00"
 DEFAULT_ACTION_MINUTES = 1

@@ -19,23 +19,32 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - dry-run environments may not install OpenCV.
     cv2 = None
 
-from benchmark.venue_meetup._core.policy import (ScriptedVenueNavPolicy,
-                                                 ScriptedVenueSmokePolicy,
-                                                 VenueMeetupPolicy)
-from benchmark.venue_meetup.ablations import (ConditionSpec,
-                                              all_condition_names,
-                                              minimal_ablation_names,
-                                              poc_condition_names,
-                                              resolve_condition)
-from benchmark.venue_meetup.closing_clock import (DEFAULT_ACTION_MINUTES,
-                                                  DEFAULT_SHOPS_CLOSE_AT,
-                                                  ClosingClock)
+from benchmark.venue_meetup._core.policy import (
+    ScriptedVenueNavPolicy,
+    ScriptedVenueSmokePolicy,
+    VenueMeetupPolicy,
+)
+from benchmark.venue_meetup.ablations import (
+    ConditionSpec,
+    all_condition_names,
+    minimal_ablation_names,
+    poc_condition_names,
+    resolve_condition,
+)
+from benchmark.venue_meetup.closing_clock import (
+    DEFAULT_ACTION_MINUTES,
+    DEFAULT_SHOPS_CLOSE_AT,
+    ClosingClock,
+)
 from benchmark.venue_meetup.coarse_map import with_rendered_coarse_map
-from benchmark.venue_meetup.generator import (evaluation_matrix,
-                                              generate_scenario)
+from benchmark.venue_meetup.episode_report import write_chat_log
+from benchmark.venue_meetup.generator import evaluation_matrix, generate_scenario
 from benchmark.venue_meetup.rosebank_grid import ROSEBANK_GRID_TEMPLATE_IDS
 from benchmark.venue_meetup.scoring import episode_score
 from benchmark.venue_meetup.social_metrics import compute_social_metrics
+from benchmark.venue_meetup.targeted_env import TargetedVenueEnv
+from benchmark.venue_meetup.timing import TimingConfig
+from benchmark.venue_meetup.varied_profiles import varied_profile
 from benchmark.venue_meetup.venue_env import VenueMeetupEnv
 from simworld.communicator.communicator import Communicator
 from simworld.communicator.unrealcv import UnrealCV
@@ -384,6 +393,9 @@ def make_policy(args: argparse.Namespace, *, prompt_mode: str | None = None):
     """Construct the requested policy."""
 
     if args.policy == "scripted":
+        if getattr(args, "protocol", "legacy") == "targeted":
+            from benchmark.venue_meetup.targeted_scripted import TargetedScriptedPolicy
+            return TargetedScriptedPolicy()
         return ScriptedVenueSmokePolicy()
     if args.policy == "nav_smoke":
         return ScriptedVenueNavPolicy()
@@ -429,7 +441,11 @@ def run_case(
     )
     scenario = with_rendered_coarse_map(scenario, case_dir)
     scenario = replace(scenario, max_steps=getattr(args, "max_steps", None) or scenario.max_steps)
-    closing_clock = ClosingClock(
+    targeted = getattr(args, "protocol", "legacy") == "targeted"
+    timing = (TimingConfig(starts_at=getattr(args, "starts_at", "17:30"),
+                           shops_close_at=getattr(args, "shops_close_at", DEFAULT_SHOPS_CLOSE_AT))
+              if targeted else None)
+    closing_clock = timing if targeted else ClosingClock(
         max_turns=scenario.max_steps,
         shops_close_at=getattr(args, "shops_close_at", DEFAULT_SHOPS_CLOSE_AT),
         action_minutes=getattr(args, "action_minutes", DEFAULT_ACTION_MINUTES),
@@ -481,7 +497,8 @@ def run_case(
         playback_fps = args.cinematic_fps
         motion_fps = 1000.0  # capture back-to-back during the walk window.
         stride_kwargs = {"step_duration": 1.1, "min_step_duration": 1.0, "max_step_duration": 1.4}
-    env = VenueMeetupEnv(
+    env_class = TargetedVenueEnv if targeted else VenueMeetupEnv
+    env = env_class(
         communicator,
         scenario,
         config=Config(str(args.config)) if args.config else Config(),
@@ -496,7 +513,8 @@ def run_case(
         motion_fps=motion_fps,
         navigate_mode="walk" if args.walk else "teleport",
         shops_close_at=closing_clock.shops_close_at,
-        action_minutes=closing_clock.action_minutes,
+        action_minutes=getattr(args, "action_minutes", DEFAULT_ACTION_MINUTES),
+        **({"timing": timing} if targeted else {}),
         **stride_kwargs,
         **condition.env_kwargs(),
     )
@@ -511,9 +529,15 @@ def run_case(
 
         done = False
         final_info: dict[str, Any] = {}
-        while not done and env.step_index < scenario.max_steps:
+        decision_rounds = 0
+        while not done:
             step_index = env.step_index
-            turns, records = policy.act_all(observations)
+            ready_observations = ({agent: observation for agent, observation in observations.items()
+                                   if agent in env.ready_agent_ids} if targeted else observations)
+            if ready_observations and decision_rounds >= scenario.max_steps:
+                raise RuntimeError("Decision safety cap reached before closing; run is incomplete, not an agent failure")
+            turns, records = policy.act_all(ready_observations) if ready_observations else ({}, [])
+            decision_rounds += bool(ready_observations)
             next_observations, rewards, done, info = env.step(turns)
             model_records.extend({"step": step_index, **record} for record in records)
             trajectory.append(
@@ -528,6 +552,18 @@ def run_case(
             )
             observations = next_observations
             final_info = info
+            # Keep durable partial artifacts if the PC/backend stops mid-run.
+            write_json(case_dir / "trajectory.json", trajectory)
+            write_jsonl(case_dir / "model_responses.jsonl", model_records)
+            if targeted:
+                progress = {"tick": env.step_index, "clock": info["closing_clock"],
+                            "decision_rounds": decision_rounds, "done": done}
+                write_json(case_dir / "progress.json", progress)
+                print(f"  tick={env.step_index} time={info['closing_clock']['current_time']} decisions={len(records)}", flush=True)
+                if cv2 is not None:
+                    for agent, observation in observations.items():
+                        if observation.get("nearby_interactables") and (info.get("actions", {}).get(agent) or step_index == 0):
+                            cv2.imwrite(str(case_dir / f"interaction_{agent}_tick_{env.step_index:03d}.png"), observation["ego_view"])
             if args.save_video:
                 for sample in env.drain_motion_frames():
                     for agent_id, frame in sample.items():
@@ -537,8 +573,9 @@ def run_case(
 
         write_json(case_dir / "trajectory.json", trajectory)
         write_jsonl(case_dir / "model_responses.jsonl", model_records)
-        from benchmark.venue_meetup.trajectory_minimap import \
-            render_trajectory_minimap
+        from benchmark.venue_meetup.trajectory_minimap import render_trajectory_minimap
+
+        chat_log = write_chat_log(case_dir, trajectory)
 
         trajectory_artifacts: dict[str, Path] = {}
         trajectory_render_error: str | None = None
@@ -580,6 +617,8 @@ def run_case(
             },
             "success": final_info.get("success", False),
             "steps_run": len(trajectory),
+            "decision_rounds": decision_rounds,
+            "protocol": "targeted_v1" if targeted else "legacy",
             "scores": scores,
             "social_metrics": social,
             "args": sanitize_run_args(args),
@@ -590,6 +629,7 @@ def run_case(
             ),
             "artifacts": {
                 "trajectory": str(case_dir / "trajectory.json"),
+                "chat_log": str(chat_log),
                 "model_responses": str(case_dir / "model_responses.jsonl"),
                 "metadata": str(case_dir / "metadata.json"),
                 "social_metrics": str(case_dir / "social_metrics.json"),
@@ -636,7 +676,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vision-max-width", type=int, default=512)
     condition_cli_names = list(dict.fromkeys(all_condition_names() + minimal_ablation_names()))
     parser.add_argument("--ablation", choices=condition_cli_names, default="main")
-    parser.add_argument("--max-steps", type=int)
+    parser.add_argument("--max-steps", type=int, help="Targeted: decision-round safety cap, not the closing deadline. Legacy: turn budget.")
+    parser.add_argument("--protocol", choices=["targeted", "legacy"], default="targeted",
+                        help="Targeted sources, varied requirements and independent timed actions; legacy explicitly reproduces old episodes.")
+    parser.add_argument("--starts-at", default="17:30", help="Targeted-protocol simulated start time, independent of --max-steps safety cap.")
     parser.add_argument(
         "--shops-close-at",
         default=DEFAULT_SHOPS_CLOSE_AT,
@@ -646,7 +689,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--action-minutes",
         type=int,
         default=DEFAULT_ACTION_MINUTES,
-        help="Fixed simulated minutes consumed by every synchronized action turn.",
+        help="Legacy protocol only: fixed simulated minutes per synchronized action turn.",
     )
     parser.add_argument(
         "--walk",
@@ -688,12 +731,13 @@ def scenarios_from_args(args: argparse.Namespace):
         templates = [
             ROSEBANK_GRID_TEMPLATE_IDS[grid_size] for grid_size in (3, 5, 7)
         ]
-        return evaluation_matrix(
+        scenarios = evaluation_matrix(
             templates=templates,
             seeds=parse_csv_ints(args.seeds),
             agent_counts=agent_counts,
-            hidden_profile=args.hidden_profile,
+            hidden_profile=args.hidden_profile or getattr(args, "protocol", "legacy") == "targeted",
         )
+        return [varied_profile(scenario) for scenario in scenarios] if getattr(args, "protocol", "legacy") == "targeted" else scenarios
 
     scenarios = []
     for seed in parse_csv_ints(args.seeds):
@@ -704,10 +748,10 @@ def scenarios_from_args(args: argparse.Namespace):
                     template_id=args.template_id,
                     num_agents=num_agents,
                     randomize=False,
-                    hidden_profile=args.hidden_profile,
+                    hidden_profile=args.hidden_profile or getattr(args, "protocol", "legacy") == "targeted",
                 )
             )
-    return scenarios
+    return [varied_profile(scenario) for scenario in scenarios] if getattr(args, "protocol", "legacy") == "targeted" else scenarios
 
 
 def main() -> int:

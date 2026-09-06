@@ -1,5 +1,15 @@
 # Venue Meetup — Design Notes: Measuring Social Information-Sharing
 
+> 2026-09-06: the default CLI protocol is now targeted/timed. The approved
+> extension is specified in `targeted_plan.md` and the README's first section.
+> It replaces full inspection with four source-specific interactions and varies
+> one/two hard requirements per agent across six existing categories. Wasted time
+> is the sole action cost; no intermediate reward/score or strategy feedback is
+> exposed. The fixed accessibility/food construction and fixed-turn clock below
+> remain the explicitly selected legacy protocol. Structural decoy tests establish
+> local ambiguity, not impossibility of a correct guess; measure communication
+> necessity empirically across held-out seeds/ablations before making that claim.
+
 > Living design doc. Captures *what* this benchmark is meant to measure and *how* the
 > environment should be structured to measure it cleanly. Update as decisions change.
 

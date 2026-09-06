@@ -40,6 +40,7 @@ TRAIT_KEYWORDS: dict[str, tuple[str, ...]] = {
     "uncrowded": ("crowd", "crowded", "busy", "packed", "empty"),
     "shelter": ("shelter", "indoor", "covered", "roof", "sheltered"),
     "near_transit": ("transit", "station", "metro", "bus", "train", "subway"),
+    "capacity": ("capacity", "seating", "seats", "space for", "room for"),
 }
 
 
@@ -102,7 +103,7 @@ def _observed_facts(trajectory: list[dict[str, Any]]) -> dict[str, dict[str, dic
             if not isinstance(result, dict):
                 continue
             if str(result.get("result", "")).startswith("INSPECT_OK") and isinstance(result.get("facts"), dict):
-                observed.setdefault(agent_id, {})[result["venue_id"]] = result["facts"]
+                observed.setdefault(agent_id, {}).setdefault(result["venue_id"], {}).update(result["facts"])
     return observed
 
 

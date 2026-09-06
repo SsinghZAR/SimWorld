@@ -12,8 +12,7 @@ from copy import deepcopy
 from typing import Any, Callable, Mapping, Protocol
 
 from benchmark.venue_meetup.closing_clock import ClosingClock
-from benchmark.venue_meetup.inspection_evidence import \
-    build_inspection_evidence
+from benchmark.venue_meetup.inspection_evidence import build_inspection_evidence
 from benchmark.venue_meetup.scenario import Scenario, Venue
 
 
@@ -41,6 +40,7 @@ _PUBLIC_TURN_KEYS: tuple[str, ...] = (
     "angle",
     "clockwise",
     "target_venue_id",
+    "target_interactable_id",
     "target_description",
     "message",
     "reasoning",
@@ -49,6 +49,10 @@ _PUBLIC_RESULT_KEYS: tuple[str, ...] = (
     "turn",
     "result",
     "venue_id",
+    "interaction_id",
+    "started_tick",
+    "completed_tick",
+    "duration_ticks",
     "target_description",
     "message",
     "agent_visible_result",

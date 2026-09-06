@@ -10,38 +10,61 @@ from typing import Any
 
 import numpy as np
 
-from benchmark.venue_meetup._core.action_space import (VenueAction,
-                                                       VenueAgentTurn,
-                                                       sanitize_turn)
-from benchmark.venue_meetup._core.comms import (BroadcastRouter, CommsRouter,
-                                                MessageBus,
-                                                messages_from_turns)
-from benchmark.venue_meetup.actions import (InspectionOutcome,
-                                            complete_inspection,
-                                            count_mask_pixels,
-                                            dispatch_single_action,
-                                            precheck_inspection,
-                                            resolve_inspect_target)
-from benchmark.venue_meetup.closing_clock import (DEFAULT_ACTION_MINUTES,
-                                                  DEFAULT_SHOPS_CLOSE_AT,
-                                                  ClosingClock)
-from benchmark.venue_meetup.navigation import (Obstacle, building_obstacles,
-                                               meeting_target, path_length,
-                                               plan_layout_route, plan_path,
-                                               select_walk_planner)
-from benchmark.venue_meetup.observations import (build_observations,
-                                                 can_inspect_zone, heading_cue,
-                                                 normalize_angle,
-                                                 observation_summary,
-                                                 public_action_result,
-                                                 target_cue)
+from benchmark.venue_meetup._core.action_space import (
+    VenueAction,
+    VenueAgentTurn,
+    sanitize_turn,
+)
+from benchmark.venue_meetup._core.comms import (
+    BroadcastRouter,
+    CommsRouter,
+    MessageBus,
+    messages_from_turns,
+)
+from benchmark.venue_meetup.actions import (
+    InspectionOutcome,
+    complete_inspection,
+    count_mask_pixels,
+    dispatch_single_action,
+    precheck_inspection,
+    resolve_inspect_target,
+)
+from benchmark.venue_meetup.closing_clock import (
+    DEFAULT_ACTION_MINUTES,
+    DEFAULT_SHOPS_CLOSE_AT,
+    ClosingClock,
+    EpisodeClock,
+)
+from benchmark.venue_meetup.navigation import (
+    Obstacle,
+    building_obstacles,
+    meeting_target,
+    path_length,
+    plan_layout_route,
+    plan_path,
+    select_walk_planner,
+)
+from benchmark.venue_meetup.observations import (
+    build_observations,
+    can_inspect_zone,
+    heading_cue,
+    normalize_angle,
+    observation_summary,
+    public_action_result,
+    target_cue,
+)
 from benchmark.venue_meetup.scenario import Scenario, Venue
-from benchmark.venue_meetup.scene_builder import (AGENT_BLUEPRINT, AgentState,
-                                                  SceneBuilder,
-                                                  direction_from_yaw)
-from benchmark.venue_meetup.scoring import (episode_score,
-                                            final_venue_from_positions,
-                                            venue_decision_facts)
+from benchmark.venue_meetup.scene_builder import (
+    AGENT_BLUEPRINT,
+    AgentState,
+    SceneBuilder,
+    direction_from_yaw,
+)
+from benchmark.venue_meetup.scoring import (
+    episode_score,
+    final_venue_from_positions,
+    venue_decision_facts,
+)
 from simworld.agent.humanoid import Humanoid
 from simworld.communicator.communicator import Communicator
 from simworld.config import Config
@@ -100,6 +123,7 @@ class VenueMeetupEnv:
         router: CommsRouter | None = None,
         shops_close_at: str = DEFAULT_SHOPS_CLOSE_AT,
         action_minutes: int = DEFAULT_ACTION_MINUTES,
+        episode_clock: EpisodeClock | None = None,
     ):
         self.communicator = communicator
         self.scenario = scenario
@@ -181,7 +205,7 @@ class VenueMeetupEnv:
         self.agent_ids = scenario.agent_ids()
         self.agent_states: dict[str, AgentState] = {}
         self.bus = MessageBus(self.agent_ids, router=router or BroadcastRouter())
-        self.closing_clock = ClosingClock(
+        self.closing_clock = episode_clock or ClosingClock(
             max_turns=scenario.max_steps,
             shops_close_at=shops_close_at,
             action_minutes=action_minutes,
@@ -497,7 +521,7 @@ class VenueMeetupEnv:
             venue_facts_fn=self._venue_facts,
         )
 
-    def _episode_clock(self) -> ClosingClock:
+    def _episode_clock(self) -> EpisodeClock:
         """Return the configured clock, lazily supporting lightweight test envs."""
 
         clock = getattr(self, "closing_clock", None)
